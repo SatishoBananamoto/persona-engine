@@ -1,0 +1,5 @@
+openai>=1.0.0
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+# These are optional. The script works with standard libraries, 
+# but installing these allows for more robust scraping and easier API calls.
