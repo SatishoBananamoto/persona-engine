@@ -165,9 +165,10 @@ class TurnPlanner:
         ctx = TraceContext()
         memory_ops = MemoryOps()
         
-        # Per-turn deterministic seed
+        # Per-turn deterministic seed (guard against None)
+        base_seed = self.determinism.seed if self.determinism.seed is not None else 0
         turn_seed = create_turn_seed(
-            base_seed=self.determinism.seed,
+            base_seed=base_seed,
             conversation_id=context.conversation_id,
             turn_number=context.turn_number
         )
