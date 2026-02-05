@@ -4,7 +4,7 @@ Stance Cache
 Maintains stance consistency across conversation turns to prevent flip-flopping.
 """
 
-from typing import Optional, Dict
+from typing import Any, Optional, Dict
 from dataclasses import dataclass
 from persona_engine.schema.ir_schema import UncertaintyAction
 
@@ -167,7 +167,7 @@ class StanceCache:
         """Clear entire cache"""
         self.cache.clear()
     
-    def get_stats(self) -> Dict[str, any]:
+    def get_stats(self) -> Dict[str, Any]:
         """Get cache statistics for debugging"""
         return {
             "total_cached_stances": len(self.cache),

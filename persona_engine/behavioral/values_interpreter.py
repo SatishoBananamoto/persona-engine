@@ -5,7 +5,7 @@ Translates Schwartz's 10 basic values into motivational priorities and
 resolves conflicts between competing values.
 """
 
-from typing import Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Tuple, Optional
 from persona_engine.schema.persona_schema import SchwartzValues, Persona
 
 
@@ -80,7 +80,7 @@ class ValuesInterpreter:
         )
         return sorted_values[:n]
     
-    def detect_value_conflicts(self, threshold: float = 0.6) -> List[Dict[str, any]]:
+    def detect_value_conflicts(self, threshold: float = 0.6) -> List[Dict[str, Any]]:
         """
         Detect when persona has high weights on conflicting values.
         
@@ -224,7 +224,7 @@ class ValuesInterpreter:
         """
         return self._value_dict[value] >= 0.65
     
-    def get_value_markers_for_validation(self) -> Dict[str, any]:
+    def get_value_markers_for_validation(self) -> Dict[str, Any]:
         """
         Returns expected value markers for validation.
         

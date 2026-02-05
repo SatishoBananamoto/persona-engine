@@ -5,7 +5,7 @@ Ensures response patterns and behavioral modifications cannot bypass
 safety constraints, privacy boundaries, or persona invariants.
 """
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from persona_engine.schema.persona_schema import ResponsePattern, TopicSensitivity
 
 
@@ -16,7 +16,7 @@ def apply_response_pattern_safely(
     topic_sensitivities: List[TopicSensitivity],
     must_avoid: List[str],
     topic_context: str = ""
-) -> Dict[str, any]:
+) -> Dict[str, Any]:
     """
     Apply response pattern with constraint checks.
     
@@ -107,7 +107,7 @@ def validate_stance_against_invariants(
     rationale: str,
     identity_facts: List[str],
     cannot_claim: List[str]
-) -> Dict[str, any]:
+) -> Dict[str, Any]:
     """
     Validate stance doesn't contradict persona invariants.
     

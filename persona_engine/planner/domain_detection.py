@@ -10,9 +10,12 @@ Production-grade domain detection that:
 - prevents double-counting of phrases and unigrams
 """
 
-from typing import List, Dict, Optional, Tuple, Set, Any
+from typing import List, Dict, Optional, Tuple, Set, Any, TYPE_CHECKING
 from dataclasses import dataclass, field
 import re
+
+if TYPE_CHECKING:
+    from persona_engine.planner.trace_context import TraceContext
 
 
 # =============================================================================

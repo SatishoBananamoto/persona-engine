@@ -31,6 +31,7 @@ class InteractionMode(str, Enum):
     COACHING = "coaching"
     DEBATE = "debate"
     SMALL_TALK = "small_talk"
+    BRAINSTORM = "brainstorm"
 
 
 class ConversationGoal(str, Enum):

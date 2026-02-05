@@ -5,7 +5,7 @@ Applies persona-specific decision policies, social role adjustments,
 and response patterns.
 """
 
-from typing import Dict, Optional, Literal
+from typing import Any, Dict, Optional, Literal
 from persona_engine.schema.persona_schema import (
     Persona,
     SocialRole,
@@ -135,7 +135,7 @@ class BehavioralRulesEngine:
     def apply_decision_policy(
         self,
         policy: DecisionPolicy
-    ) -> Dict[str, any]:
+    ) -> Dict[str, Any]:
         """
         Apply decision policy to modify IR generation.
         
@@ -191,7 +191,7 @@ class BehavioralRulesEngine:
     def apply_response_pattern(
         self,
         pattern: ResponsePattern
-    ) -> Dict[str, any]:
+    ) -> Dict[str, Any]:
         """
         Apply response pattern to influence IR.
         
@@ -215,10 +215,10 @@ class BehavioralRulesEngine:
     
     def apply_all_rules(
         self,
- interaction_mode: InteractionMode,
+        interaction_mode: InteractionMode,
         input_text: str,
         base_style: Dict[str, float]
-    ) -> Dict[str, any]:
+    ) -> Dict[str, Any]:
         """
         Apply all applicable behavioral rules.
         

@@ -185,26 +185,3 @@ class DeterminismManager:
     def reset_call_count(self) -> None:
         """Reset call counter (e.g., at start of new turn)"""
         self.call_count = 0
-
-
-# ============================================================================
-# Module-Level Utilities
-# ============================================================================
-
-def create_turn_seed(base_seed: int, conversation_id: str, turn_number: int) -> int:
-    """
-    Generate deterministic per-turn seed from base seed.
-    
-    Args:
-        base_seed: Initial seed for conversation
-        conversation_id: Unique conversation identifier
-        turn_number: Turn number (0-indexed)
-        
-    Returns:
-        Deterministic seed for this turn
-    """
-    # Combine inputs into deterministic seed
-    conv_hash = hash(conversation_id) % (2**31)  # Keep it positive 32-bit
-    turn_seed = (base_seed + conv_hash + turn_number * 1000) % (2**31)
-    
-    return turn_seed

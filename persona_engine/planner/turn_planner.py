@@ -167,7 +167,7 @@ class TurnPlanner:
         
         # Per-turn deterministic seed
         turn_seed = create_turn_seed(
-            base_seed=self.determinism.seed,
+            base_seed=self.determinism.seed if self.determinism.seed is not None else 0,
             conversation_id=context.conversation_id,
             turn_number=context.turn_number
         )
