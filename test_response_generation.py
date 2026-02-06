@@ -1,0 +1,770 @@
+"""Tests for Phase 5: Response Generation.
+
+Covers:
+  1. Schema validation (GeneratedResponse, ResponseConfig)
+  2. Prompt builder (IR → system prompt)
+  3. MockAdapter
+  4. TemplateAdapter (rule-based text generation)
+  5. ResponseGenerator orchestrator
+  6. Persona differentiation (different personas → different output)
+
+All tests run without an API key.
+"""
+
+import pytest
+import yaml
+
+from persona_engine.memory.stance_cache import StanceCache
+from persona_engine.planner.turn_planner import ConversationContext, TurnPlanner
+from persona_engine.response.adapters import MockAdapter, TemplateAdapter
+from persona_engine.response.generator import ResponseGenerator, create_response_generator
+from persona_engine.response.prompt_builder import (
+    CLAIM_TYPE_PROMPTS,
+    TONE_PROMPTS,
+    UNCERTAINTY_PROMPTS,
+    VERBOSITY_PROMPTS,
+    build_system_prompt,
+    confidence_instruction,
+    directness_instruction,
+    disclosure_instruction,
+    elasticity_instruction,
+    formality_instruction,
+)
+from persona_engine.response.schema import (
+    GeneratedResponse,
+    GenerationBackend,
+    ResponseConfig,
+)
+from persona_engine.schema.ir_schema import (
+    CommunicationStyle,
+    ConversationFrame,
+    ConversationGoal,
+    InteractionMode,
+    IntermediateRepresentation,
+    KnowledgeAndDisclosure,
+    KnowledgeClaimType,
+    ResponseStructure,
+    Tone,
+    UncertaintyAction,
+    Verbosity,
+)
+from persona_engine.schema.persona_schema import Persona
+from persona_engine.utils.determinism import DeterminismManager
+
+
+# =============================================================================
+# Fixtures
+# =============================================================================
+
+
+def load_persona(path: str = "personas/ux_researcher.yaml") -> Persona:
+    with open(path) as f:
+        data = yaml.safe_load(f)
+    if "domains" in data and "knowledge_domains" not in data:
+        data["knowledge_domains"] = data.pop("domains")
+    return Persona(**data)
+
+
+def make_ir(
+    tone: Tone = Tone.NEUTRAL_CALM,
+    verbosity: Verbosity = Verbosity.MEDIUM,
+    formality: float = 0.5,
+    directness: float = 0.5,
+    confidence: float = 0.5,
+    elasticity: float = 0.5,
+    disclosure_level: float = 0.5,
+    uncertainty_action: UncertaintyAction = UncertaintyAction.ANSWER,
+    knowledge_claim_type: KnowledgeClaimType = KnowledgeClaimType.COMMON_KNOWLEDGE,
+    stance: str | None = "This approach has both strengths and weaknesses",
+    rationale: str | None = "Based on experience and analysis of available evidence",
+    intent: str = "Share perspective on the topic",
+    mode: InteractionMode = InteractionMode.CASUAL_CHAT,
+    goal: ConversationGoal = ConversationGoal.EXPLORE_IDEAS,
+    turn_id: str = "test_turn_1",
+) -> IntermediateRepresentation:
+    """Build an IR with controllable parameters for testing."""
+    return IntermediateRepresentation(
+        conversation_frame=ConversationFrame(
+            interaction_mode=mode,
+            goal=goal,
+        ),
+        response_structure=ResponseStructure(
+            intent=intent,
+            stance=stance,
+            rationale=rationale,
+            elasticity=elasticity,
+            confidence=confidence,
+        ),
+        communication_style=CommunicationStyle(
+            tone=tone,
+            verbosity=verbosity,
+            formality=formality,
+            directness=directness,
+        ),
+        knowledge_disclosure=KnowledgeAndDisclosure(
+            disclosure_level=disclosure_level,
+            uncertainty_action=uncertainty_action,
+            knowledge_claim_type=knowledge_claim_type,
+        ),
+        turn_id=turn_id,
+        seed=42,
+    )
+
+
+def make_context(
+    user_input: str,
+    topic: str = "general",
+    mode: InteractionMode = InteractionMode.CASUAL_CHAT,
+    goal: ConversationGoal = ConversationGoal.EXPLORE_IDEAS,
+    turn: int = 1,
+) -> ConversationContext:
+    return ConversationContext(
+        conversation_id="test_response",
+        turn_number=turn,
+        interaction_mode=mode,
+        goal=goal,
+        topic_signature=topic,
+        user_input=user_input,
+        stance_cache=StanceCache(),
+    )
+
+
+# =============================================================================
+# 1. Schema Tests
+# =============================================================================
+
+
+class TestSchema:
+    """GeneratedResponse and ResponseConfig validation."""
+
+    def test_generated_response_creation(self):
+        resp = GeneratedResponse(text="Hello", backend=GenerationBackend.MOCK)
+        assert resp.text == "Hello"
+        assert resp.backend == GenerationBackend.MOCK
+        assert resp.model_id is None
+        assert resp.token_usage is None
+
+    def test_generated_response_all_fields(self):
+        resp = GeneratedResponse(
+            text="Hi there",
+            backend=GenerationBackend.ANTHROPIC,
+            model_id="claude-haiku-4-5-20251001",
+            prompt_system="You are Sarah.",
+            prompt_user="Hello",
+            token_usage={"input_tokens": 100, "output_tokens": 50},
+            ir_turn_id="turn_1",
+        )
+        assert resp.model_id == "claude-haiku-4-5-20251001"
+        assert resp.token_usage["input_tokens"] == 100
+        assert resp.ir_turn_id == "turn_1"
+
+    def test_response_config_defaults(self):
+        config = ResponseConfig()
+        assert config.backend == GenerationBackend.TEMPLATE
+        assert config.max_tokens == 300
+        assert config.temperature == 0.7
+        assert config.api_key is None
+
+    def test_generation_backend_enum_values(self):
+        assert GenerationBackend.MOCK == "mock"
+        assert GenerationBackend.TEMPLATE == "template"
+        assert GenerationBackend.ANTHROPIC == "anthropic"
+
+
+# =============================================================================
+# 2. Prompt Builder Tests
+# =============================================================================
+
+
+class TestPromptBuilder:
+    """Test IR → system prompt conversion."""
+
+    def test_all_tones_have_prompt(self):
+        """Every Tone enum value must have a prompt mapping."""
+        for tone in Tone:
+            assert tone.value in TONE_PROMPTS, f"Missing prompt for tone: {tone.value}"
+
+    def test_all_verbosities_have_prompt(self):
+        for v in Verbosity:
+            assert v.value in VERBOSITY_PROMPTS
+
+    def test_all_uncertainty_actions_have_prompt(self):
+        for ua in UncertaintyAction:
+            assert ua.value in UNCERTAINTY_PROMPTS
+
+    def test_all_claim_types_have_prompt(self):
+        for ct in KnowledgeClaimType:
+            assert ct.value in CLAIM_TYPE_PROMPTS
+
+    def test_tone_appears_in_prompt(self):
+        ir = make_ir(tone=Tone.ANXIOUS_STRESSED)
+        prompt = build_system_prompt(ir)
+        assert "anxiety" in prompt.lower() or "stress" in prompt.lower()
+
+    def test_warm_tone_in_prompt(self):
+        ir = make_ir(tone=Tone.WARM_ENTHUSIASTIC)
+        prompt = build_system_prompt(ir)
+        assert "warmth" in prompt.lower() or "enthusiasm" in prompt.lower()
+
+    def test_verbosity_brief_in_prompt(self):
+        ir = make_ir(verbosity=Verbosity.BRIEF)
+        prompt = build_system_prompt(ir)
+        assert "1-2 sentences" in prompt
+
+    def test_verbosity_detailed_in_prompt(self):
+        ir = make_ir(verbosity=Verbosity.DETAILED)
+        prompt = build_system_prompt(ir)
+        assert "6+" in prompt
+
+    def test_high_formality_instruction(self):
+        ir = make_ir(formality=0.85)
+        prompt = build_system_prompt(ir)
+        assert "formal" in prompt.lower()
+
+    def test_low_formality_instruction(self):
+        ir = make_ir(formality=0.15)
+        prompt = build_system_prompt(ir)
+        assert "casual" in prompt.lower()
+
+    def test_high_confidence_instruction(self):
+        ir = make_ir(confidence=0.8)
+        prompt = build_system_prompt(ir)
+        assert "confidence" in prompt.lower()
+
+    def test_low_confidence_instruction(self):
+        ir = make_ir(confidence=0.2)
+        prompt = build_system_prompt(ir)
+        assert "uncertain" in prompt.lower() or "not sure" in prompt.lower()
+
+    def test_stance_appears_in_prompt(self):
+        ir = make_ir(stance="AI should augment human creativity")
+        prompt = build_system_prompt(ir)
+        assert "AI should augment human creativity" in prompt
+
+    def test_rationale_appears_in_prompt(self):
+        ir = make_ir(rationale="8 years of UX research experience")
+        prompt = build_system_prompt(ir)
+        assert "8 years of UX research" in prompt
+
+    def test_intent_appears_in_prompt(self):
+        ir = make_ir(intent="Share expertise on UX methodology")
+        prompt = build_system_prompt(ir)
+        assert "Share expertise on UX methodology" in prompt
+
+    def test_hedge_uncertainty_in_prompt(self):
+        ir = make_ir(uncertainty_action=UncertaintyAction.HEDGE)
+        prompt = build_system_prompt(ir)
+        assert "hedging" in prompt.lower() or "limits" in prompt.lower()
+
+    def test_refuse_uncertainty_in_prompt(self):
+        ir = make_ir(uncertainty_action=UncertaintyAction.REFUSE)
+        prompt = build_system_prompt(ir)
+        assert "decline" in prompt.lower()
+
+    def test_domain_expert_claim_in_prompt(self):
+        ir = make_ir(knowledge_claim_type=KnowledgeClaimType.DOMAIN_EXPERT)
+        prompt = build_system_prompt(ir)
+        assert "professional expertise" in prompt.lower()
+
+    def test_speculative_claim_in_prompt(self):
+        ir = make_ir(knowledge_claim_type=KnowledgeClaimType.SPECULATIVE)
+        prompt = build_system_prompt(ir)
+        assert "speculation" in prompt.lower() or "wonder" in prompt.lower()
+
+    def test_persona_identity_in_prompt(self):
+        persona = load_persona()
+        ir = make_ir()
+        prompt = build_system_prompt(ir, persona=persona)
+        assert "Sarah" in prompt
+        assert "UX Researcher" in prompt
+
+    def test_no_persona_still_works(self):
+        ir = make_ir()
+        prompt = build_system_prompt(ir, persona=None)
+        assert "COMMUNICATION STYLE" in prompt
+        assert "RESPONSE GUIDANCE" in prompt
+
+    def test_safety_blocked_topics(self):
+        ir = make_ir()
+        ir.safety_plan.blocked_topics = ["employer_name", "participant_data"]
+        prompt = build_system_prompt(ir)
+        assert "employer_name" in prompt
+        assert "participant_data" in prompt
+        assert "CRITICAL" in prompt
+
+    def test_different_irs_produce_different_prompts(self):
+        ir1 = make_ir(tone=Tone.WARM_ENTHUSIASTIC, confidence=0.9)
+        ir2 = make_ir(tone=Tone.ANXIOUS_STRESSED, confidence=0.2)
+        prompt1 = build_system_prompt(ir1)
+        prompt2 = build_system_prompt(ir2)
+        assert prompt1 != prompt2
+
+    def test_elasticity_firm_in_prompt(self):
+        ir = make_ir(elasticity=0.1)
+        prompt = build_system_prompt(ir)
+        assert "firmly" in prompt.lower() or "firm" in prompt.lower()
+
+    def test_elasticity_open_in_prompt(self):
+        ir = make_ir(elasticity=0.8)
+        prompt = build_system_prompt(ir)
+        assert "open-minded" in prompt.lower() or "open" in prompt.lower()
+
+    def test_disclosure_guarded_in_prompt(self):
+        ir = make_ir(disclosure_level=0.1)
+        prompt = build_system_prompt(ir)
+        assert "guarded" in prompt.lower()
+
+    def test_disclosure_open_in_prompt(self):
+        ir = make_ir(disclosure_level=0.8)
+        prompt = build_system_prompt(ir)
+        assert "open" in prompt.lower()
+
+
+# =============================================================================
+# 3. Float-to-Instruction Tests
+# =============================================================================
+
+
+class TestFloatInstructions:
+    """Test graduated float → instruction converters."""
+
+    @pytest.mark.parametrize("val,keyword", [
+        (0.1, "casual"),
+        (0.3, "conversational"),
+        (0.6, "professional"),
+        (0.9, "formal"),
+    ])
+    def test_formality_levels(self, val, keyword):
+        assert keyword in formality_instruction(val).lower()
+
+    @pytest.mark.parametrize("val,keyword", [
+        (0.1, "diplomatic"),
+        (0.4, "tact"),
+        (0.8, "direct"),
+    ])
+    def test_directness_levels(self, val, keyword):
+        assert keyword in directness_instruction(val).lower()
+
+    @pytest.mark.parametrize("val,keyword", [
+        (0.1, "uncertainty"),
+        (0.4, "moderate"),
+        (0.8, "confidence"),
+    ])
+    def test_confidence_levels(self, val, keyword):
+        assert keyword in confidence_instruction(val).lower()
+
+    @pytest.mark.parametrize("val,keyword", [
+        (0.1, "firmly"),
+        (0.4, "open to adjusting"),
+        (0.8, "open-minded"),
+    ])
+    def test_elasticity_levels(self, val, keyword):
+        assert keyword in elasticity_instruction(val).lower()
+
+    @pytest.mark.parametrize("val,keyword", [
+        (0.1, "guarded"),
+        (0.4, "relevant personal context"),
+        (0.8, "open"),
+    ])
+    def test_disclosure_levels(self, val, keyword):
+        assert keyword in disclosure_instruction(val).lower()
+
+
+# =============================================================================
+# 4. MockAdapter Tests
+# =============================================================================
+
+
+class TestMockAdapter:
+    """Test mock adapter for testing infrastructure."""
+
+    def test_returns_generated_response(self):
+        adapter = MockAdapter()
+        resp = adapter.generate("system", "user")
+        assert isinstance(resp, GeneratedResponse)
+
+    def test_backend_is_mock(self):
+        adapter = MockAdapter()
+        resp = adapter.generate("system", "user")
+        assert resp.backend == GenerationBackend.MOCK
+
+    def test_prompts_preserved(self):
+        adapter = MockAdapter()
+        resp = adapter.generate("my system prompt", "my user prompt")
+        assert resp.prompt_system == "my system prompt"
+        assert resp.prompt_user == "my user prompt"
+
+    def test_fixed_response(self):
+        adapter = MockAdapter(response_text="Fixed answer!")
+        resp = adapter.generate("system", "user")
+        assert resp.text == "Fixed answer!"
+
+    def test_default_response_contains_user_input(self):
+        adapter = MockAdapter()
+        resp = adapter.generate("system", "What about AI?")
+        assert "What about AI?" in resp.text
+
+    def test_call_count_increments(self):
+        adapter = MockAdapter()
+        assert adapter.call_count == 0
+        adapter.generate("s", "u")
+        assert adapter.call_count == 1
+        adapter.generate("s", "u")
+        assert adapter.call_count == 2
+
+    def test_last_prompts_tracked(self):
+        adapter = MockAdapter()
+        adapter.generate("first_system", "first_user")
+        adapter.generate("second_system", "second_user")
+        assert adapter.last_system_prompt == "second_system"
+        assert adapter.last_user_prompt == "second_user"
+
+
+# =============================================================================
+# 5. TemplateAdapter Tests
+# =============================================================================
+
+
+class TestTemplateAdapter:
+    """Test rule-based text generation from IR."""
+
+    def test_returns_generated_response(self):
+        adapter = TemplateAdapter()
+        ir = make_ir()
+        resp = adapter.generate_from_ir(ir, "test input")
+        assert isinstance(resp, GeneratedResponse)
+        assert resp.backend == GenerationBackend.TEMPLATE
+
+    def test_brief_produces_short_text(self):
+        adapter = TemplateAdapter()
+        ir = make_ir(verbosity=Verbosity.BRIEF)
+        resp = adapter.generate_from_ir(ir, "test")
+        sentences = [s.strip() for s in resp.text.split(".") if s.strip()]
+        assert len(sentences) <= 3  # Allow some flexibility
+
+    def test_detailed_longer_than_brief(self):
+        adapter = TemplateAdapter()
+        ir_brief = make_ir(verbosity=Verbosity.BRIEF)
+        ir_detailed = make_ir(verbosity=Verbosity.DETAILED)
+        resp_brief = adapter.generate_from_ir(ir_brief, "test")
+        resp_detailed = adapter.generate_from_ir(ir_detailed, "test")
+        assert len(resp_detailed.text) > len(resp_brief.text)
+
+    def test_different_tones_different_openers(self):
+        adapter = TemplateAdapter()
+        ir_warm = make_ir(tone=Tone.WARM_ENTHUSIASTIC)
+        ir_anxious = make_ir(tone=Tone.ANXIOUS_STRESSED)
+        resp_warm = adapter.generate_from_ir(ir_warm, "test")
+        resp_anxious = adapter.generate_from_ir(ir_anxious, "test")
+        assert resp_warm.text != resp_anxious.text
+
+    def test_low_confidence_adds_hedging(self):
+        adapter = TemplateAdapter()
+        ir = make_ir(confidence=0.2, stance="this could work")
+        resp = adapter.generate_from_ir(ir, "test")
+        text_lower = resp.text.lower()
+        assert "i think" in text_lower or "from what" in text_lower
+
+    def test_high_confidence_no_hedging(self):
+        adapter = TemplateAdapter()
+        ir = make_ir(confidence=0.9, stance="This approach works well")
+        resp = adapter.generate_from_ir(ir, "test")
+        assert "I think this" not in resp.text
+        assert "From what I understand" not in resp.text
+
+    def test_ask_clarifying_adds_question(self):
+        adapter = TemplateAdapter()
+        ir = make_ir(uncertainty_action=UncertaintyAction.ASK_CLARIFYING)
+        resp = adapter.generate_from_ir(ir, "test")
+        assert "?" in resp.text
+
+    def test_hedge_adds_uncertainty(self):
+        adapter = TemplateAdapter()
+        ir = make_ir(uncertainty_action=UncertaintyAction.HEDGE)
+        resp = adapter.generate_from_ir(ir, "test")
+        assert "not entirely certain" in resp.text.lower()
+
+    def test_refuse_adds_declination(self):
+        adapter = TemplateAdapter()
+        ir = make_ir(uncertainty_action=UncertaintyAction.REFUSE)
+        resp = adapter.generate_from_ir(ir, "test")
+        assert "not really the right person" in resp.text.lower()
+
+    def test_stance_appears_in_text(self):
+        adapter = TemplateAdapter()
+        ir = make_ir(
+            stance="User research is essential for good design",
+            confidence=0.8,
+        )
+        resp = adapter.generate_from_ir(ir, "test")
+        assert "user research" in resp.text.lower()
+
+    def test_high_formality_removes_contractions(self):
+        adapter = TemplateAdapter()
+        ir = make_ir(
+            formality=0.9,
+            tone=Tone.NEUTRAL_CALM,
+            stance="I'm not sure about this",
+        )
+        resp = adapter.generate_from_ir(ir, "test")
+        # High formality should expand "I'm" to "I am"
+        assert "I am" in resp.text or "I'm" not in resp.text
+
+    def test_turn_id_propagated(self):
+        adapter = TemplateAdapter()
+        ir = make_ir(turn_id="conv123_turn_5")
+        resp = adapter.generate_from_ir(ir, "test")
+        assert resp.ir_turn_id == "conv123_turn_5"
+
+    def test_persona_adds_occupation_in_detailed(self):
+        adapter = TemplateAdapter()
+        persona = load_persona()
+        ir = make_ir(verbosity=Verbosity.DETAILED)
+        resp = adapter.generate_from_ir(ir, "test", persona=persona)
+        assert "ux researcher" in resp.text.lower()
+
+
+# =============================================================================
+# 6. ResponseGenerator Tests
+# =============================================================================
+
+
+class TestResponseGenerator:
+    """Test the orchestrator wiring."""
+
+    def test_default_uses_template_backend(self):
+        gen = ResponseGenerator()
+        assert isinstance(gen.adapter, TemplateAdapter)
+
+    def test_mock_backend_via_config(self):
+        config = ResponseConfig(backend=GenerationBackend.MOCK)
+        gen = ResponseGenerator(config=config)
+        assert isinstance(gen.adapter, MockAdapter)
+
+    def test_adapter_injection(self):
+        mock = MockAdapter(response_text="injected")
+        gen = ResponseGenerator(adapter=mock)
+        ir = make_ir()
+        resp = gen.generate(ir, "test")
+        assert resp.text == "injected"
+
+    def test_generate_returns_response(self):
+        gen = ResponseGenerator()
+        ir = make_ir()
+        resp = gen.generate(ir, "What do you think?")
+        assert isinstance(resp, GeneratedResponse)
+        assert len(resp.text) > 0
+
+    def test_turn_id_propagated(self):
+        gen = ResponseGenerator()
+        ir = make_ir(turn_id="my_turn_123")
+        resp = gen.generate(ir, "test")
+        assert resp.ir_turn_id == "my_turn_123"
+
+    def test_mock_receives_built_prompt(self):
+        mock = MockAdapter()
+        persona = load_persona()
+        gen = ResponseGenerator(persona=persona, adapter=mock)
+        ir = make_ir(tone=Tone.WARM_ENTHUSIASTIC)
+        gen.generate(ir, "Hello!")
+        # Mock captures the system prompt that was built
+        assert "warmth" in mock.last_system_prompt.lower()
+        assert "Sarah" in mock.last_system_prompt
+
+    def test_factory_function(self):
+        gen = create_response_generator(backend="template")
+        assert isinstance(gen.adapter, TemplateAdapter)
+
+    def test_factory_with_persona(self):
+        persona = load_persona()
+        gen = create_response_generator(persona=persona, backend="template")
+        ir = make_ir()
+        resp = gen.generate(ir, "test")
+        assert isinstance(resp, GeneratedResponse)
+
+
+# =============================================================================
+# 7. Persona Differentiation Tests
+# =============================================================================
+
+
+class TestPersonaDifferentiation:
+    """Different personas/states MUST produce different responses."""
+
+    def test_different_personas_different_template_output(self):
+        """Two different personas → different IR → different template text."""
+        persona1 = load_persona("personas/ux_researcher.yaml")
+        persona2 = load_persona("personas/test_high_neuroticism.yaml")
+
+        planner1 = TurnPlanner(persona1, DeterminismManager(seed=42))
+        planner2 = TurnPlanner(persona2, DeterminismManager(seed=42))
+
+        ctx1 = make_context("What do you think about remote work?")
+        ctx2 = make_context("What do you think about remote work?")
+
+        ir1 = planner1.generate_ir(ctx1)
+        ir2 = planner2.generate_ir(ctx2)
+
+        gen1 = ResponseGenerator(persona=persona1)
+        gen2 = ResponseGenerator(persona=persona2)
+
+        resp1 = gen1.generate(ir1, "What do you think about remote work?")
+        resp2 = gen2.generate(ir2, "What do you think about remote work?")
+
+        # Different personas should produce different text
+        assert resp1.text != resp2.text, (
+            "Different personas should produce different template responses"
+        )
+
+    def test_different_tones_different_character(self):
+        """Same IR but different tones → different opening character."""
+        adapter = TemplateAdapter()
+
+        ir_warm = make_ir(tone=Tone.WARM_ENTHUSIASTIC, confidence=0.8)
+        ir_tired = make_ir(tone=Tone.TIRED_WITHDRAWN, confidence=0.8)
+
+        resp_warm = adapter.generate_from_ir(ir_warm, "test")
+        resp_tired = adapter.generate_from_ir(ir_tired, "test")
+
+        # Warm should start enthusiastically, tired should be subdued
+        assert resp_warm.text != resp_tired.text
+        assert "excited" in resp_warm.text.lower() or "great" in resp_warm.text.lower()
+
+    def test_expert_vs_nonexpert_different_confidence(self):
+        """Expert domain → high confidence text, unknown domain → hedging text."""
+        persona = load_persona()
+        planner = TurnPlanner(persona, DeterminismManager(seed=42))
+        gen = ResponseGenerator(persona=persona)
+
+        # Expert domain (psychology)
+        ctx_expert = make_context(
+            "Tell me about cognitive load in UX design",
+            topic="psychology",
+        )
+        ir_expert = planner.generate_ir(ctx_expert)
+        resp_expert = gen.generate(ir_expert, ctx_expert.user_input)
+
+        # Recreate planner to avoid state bleed
+        planner2 = TurnPlanner(persona, DeterminismManager(seed=42))
+        gen2 = ResponseGenerator(persona=persona)
+
+        # Unknown domain
+        ctx_unknown = make_context(
+            "Explain quantum chromodynamics",
+            topic="particle_physics",
+        )
+        ir_unknown = planner2.generate_ir(ctx_unknown)
+        resp_unknown = gen2.generate(ir_unknown, ctx_unknown.user_input)
+
+        # Responses should differ
+        assert resp_expert.text != resp_unknown.text
+
+    def test_same_persona_different_moods_over_turns(self):
+        """Same persona at turn 1 vs turn 15 should produce different output."""
+        persona = load_persona()
+        planner = TurnPlanner(persona, DeterminismManager(seed=42))
+        gen = ResponseGenerator(persona=persona)
+
+        cache = StanceCache()
+
+        # Turn 1
+        ctx1 = ConversationContext(
+            conversation_id="test_mood",
+            turn_number=1,
+            interaction_mode=InteractionMode.CASUAL_CHAT,
+            goal=ConversationGoal.EXPLORE_IDEAS,
+            topic_signature="general",
+            user_input="What's on your mind?",
+            stance_cache=cache,
+        )
+        ir1 = planner.generate_ir(ctx1)
+        resp1 = gen.generate(ir1, ctx1.user_input)
+
+        # Simulate many turns to build fatigue
+        for t in range(2, 16):
+            ctx_mid = ConversationContext(
+                conversation_id="test_mood",
+                turn_number=t,
+                interaction_mode=InteractionMode.CASUAL_CHAT,
+                goal=ConversationGoal.EXPLORE_IDEAS,
+                topic_signature="general",
+                user_input="Tell me more.",
+                stance_cache=cache,
+            )
+            planner.generate_ir(ctx_mid)
+
+        # Turn 16
+        ctx16 = ConversationContext(
+            conversation_id="test_mood",
+            turn_number=16,
+            interaction_mode=InteractionMode.CASUAL_CHAT,
+            goal=ConversationGoal.EXPLORE_IDEAS,
+            topic_signature="general",
+            user_input="What's on your mind?",
+            stance_cache=cache,
+        )
+        ir16 = planner.generate_ir(ctx16)
+        resp16 = gen.generate(ir16, ctx16.user_input)
+
+        # After 15 turns, fatigue should change the output
+        assert resp1.text != resp16.text or ir1.communication_style.tone != ir16.communication_style.tone
+
+
+# =============================================================================
+# 8. Full Pipeline Integration Tests
+# =============================================================================
+
+
+class TestFullPipeline:
+    """End-to-end: Persona → TurnPlanner → IR → ResponseGenerator → text."""
+
+    def test_end_to_end_template(self):
+        """Full pipeline with template backend produces non-empty text."""
+        persona = load_persona()
+        planner = TurnPlanner(persona, DeterminismManager(seed=42))
+        gen = ResponseGenerator(persona=persona)
+
+        ctx = make_context("What do you think about AI in UX research?")
+        ir = planner.generate_ir(ctx)
+        resp = gen.generate(ir, ctx.user_input)
+
+        assert isinstance(resp, GeneratedResponse)
+        assert len(resp.text) > 10
+        assert resp.backend == GenerationBackend.TEMPLATE
+        assert resp.ir_turn_id is not None
+
+    def test_end_to_end_mock(self):
+        """Full pipeline with mock backend captures correct prompt."""
+        persona = load_persona()
+        planner = TurnPlanner(persona, DeterminismManager(seed=42))
+
+        mock = MockAdapter()
+        gen = ResponseGenerator(persona=persona, adapter=mock)
+
+        ctx = make_context("Tell me about your research methodology")
+        ir = planner.generate_ir(ctx)
+        resp = gen.generate(ir, ctx.user_input)
+
+        # Verify the prompt was built from the IR
+        assert resp.prompt_system is not None
+        assert "COMMUNICATION STYLE" in resp.prompt_system
+        assert "RESPONSE GUIDANCE" in resp.prompt_system
+        assert "Sarah" in resp.prompt_system
+
+    def test_deterministic_template_output(self):
+        """Same seed + same input → same template output."""
+        persona = load_persona()
+
+        planner1 = TurnPlanner(persona, DeterminismManager(seed=42))
+        gen1 = ResponseGenerator(persona=persona)
+        ctx1 = make_context("What do you think about AI?")
+        ir1 = planner1.generate_ir(ctx1)
+        resp1 = gen1.generate(ir1, ctx1.user_input)
+
+        planner2 = TurnPlanner(persona, DeterminismManager(seed=42))
+        gen2 = ResponseGenerator(persona=persona)
+        ctx2 = make_context("What do you think about AI?")
+        ir2 = planner2.generate_ir(ctx2)
+        resp2 = gen2.generate(ir2, ctx2.user_input)
+
+        assert resp1.text == resp2.text
