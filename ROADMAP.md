@@ -40,11 +40,11 @@ Build **Persona Engine + Turn Planner (IR) + Validator + Local SDK** with 10-15 
 - [ ] Prevent persona drift from memory replay
 
 ## Phase 5: Response Generator (IR → Text)
-- [ ] Choose LLM provider (Claude vs GPT-4 - decide based on controllability)
-- [ ] Build LLM adapter abstraction
-- [ ] Implement IR → text renderer (LLM takes IR constraints)
+- [x] Choose LLM provider (Anthropic Claude selected)
+- [x] Build LLM adapter abstraction (AnthropicAdapter, OpenAIAdapter, MockLLMAdapter)
+- [x] Implement IR → text renderer (IRPromptBuilder with constraint formatting)
 - [ ] Add template engine for strict mode
-- [ ] Create style modulator (applies verbosity, formality, directness from IR)
+- [x] Create style modulator (applies verbosity, formality, directness from IR)
 - [ ] Implement strict mode (reduces creativity, increases templates)
 
 ## Phase 6: Validation & QA Suite

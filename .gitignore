@@ -33,3 +33,4 @@ Thumbs.db
 
 # Archive (old ICIF-AES project)
 icif_aes_archive/
+.env
