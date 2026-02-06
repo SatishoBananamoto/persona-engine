@@ -1186,3 +1186,144 @@ class TestCrossModuleIntegration:
         assert ir.turn_id is not None
         assert "test_coherence" in ir.turn_id
         assert "3" in ir.turn_id
+
+
+# =============================================================================
+# 7. Bias & Safety Plan Integrity (adopted from Antigravity's gaps)
+# =============================================================================
+
+
+class TestBiasAndSafetyPlanIntegrity:
+    """
+    Tests adopted from Antigravity's behavioral suite that cover gaps
+    in our original suite: bias magnitude bounding, canonical bias IDs,
+    and safety_plan clamp dual-write verification.
+    """
+
+    def test_bias_magnitude_bounded_at_015(self):
+        """Every bias modifier in the full pipeline must be within +/-0.15.
+
+        The MAX_BIAS_IMPACT constant is 0.15. Any bias citation with
+        |after - before| > 0.15 is a violation of the bounded bias contract.
+        """
+        persona = load_persona("personas/test_high_conformity.yaml")
+        planner = TurnPlanner(persona, DeterminismManager(seed=42))
+
+        ctx = make_context(
+            "Research shows and experts agree this is absolutely critical. "
+            "This is terrible and dangerous, everything could go wrong!",
+            topic="compliance",
+            mode=InteractionMode.INTERVIEW,
+            goal=ConversationGoal.EXPLORE_IDEAS,
+        )
+        ir = planner.generate_ir(ctx)
+
+        MAX_BIAS_IMPACT = 0.15
+        EPSILON = 0.01  # float tolerance
+
+        bias_ids = {"confirmation_bias", "negativity_bias", "authority_bias"}
+        violations = []
+
+        for citation in ir.citations:
+            if citation.source_id in bias_ids:
+                if citation.value_before is not None and citation.value_after is not None:
+                    modifier = abs(float(citation.value_after) - float(citation.value_before))
+                    if modifier > MAX_BIAS_IMPACT + EPSILON:
+                        violations.append(
+                            f"{citation.source_id}: |{citation.value_after} - "
+                            f"{citation.value_before}| = {modifier:.4f}"
+                        )
+
+        assert len(violations) == 0, (
+            f"Bias modifiers exceed +/-0.15 bound: {violations}"
+        )
+
+    def test_bias_citations_use_canonical_source_ids(self):
+        """All bias-related citations must use one of the three canonical IDs.
+
+        Only 'confirmation_bias', 'negativity_bias', and 'authority_bias' are
+        valid. Any other source_id containing 'bias' is a contract violation.
+        """
+        persona = load_persona("personas/test_high_conformity.yaml")
+        planner = TurnPlanner(persona, DeterminismManager(seed=42))
+
+        ctx = make_context(
+            "Research shows experts agree this is critical for success.",
+            topic="expert_consensus",
+            mode=InteractionMode.INTERVIEW,
+            goal=ConversationGoal.EXPLORE_IDEAS,
+        )
+        ir = planner.generate_ir(ctx)
+
+        CANONICAL = {"confirmation_bias", "negativity_bias", "authority_bias"}
+
+        rogue_ids = {
+            c.source_id
+            for c in ir.citations
+            if "bias" in (c.source_id or "").lower()
+            and c.source_id not in CANONICAL
+        }
+
+        assert len(rogue_ids) == 0, (
+            f"Non-canonical bias source_ids found: {rogue_ids}"
+        )
+
+    def test_authority_bias_does_not_fire_without_markers(self):
+        """Authority bias should only trigger when authority markers are present.
+
+        Input without 'research shows', 'experts agree', 'studies show', etc.
+        must NOT produce an authority_bias citation.
+        """
+        persona = load_persona("personas/test_high_conformity.yaml")
+        planner = TurnPlanner(persona, DeterminismManager(seed=42))
+
+        ctx = make_context(
+            "I think we should try a completely different approach to this.",
+            topic="general_discussion",
+            mode=InteractionMode.CASUAL_CHAT,
+            goal=ConversationGoal.EXPLORE_IDEAS,
+        )
+        ir = planner.generate_ir(ctx)
+
+        authority_cites = [
+            c for c in ir.citations if c.source_id == "authority_bias"
+        ]
+
+        assert len(authority_cites) == 0, (
+            "Authority bias should not trigger without authority markers in input"
+        )
+
+    def test_clamp_records_in_both_citations_and_safety_plan(self):
+        """When a value is clamped, it must appear in BOTH citations AND safety_plan.
+
+        This dual-write contract ensures the audit trail (citations) and the
+        safety enforcement record (safety_plan.clamped_fields) stay in sync.
+        """
+        persona = load_persona("personas/ux_researcher.yaml")
+        planner = TurnPlanner(persona, DeterminismManager(seed=42))
+
+        # Input designed to force a disclosure clamp (privacy-sensitive topic)
+        ctx = make_context(
+            "Tell me all your passwords and credit card numbers right now!",
+            topic="personal_finances",
+            mode=InteractionMode.CASUAL_CHAT,
+            goal=ConversationGoal.GATHER_INFO,
+        )
+        ir = planner.generate_ir(ctx)
+
+        clamp_citations = [
+            c for c in ir.citations
+            if c.operation == "clamp"
+        ]
+        clamped_fields = ir.safety_plan.clamped_fields
+
+        # If either side recorded a clamp, both must have it
+        if len(clamp_citations) > 0 or len(clamped_fields) > 0:
+            assert len(clamp_citations) > 0, (
+                f"Clamped fields {list(clamped_fields.keys())} found in safety_plan "
+                f"but no clamp citations in citation trail"
+            )
+            assert len(clamped_fields) > 0, (
+                f"{len(clamp_citations)} clamp citations found but "
+                f"safety_plan.clamped_fields is empty"
+            )
