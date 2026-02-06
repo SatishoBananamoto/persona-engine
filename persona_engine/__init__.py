@@ -6,18 +6,18 @@ A psychologically-grounded system for creating behaviorally coherent synthetic p
 
 __version__ = "0.1.0"
 
+from persona_engine.schema.ir_schema import (
+    CommunicationStyle,
+    ConversationFrame,
+    IntermediateRepresentation,
+    KnowledgeAndDisclosure,
+    ResponseStructure,
+)
 from persona_engine.schema.persona_schema import (
-    Persona,
-    PersonalityProfile,
     CognitiveStyle,
     CommunicationPreferences,
-)
-from persona_engine.schema.ir_schema import (
-    IntermediateRepresentation,
-    ConversationFrame,
-    ResponseStructure,
-    CommunicationStyle,
-    KnowledgeAndDisclosure,
+    Persona,
+    PersonalityProfile,
 )
 
 __all__ = [

@@ -10,9 +10,9 @@ Production-grade domain detection that:
 - prevents double-counting of phrases and unigrams
 """
 
-from typing import List, Dict, Optional, Tuple, Set, Any, TYPE_CHECKING
-from dataclasses import dataclass, field
 import re
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from persona_engine.planner.trace_context import TraceContext
@@ -51,7 +51,7 @@ def _get_field(obj: Any, field_name: str, default: Any = None) -> Any:
 def tokenize_with_ngrams(
     text: str,
     max_n: int = MAX_NGRAM_SIZE,
-) -> Tuple[List[str], Set[str]]:
+) -> tuple[list[str], set[str]]:
     """
     Tokenize input into unigrams + phrase n-grams.
 
@@ -65,7 +65,7 @@ def tokenize_with_ngrams(
     text = re.sub(r"[^\w\s]", " ", text)
     tokens = [t.strip() for t in text.split() if t.strip()]
 
-    ngrams: Set[str] = set()
+    ngrams: set[str] = set()
     for n in range(2, max_n + 1):
         for i in range(len(tokens) - n + 1):
             phrase = " ".join(tokens[i : i + n])
@@ -74,10 +74,10 @@ def tokenize_with_ngrams(
     return tokens, ngrams
 
 
-def _extract_keywords(text: str, filter_short: bool = False) -> List[str]:
+def _extract_keywords(text: str, filter_short: bool = False) -> list[str]:
     """
     Extract keywords from a string using the same tokenization rules.
-    
+
     Args:
         text: Input string to tokenize
         filter_short: If True, filter out tokens < 3 chars unless whitelisted
@@ -85,10 +85,10 @@ def _extract_keywords(text: str, filter_short: bool = False) -> List[str]:
     text = text.lower()
     text = re.sub(r"[^\w\s]", " ", text)
     tokens = [t.strip() for t in text.split() if t.strip()]
-    
+
     if filter_short:
         return [t for t in tokens if len(t) >= 3 or t in TECHNICAL_TERMS_WHITELIST]
-        
+
     return tokens
 
 
@@ -108,22 +108,22 @@ class DomainEntry:
     """Single domain in the registry."""
 
     domain_id: str
-    keywords: Dict[str, float]  # keyword -> weight (0.0-1.0)
-    negative_keywords: List[str] = field(default_factory=list)
+    keywords: dict[str, float]  # keyword -> weight (0.0-1.0)
+    negative_keywords: list[str] = field(default_factory=list)
 
-    def score_input(self, tokens: List[str], ngrams: Set[str]) -> float:
+    def score_input(self, tokens: list[str], ngrams: set[str]) -> float:
         """
         Score input against this domain's keywords.
 
         Uses exact matching for unigrams and phrase matching for
         multi-word keywords via the ngram set.
-        
+
         Note: Cumulative scoring - scores both phrases and constituent unigrams
         if they appear in the keyword list. This provides a natural boost
         for phrase matches.
         """
         score = 0.0
-        
+
         # 1. Penalize negative keywords first
         for neg in self.negative_keywords:
             hit = (neg in ngrams) if (" " in neg) else (neg in tokens)
@@ -131,20 +131,20 @@ class DomainEntry:
                 score -= NEGATIVE_KEYWORD_PENALTY
 
         # 2. Score positive keywords
-        matched_keywords: Set[str] = set()
+        matched_keywords: set[str] = set()
 
         # Check all keywords against ngrams/tokens
         for kw, weight in self.keywords.items():
             is_phrase = " " in kw
             hit = False
-            
+
             if is_phrase:
                 if kw in ngrams:
                     hit = True
             else:
                 if kw in tokens:
                     hit = True
-            
+
             if hit and kw not in matched_keywords:
                 score += weight
                 matched_keywords.add(kw)
@@ -155,7 +155,7 @@ class DomainEntry:
 # Built-in domain registry — can be extended per deployment
 # Note: Whitelist filtering is NOT applied to these hardcoded keywords.
 # Short tokens like "ux", "ai" in the registry are preserved.
-DOMAIN_REGISTRY: List[DomainEntry] = [
+DOMAIN_REGISTRY: list[DomainEntry] = [
     DomainEntry(
         domain_id="psychology",
         keywords={
@@ -222,9 +222,9 @@ _PRIORITY_PERSONA = 1  # persona wins ties
 
 def detect_domain(
     user_input: str,
-    persona_domains: Optional[List[dict]] = None,
+    persona_domains: list[dict] | None = None,
     ctx: Optional["TraceContext"] = None,
-) -> Tuple[str, float]:
+) -> tuple[str, float]:
     """
     Detect domain from user input using keyword scoring.
 
@@ -260,7 +260,7 @@ def detect_domain(
     # ------------------------------------------------------------------
     # Score all candidates: (score, priority, domain_id)
     # ------------------------------------------------------------------
-    scores: List[Tuple[float, int, str]] = []
+    scores: list[tuple[float, int, str]] = []
 
     for entry in DOMAIN_REGISTRY:
         score = entry.score_input(tokens, ngrams)
@@ -276,17 +276,17 @@ def detect_domain(
             subdomains = _get_field(pd, "subdomains", [])
 
             # Build keywords from domain name + subdomains
-            domain_keywords: Dict[str, float] = {domain_name: 1.0}
+            domain_keywords: dict[str, float] = {domain_name: 1.0}
             for sd in subdomains:
                 # Use unified tokenizer to split "UI/UX" -> "ui", "ux"
                 sd_keywords = _extract_keywords(sd, filter_short=False)
-                
+
                 # Check for phrasal subdomains vs single words
                 if len(sd_keywords) > 1:
                     # Add exact phrase
                     phrase = " ".join(sd_keywords)
                     domain_keywords[phrase] = 0.8
-                
+
                 # Add individual tokens
                 for word in sd_keywords:
                     # Apply whitelist filter here for dynamic keywords
@@ -352,8 +352,8 @@ def detect_domain(
 
 def compute_topic_relevance(
     user_input: str,
-    persona_domains: Optional[List[Any]] = None,
-    persona_goals: Optional[List[Any]] = None,
+    persona_domains: list[Any] | None = None,
+    persona_goals: list[Any] | None = None,
     ctx: Optional["TraceContext"] = None,
     default_relevance: float = DEFAULT_TOPIC_RELEVANCE,
 ) -> float:
@@ -361,7 +361,7 @@ def compute_topic_relevance(
     Compute topic relevance as overlap between input and persona interests.
 
     Relevance = (# overlapping keywords) / (# input tokens).
-    
+
     Prevents double-counting by consuming tokens matched by phrases.
 
     Args:
@@ -386,8 +386,8 @@ def compute_topic_relevance(
         return default_relevance
 
     # 1. Build Interest Sets
-    interest_keywords: Set[str] = set()
-    interest_phrases: Set[str] = set() 
+    interest_keywords: set[str] = set()
+    interest_phrases: set[str] = set()
 
     if persona_domains:
         for pd in persona_domains:
@@ -403,10 +403,10 @@ def compute_topic_relevance(
                 sd_tokens = _extract_keywords(sd, filter_short=False)
                 if not sd_tokens:
                     continue
-                
+
                 if len(sd_tokens) > 1:
                     interest_phrases.add(" ".join(sd_tokens))
-                
+
                 # Add individual words with filter
                 for word in sd_tokens:
                     if len(word) >= 3 or word in TECHNICAL_TERMS_WHITELIST:
@@ -417,7 +417,7 @@ def compute_topic_relevance(
             goal_text = (_get_field(g, "goal") or "")
             if not goal_text.strip():
                 continue
-            
+
             # Goals usually sentences -> extract just keywords with filter
             goal_tokens = _extract_keywords(goal_text, filter_short=True)
             for word in goal_tokens:
@@ -439,13 +439,13 @@ def compute_topic_relevance(
     # 2. Compute Coverage (Prevent double-counting)
     # We want to find how many *tokens* are covered by interests.
     # Phrases cover multiple tokens. Unigrams cover 1.
-    
-    covered_indices: Set[int] = set()
-    
+
+    covered_indices: set[int] = set()
+
     # A. Check phrases first (longest first ideally, but ngrams set is flat)
-    # Since we don't have indices in `ngrams`, we must reconstruct detection 
+    # Since we don't have indices in `ngrams`, we must reconstruct detection
     # to associate matches with token indices.
-    
+
     # Iterate through generated ngrams again to map to indices
     # MAX_NGRAM_SIZE is small (3), so this is cheap.
     for n in range(MAX_NGRAM_SIZE, 1, -1):  # 3, then 2
@@ -455,7 +455,7 @@ def compute_topic_relevance(
             is_overlap = any(j in covered_indices for j in range(i, i + n))
             if is_overlap:
                 continue
-                
+
             phrase = " ".join(tokens_list[i : i + n])
             if phrase in interest_phrases:
                 # MARK CONSUMED
@@ -618,7 +618,7 @@ def _norm_action(action: str) -> str:
 
 
 # Intent map: (user_intent, normalized_uncertainty_action) → intent string
-_INTENT_MAP: Dict[Tuple[str, str], str] = {
+_INTENT_MAP: dict[tuple[str, str], str] = {
     # User is asking
     ("ask", "ANSWER"): "Provide direct answer with domain knowledge",
     ("ask", "HEDGE"): "Provide tentative answer with uncertainty markers",
@@ -689,20 +689,20 @@ def generate_intent_string(
 
     norm = _norm_action(uncertainty_action)
     key = (user_intent.lower(), norm)
-    intent = _INTENT_MAP.get(key)
+    mapped_intent = _INTENT_MAP.get(key)
 
-    if intent:
+    if mapped_intent:
         if ctx:
             ctx.add_basic_citation(
                 source_type="rule",
                 source_id="intent_generation",
                 effect=(
                     f"Intent: user_intent='{user_intent}' + "
-                    f"uncertainty='{norm}' → '{intent}'"
+                    f"uncertainty='{norm}' → '{mapped_intent}'"
                 ),
                 weight=1.0,
             )
-        return intent
+        return mapped_intent
 
     # Fallback for unknown combinations
     fallback = f"Respond to {user_intent} with {uncertainty_action.lower()} approach"

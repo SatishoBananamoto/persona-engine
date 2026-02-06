@@ -8,40 +8,41 @@ Production-grade context object for Turn Planner that ensures:
 - Per-turn seed management
 """
 
-from typing import List, Optional, Literal
+from typing import Literal
+
 from persona_engine.schema.ir_schema import (
     Citation,
-    SafetyPlan,
     ClampRecord,
     MemoryOps,
-    apply_numeric_modifier,
+    SafetyPlan,
     apply_enum_modifier,
+    apply_numeric_modifier,
 )
 
 
 class TraceContext:
     """
     Centralized citation and safety tracking for Turn Planner.
-    
+
     Provides convenience methods that ensure every mutation
     goes through proper citation and safety plan recording.
-    
+
     Features:
     - Auto-generates delta citations
     - Records clamps in SafetyPlan
     - Supports multiple clamps per field
     - Constraint name tracking
     """
-    
-    def __init__(self):
-        self.citations: List[Citation] = []
+
+    def __init__(self) -> None:
+        self.citations: list[Citation] = []
         self.safety_plan: SafetyPlan = SafetyPlan()
         self.memory_ops: MemoryOps = MemoryOps()
-    
+
     # ========================================================================
     # Convenience Wrappers (shorter names for planner code)
     # ========================================================================
-    
+
     def num(
         self,
         *,
@@ -53,7 +54,7 @@ class TraceContext:
         after: float,
         effect: str,
         weight: float = 1.0,
-        reason: Optional[str] = None,
+        reason: str | None = None,
     ) -> float:
         """Apply numeric modifier with auto-citation"""
         return apply_numeric_modifier(
@@ -68,7 +69,7 @@ class TraceContext:
             weight=weight,
             reason=reason,
         )
-    
+
     def enum(
         self,
         *,
@@ -80,7 +81,7 @@ class TraceContext:
         after: str,
         effect: str,
         weight: float = 1.0,
-        reason: Optional[str] = None,
+        reason: str | None = None,
     ) -> str:
         """Apply enum/string modifier with auto-citation"""
         return apply_enum_modifier(
@@ -95,24 +96,24 @@ class TraceContext:
             weight=weight,
             reason=reason,
         )
-    
+
     def clamp(
         self,
         *,
         field_name: str,
         target_field: str,
         proposed: float,
-        minimum: Optional[float],
-        maximum: Optional[float],
+        minimum: float | None,
+        maximum: float | None,
         constraint_name: str,  # CRITICAL: not hardcoded to "bounds_check"
         reason: str,
     ) -> float:
         """
         Clamp value and record in both citations and safety plan.
-        
+
         Supports multiple clamps per field (stored as List[ClampRecord]).
         Only records if actual clamping occurred.
-        
+
         Args:
             field_name: Short name for safety_plan key (e.g., "disclosure_level")
             target_field: Full IR field path (e.g., "knowledge_disclosure.disclosure_level")
@@ -121,18 +122,18 @@ class TraceContext:
             maximum: Upper bound (None = no upper bound)
             constraint_name: Which constraint is clamping (e.g., "privacy_filter", "bounds_check")
             reason: Why this clamp is happening
-            
+
         Returns:
             Clamped value
         """
         actual = proposed
-        
+
         # Apply clamps
         if minimum is not None and actual < minimum:
             actual = minimum
         if maximum is not None and actual > maximum:
             actual = maximum
-        
+
         # Only record if clamping happened
         if abs(actual - proposed) > 1e-9:
             # Add citation
@@ -147,11 +148,11 @@ class TraceContext:
                 weight=1.0,
                 reason=reason
             )
-            
+
             # Add safety plan record (supports multiple clamps per field)
             if field_name not in self.safety_plan.clamped_fields:
                 self.safety_plan.clamped_fields[field_name] = []
-            
+
             self.safety_plan.clamped_fields[field_name].append(ClampRecord(
                 proposed=proposed,
                 actual=actual,
@@ -159,12 +160,12 @@ class TraceContext:
                 maximum=maximum,
                 reason=f"{constraint_name}: {reason}"
             ))
-            
+
             # Mark constraint as active
             self.activate_constraint(constraint_name)
-        
+
         return actual
-    
+
     def base(
         self,
         *,
@@ -184,7 +185,7 @@ class TraceContext:
             effect=effect,
             weight=1.0
         )
-    
+
     def base_enum(
         self,
         *,
@@ -204,27 +205,27 @@ class TraceContext:
             effect=effect,
             weight=1.0
         )
-    
-    def block_topic(self, topic: str):
+
+    def block_topic(self, topic: str) -> None:
         """Record blocked topic in safety plan"""
         if topic not in self.safety_plan.blocked_topics:
             self.safety_plan.blocked_topics.append(topic)
-        
+
         self.activate_constraint("must_avoid")
-    
-    def block_pattern(self, pattern_trigger: str, reason: str):
+
+    def block_pattern(self, pattern_trigger: str, reason: str) -> None:
         """Record blocked pattern in safety plan"""
         block_msg = f"Pattern '{pattern_trigger}' blocked: {reason}"
         if block_msg not in self.safety_plan.pattern_blocks:
             self.safety_plan.pattern_blocks.append(block_msg)
-        
+
         self.activate_constraint("pattern_safety")
-    
-    def activate_constraint(self, constraint_name: str):
+
+    def activate_constraint(self, constraint_name: str) -> None:
         """Mark constraint as active (idempotent)"""
         if constraint_name not in self.safety_plan.active_constraints:
             self.safety_plan.active_constraints.append(constraint_name)
-    
+
     def add_basic_citation(
         self,
         *,
@@ -232,7 +233,7 @@ class TraceContext:
         source_id: str,
         effect: str,
         weight: float = 1.0
-    ):
+    ) -> None:
         """Add basic citation without delta tracking (for info/context)"""
         self.citations.append(Citation(
             source_type=source_type,  # type: ignore
@@ -255,7 +256,7 @@ def clamp01(
 ) -> float:
     """
     Convenience: clamp numeric value to [0, 1].
-    
+
     Only records if actual clamping occurs.
     """
     return ctx.clamp(
@@ -272,24 +273,24 @@ def clamp01(
 def create_turn_seed(base_seed: int, conversation_id: str, turn_number: int) -> int:
     """
     Create deterministic per-turn seed.
-    
+
     Ensures same conversation+turn always gets same seed for reproducibility.
-    
+
     Args:
         base_seed: Base random seed
         conversation_id: Unique conversation identifier
         turn_number: Turn number in conversation
-        
+
     Returns:
         Deterministic seed for this turn
     """
     import hashlib
-    
+
     # Combine inputs deterministically
     seed_input = f"{base_seed}:{conversation_id}:{turn_number}"
     hash_digest = hashlib.sha256(seed_input.encode()).digest()
-    
+
     # Convert first 4 bytes to int
     turn_seed = int.from_bytes(hash_digest[:4], byteorder='big')
-    
+
     return turn_seed

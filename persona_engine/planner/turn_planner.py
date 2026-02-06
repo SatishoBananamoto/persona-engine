@@ -12,49 +12,49 @@ This ensures:
 - Constraint enforcement
 """
 
-from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
+from typing import Optional
 
-from persona_engine.schema.persona_schema import Persona
-from persona_engine.schema.ir_schema import (
-    IntermediateRepresentation,
-    ConversationFrame,
-    ResponseStructure,
-    CommunicationStyle,
-    KnowledgeAndDisclosure,
-    InteractionMode,
-    ConversationGoal,
-    Verbosity,
-    Tone,
-    UncertaintyAction,
-    KnowledgeClaimType,
-    MemoryOps
-)
 from persona_engine.behavioral import (
-    TraitInterpreter,
-    ValuesInterpreter,
+    BehavioralRulesEngine,
+    BiasModifier,
+    BiasSimulator,
     CognitiveStyleInterpreter,
     StateManager,
-    BehavioralRulesEngine,
-    resolve_uncertainty_action,
-    infer_knowledge_claim_type,
+    TraitInterpreter,
+    ValuesInterpreter,
     apply_response_pattern_safely,
+    infer_knowledge_claim_type,
+    resolve_uncertainty_action,
     validate_stance_against_invariants,
-    BiasSimulator,
 )
 from persona_engine.memory import StanceCache
-from persona_engine.utils import DeterminismManager
-from persona_engine.planner.trace_context import TraceContext, create_turn_seed, clamp01
-from persona_engine.planner.intent_analyzer import analyze_intent
-from persona_engine.planner.stance_generator import generate_stance_safe
 from persona_engine.planner.domain_detection import (
-    detect_domain,
     compute_topic_relevance,
+    detect_domain,
     detect_evidence_strength,
     generate_intent_string,
-    DEFAULT_DOMAIN
 )
-
+from persona_engine.planner.intent_analyzer import analyze_intent
+from persona_engine.planner.stance_generator import generate_stance_safe
+from persona_engine.planner.trace_context import TraceContext, clamp01, create_turn_seed
+from persona_engine.schema.ir_schema import (
+    Citation,
+    CommunicationStyle,
+    ConversationFrame,
+    ConversationGoal,
+    InteractionMode,
+    IntermediateRepresentation,
+    KnowledgeAndDisclosure,
+    KnowledgeClaimType,
+    MemoryOps,
+    ResponseStructure,
+    Tone,
+    UncertaintyAction,
+    Verbosity,
+)
+from persona_engine.schema.persona_schema import Persona
+from persona_engine.utils import DeterminismManager
 
 # =============================================================================
 # CONFIGURATION CONSTANTS
@@ -92,30 +92,30 @@ class ConversationContext:
     """Context for current conversation"""
     conversation_id: str
     turn_number: int
-    interaction_mode: Optional[InteractionMode]  # Can be None, inferred by analyze_intent
-    goal: Optional[ConversationGoal]  # Can be None, inferred by analyze_intent
+    interaction_mode: InteractionMode | None  # Can be None, inferred by analyze_intent
+    goal: ConversationGoal | None  # Can be None, inferred by analyze_intent
     topic_signature: str  # Hash/key for topic
     user_input: str
     stance_cache: StanceCache
-    domain: Optional[str] = None
-    
-    
+    domain: str | None = None
+
+
 class TurnPlanner:
     """
     Orchestrates all behavioral components to generate IR.
-    
+
     Follows canonical modifier composition sequence:
     base → role → trait → state → constraints
     """
-    
+
     def __init__(
         self,
         persona: Persona,
-        determinism: Optional[DeterminismManager] = None
+        determinism: DeterminismManager | None = None
     ):
         self.persona = persona
         self.determinism = determinism or DeterminismManager()
-        
+
         # Initialize all interpreters
         self.traits = TraitInterpreter(persona.psychology.big_five)
         self.values = ValuesInterpreter(persona.psychology.values)
@@ -126,7 +126,7 @@ class TurnPlanner:
             self.determinism
         )
         self.rules = BehavioralRulesEngine(persona)
-        
+
         # Initialize bias simulator
         self.bias_simulator = BiasSimulator(
             traits={
@@ -138,17 +138,17 @@ class TurnPlanner:
             },
             value_priorities=self.values.get_value_priorities(),
         )
-        
+
         # Track bias modifiers for current turn (reset per turn)
-        self._current_bias_modifiers = []
-    
+        self._current_bias_modifiers: list[BiasModifier] = []
+
     def generate_ir(self, context: ConversationContext) -> IntermediateRepresentation:
         """
         Generate Intermediate Representation for a single turn.
-        
+
         This is the central orchestration method that coordinates all behavioral
         interpreters using canonical modifier composition with full citation tracking.
-        
+
         P0/P1 PRODUCTION FEATURES:
         - TraceContext for all citations + SafetyPlan
         - Per-turn deterministic seeding
@@ -158,13 +158,13 @@ class TurnPlanner:
         - Pattern blocks recorded
         """
         # Imports already at top level
-        
+
         # ====================================================================
         # SETUP: TraceContext + Per-Turn Seed
         # ====================================================================
         ctx = TraceContext()
         memory_ops = MemoryOps()
-        
+
         # Per-turn deterministic seed
         turn_seed = create_turn_seed(
             base_seed=self.determinism.seed if self.determinism.seed is not None else 0,
@@ -172,7 +172,7 @@ class TurnPlanner:
             turn_number=context.turn_number
         )
         self.determinism.set_seed(turn_seed)
-        
+
         # ====================================================================
         # 1. TOPIC RELEVANCE (computed before state evolution)
         # ====================================================================
@@ -185,7 +185,7 @@ class TurnPlanner:
                     "proficiency": kd.proficiency,
                     "subdomains": getattr(kd, "subdomains", None) or []
                 })
-        
+
         persona_goals = []
         if hasattr(self.persona, 'primary_goals'):
             for g in self.persona.primary_goals:
@@ -199,7 +199,7 @@ class TurnPlanner:
                     "goal": getattr(g, "goal", ""),
                     "weight": getattr(g, "weight", 0.5)
                 })
-        
+
         topic_relevance = compute_topic_relevance(
             user_input=context.user_input,
             persona_domains=persona_domains,
@@ -207,7 +207,7 @@ class TurnPlanner:
             ctx=ctx,
             default_relevance=DEFAULT_TOPIC_RELEVANCE
         )
-        
+
         # ====================================================================
         # 1.5 COMPUTE BIAS MODIFIERS (Phase 2 - Bounded Bias Simulation)
         # ====================================================================
@@ -217,7 +217,7 @@ class TurnPlanner:
             value_alignment=topic_relevance,
             ctx=ctx,
         )
-        
+
         # ====================================================================
         # 2. STATE EVOLUTION (before generating response)
         # ====================================================================
@@ -227,7 +227,7 @@ class TurnPlanner:
             conversation_length=context.turn_number,
             topic_relevance=topic_relevance  # Now using real computed value
         )
-        
+
         # ====================================================================
         # 1.5. INTENT ANALYSIS (EARLY - infers mode/goal if missing)
         # ====================================================================
@@ -237,7 +237,7 @@ class TurnPlanner:
             current_goal=context.goal,
             ctx=ctx
         )
-        
+
         # DESIGN NOTE: We intentionally mutate the caller's context object here.
         # This is a side effect, but it's required because:
         # 1. IR assembly needs the inferred mode/goal (not the original None values)
@@ -246,20 +246,20 @@ class TurnPlanner:
         # Alternative: return a new context, but that would break expected semantics.
         context.interaction_mode = inferred_mode
         context.goal = inferred_goal
-        
+
         # ====================================================================
         # 3. DOMAIN + PROFICIENCY (with keyword scoring + citations)
         # ====================================================================
         domain = context.domain or self._detect_domain(context.user_input, ctx=ctx)
         proficiency = self._get_domain_proficiency(domain)
-        
+
         ctx.add_basic_citation(
             source_type="state",
             source_id="domain_proficiency",
             effect=f"Domain '{domain}' proficiency: {proficiency:.2f}",
             weight=1.0
         )
-        
+
         # ====================================================================
         # 2.5. EXPERT ELIGIBILITY (P1: compute EARLY for stance guardrails)
         # ====================================================================
@@ -270,7 +270,7 @@ class TurnPlanner:
         )
         expert_threshold = getattr(self.persona.claim_policy, "expert_threshold", EXPERT_THRESHOLD)
         expert_allowed = is_domain_specific and (proficiency >= expert_threshold)
-        
+
         ctx.add_basic_citation(
             source_type="rule",
             source_id="expert_eligibility",
@@ -280,7 +280,7 @@ class TurnPlanner:
         # NOTE: domain_context was previously stored here for reuse in _infer_claim_type,
         # but _infer_claim_type currently recomputes is_domain_specific. If performance
         # becomes a concern, pass domain_context as a parameter instead.
-        
+
         # ====================================================================
         # 4. CORE METRICS (ELASTICITY) - Computed EARLY for cache logic
         # ====================================================================
@@ -291,7 +291,7 @@ class TurnPlanner:
         # ====================================================================
         # Detect evidence strength (challenge detection)
         evidence_strength = detect_evidence_strength(context.user_input, ctx=ctx)
-        
+
         # Apply stress if challenged
         if evidence_strength > EVIDENCE_STRESS_THRESHOLD:
             self.state.apply_stress_trigger("conflict", intensity=evidence_strength)
@@ -310,14 +310,14 @@ class TurnPlanner:
             current_elasticity=elasticity,
             ctx=ctx
         )
-        
+
         # ====================================================================
         # 5-7. REMAINING METRICS (confidence, tone, verbosity)
         # ====================================================================
         confidence = self._compute_confidence(proficiency, ctx)
         tone = self._select_tone(ctx)
         verbosity = self._compute_verbosity(ctx)
-        
+
         # ====================================================================
         # 8. COMMUNICATION STYLE (formality + directness)
         # ====================================================================
@@ -325,7 +325,7 @@ class TurnPlanner:
             context.interaction_mode,
             ctx
         )
-        
+
         # ====================================================================
         # 9. DISCLOSURE (P1: multi-clamp with SafetyPlan)
         # ====================================================================
@@ -333,12 +333,12 @@ class TurnPlanner:
             context.topic_signature,
             ctx
         )
-        
+
         # ====================================================================
         # 10. UNCERTAINTY ACTION (single resolver)
         # ====================================================================
         # Use separate list to avoid bypassing TraceContext's structured API
-        resolver_citations = []
+        resolver_citations: list[Citation] = []
         uncertainty_action = resolve_uncertainty_action(
             proficiency=proficiency,
             confidence=confidence,
@@ -348,12 +348,12 @@ class TurnPlanner:
             claim_policy_lookup_behavior=self.persona.claim_policy.lookup_behavior,
             citations=resolver_citations  # Isolated list
         )
-        
+
         # Merge resolver citations into TraceContext (preserves audit trail)
         for cite in resolver_citations:
             ctx.citations.append(cite)
 
-        
+
         # Add enum citation for uncertainty_action (derived, not base)
         ctx.enum(
             source_type="rule",
@@ -365,7 +365,7 @@ class TurnPlanner:
             effect=f"Uncertainty action resolved: {uncertainty_action.value}",
             weight=1.0
         )
-        
+
         # ====================================================================
         # 11. KNOWLEDGE CLAIM TYPE
         # ====================================================================
@@ -374,7 +374,7 @@ class TurnPlanner:
             uncertainty_action,
             domain
         )
-        
+
         # Enum citation for claim type (derived from inference, not base)
         claim_enum = KnowledgeClaimType(knowledge_claim_type)
         ctx.enum(
@@ -387,7 +387,7 @@ class TurnPlanner:
             effect=f"Knowledge claim type inferred: {claim_enum.value}",
             weight=1.0
         )
-        
+
         # ====================================================================
         # 12. APPLY RESPONSE PATTERNS (P1: populates SafetyPlan.pattern_blocks)
         # ====================================================================
@@ -396,7 +396,7 @@ class TurnPlanner:
             disclosure_level,
             ctx
         )
-        
+
         # ====================================================================
         # 13. VALIDATE CONSTRAINTS (invariants)
         # ====================================================================
@@ -406,7 +406,7 @@ class TurnPlanner:
             self.persona.invariants.identity_facts,
             self.persona.invariants.cannot_claim
         )
-        
+
         if not validation["valid"]:
             ctx.activate_constraint("invariants")
             for violation in validation["violations"]:
@@ -416,7 +416,7 @@ class TurnPlanner:
                     effect=f"VIOLATION: {violation['message']}",
                     weight=1.0
                 )
-        
+
         # ====================================================================
         # 14. ASSEMBLE IR (P0/P1: includes SafetyPlan + MemoryOps)
         # ====================================================================
@@ -457,7 +457,7 @@ class TurnPlanner:
             turn_id=f"{context.conversation_id}_turn_{context.turn_number}",
             seed=turn_seed                     # P0: per-turn seed
         )
-        
+
         # ====================================================================
         # 15. CACHE STANCE (for future consistency)
         # ====================================================================
@@ -471,17 +471,17 @@ class TurnPlanner:
                 confidence=confidence,
                 turn_number=context.turn_number
             )
-        
+
         return ir
-    
+
     # ========================================================================
     # Helper Methods
     # ========================================================================
-    
-    def _detect_domain(self, user_input: str, ctx: Optional[TraceContext] = None) -> str:
+
+    def _detect_domain(self, user_input: str, ctx: TraceContext | None = None) -> str:
         """
         Detect domain from user input using keyword scoring.
-        
+
         Uses domain_detection module for deterministic keyword matching.
         Falls back to 'general' with citation when no match exceeds threshold.
         """
@@ -490,22 +490,22 @@ class TurnPlanner:
             {"domain": kd.domain, "proficiency": kd.proficiency, "subdomains": kd.subdomains}
             for kd in self.persona.knowledge_domains
         ] if self.persona.knowledge_domains else []
-        
+
         domain, _score = detect_domain(
             user_input=user_input,
             persona_domains=persona_domains,
             ctx=ctx
         )
-        
+
         return domain
-    
+
     def _get_domain_proficiency(self, domain: str) -> float:
         """Get persona's proficiency in domain"""
         for knowledge in self.persona.knowledge_domains:
             if knowledge.domain.lower() == domain.lower():
                 return knowledge.proficiency
         return DEFAULT_PROFICIENCY  # Low proficiency in unknown domains
-    
+
     def _generate_stance(
         self,
         context: ConversationContext,
@@ -517,18 +517,18 @@ class TurnPlanner:
     ) -> tuple[str, str]:
         """
         Generate or retrieve cached stance on topic (P1 guardrails via expert_allowed).
-        
+
         Handles reconsideration if new evidence (challenge) > threshold.
-        
+
         Returns: (stance, rationale)
         """
         # Check cache first
         cached = context.stance_cache.get_stance(
             context.topic_signature,
-            str(context.interaction_mode.value),
+            str(context.interaction_mode.value) if context.interaction_mode else "casual_chat",
             context.turn_number
         )
-        
+
         # Decide whether to use cached stance
         if cached:
             should_reconsider = context.stance_cache.should_reconsider(
@@ -537,7 +537,7 @@ class TurnPlanner:
                 current_elasticity=current_elasticity,
                 current_turn=context.turn_number
             )
-            
+
             if not should_reconsider:
                 ctx.add_basic_citation(
                     source_type="memory",
@@ -546,7 +546,7 @@ class TurnPlanner:
                     weight=1.0
                 )
                 return cached.stance, cached.rationale_seeds
-            
+
             else:
                 ctx.add_basic_citation(
                     source_type="rule",
@@ -554,7 +554,7 @@ class TurnPlanner:
                     effect=f"Reconsidering cached stance (evidence={evidence_strength:.2f}, elasticity={current_elasticity:.2f})",
                     weight=1.0
                 )
-        
+
         # Generate new stance with guardrails
         stance, rationale = generate_stance_safe(
             persona=self.persona,
@@ -566,10 +566,10 @@ class TurnPlanner:
             expert_allowed=expert_allowed,
             ctx=ctx
         )
-        
+
         return stance, rationale
 
-    
+
     def _compute_elasticity(
         self,
         proficiency: float,
@@ -577,7 +577,7 @@ class TurnPlanner:
     ) -> float:
         """
         Compute elasticity (openness to persuasion).
-        
+
         Sequence: base (trait) → cognitive blend → confirmation bias → bounds [0.1, 0.9]
         """
         # Trait-based elasticity
@@ -588,11 +588,11 @@ class TurnPlanner:
             value=trait_elasticity,
             effect=f"Trait-based elasticity ({trait_elasticity:.2f})"
         )
-        
+
         # Cognitive complexity modifier
         cognitive_elasticity = self.cognitive.get_elasticity_from_cognitive_style()
         blended = (elasticity + cognitive_elasticity) / 2.0
-        
+
         elasticity = ctx.num(
             source_type="trait",
             source_id="cognitive_complexity",
@@ -604,7 +604,7 @@ class TurnPlanner:
             weight=0.7,
             reason=f"trait={trait_elasticity:.2f}, cognitive={cognitive_elasticity:.2f}"
         )
-        
+
         # Apply Confirmation Bias modifier (Phase 2)
         conf_mod = self.bias_simulator.get_modifier_for_field(
             self._current_bias_modifiers,
@@ -623,7 +623,7 @@ class TurnPlanner:
                 weight=conf_mod.strength,
                 reason=conf_mod.trigger
             )
-        
+
         # Clamp to [0.1, 0.9] bounds
         # NOTE: Always attempt clamp; ctx.clamp only records if clamping actually occurs
         elasticity = ctx.clamp(
@@ -635,9 +635,9 @@ class TurnPlanner:
             constraint_name="bounds_check",
             reason=f"Elasticity bounds [{ELASTICITY_MIN}, {ELASTICITY_MAX}]"
         )
-        
+
         return elasticity
-    
+
     def _compute_confidence(
         self,
         proficiency: float,
@@ -645,11 +645,10 @@ class TurnPlanner:
     ) -> float:
         """
         Compute response confidence.
-        
+
         Sequence: base (proficiency) → trait → cognitive → authority bias → bounds
         """
-        from persona_engine.planner.trace_context import clamp01
-        
+
         # Base from proficiency
         confidence = ctx.base(
             field_name="confidence.proficiency_base",
@@ -657,7 +656,7 @@ class TurnPlanner:
             value=proficiency,
             effect=f"Base confidence from domain proficiency ({proficiency:.2f})"
         )
-        
+
         # Trait adjustments (conscientiousness, neuroticism)
         adjusted = self.traits.get_confidence_modifier(confidence)
         confidence = ctx.num(
@@ -671,7 +670,7 @@ class TurnPlanner:
             weight=0.8,
             reason=f"C={self.persona.psychology.big_five.conscientiousness:.2f}, N={self.persona.psychology.big_five.neuroticism:.2f}"
         )
-        
+
         # Cognitive style adjustments
         adjusted2 = self.cognitive.get_confidence_adjustment(confidence)
         confidence = ctx.num(
@@ -685,7 +684,7 @@ class TurnPlanner:
             weight=0.6,
             reason="Risk tolerance/need for closure influence"
         )
-        
+
         # Apply Authority Bias modifier (Phase 2)
         auth_mod = self.bias_simulator.get_modifier_for_field(
             self._current_bias_modifiers,
@@ -704,7 +703,7 @@ class TurnPlanner:
                 weight=auth_mod.strength,
                 reason=auth_mod.trigger
             )
-        
+
         # Bounds clamp
         confidence = clamp01(
             ctx,
@@ -712,18 +711,18 @@ class TurnPlanner:
             target_field="response_structure.confidence",
             value=confidence
         )
-        
+
         return confidence
-    
+
     def _select_tone(self, ctx: "TraceContext") -> Tone:
         """
         Select tone from mood + stress + traits + negativity bias.
-        
+
         Sequence: base (mood/stress/traits) → negativity bias adjustment
         """
         valence, arousal = self.state.get_mood()
         stress = self.state.get_stress()
-        
+
         # Check for negativity bias (Phase 2)
         # Negativity bias increases arousal, which may shift tone selection
         neg_mod = self.bias_simulator.get_modifier_for_field(
@@ -744,40 +743,40 @@ class TurnPlanner:
                 weight=neg_mod.strength,
                 reason=neg_mod.trigger
             )
-        
+
         tone = self.traits.get_tone_from_mood(valence, arousal, stress)
-        
+
         ctx.base_enum(
             field_name="tone.mood_stress_traits",
             target_field="communication_style.tone",
             value=tone.value,
             effect=f"Mood (v={valence:.2f}, a={arousal:.2f}) + stress ({stress:.2f}) → {tone.value}"
         )
-        
+
         return tone
-    
+
     def _compute_verbosity(
         self,
         ctx: "TraceContext"
     ) -> Verbosity:
         """
         Compute verbosity level.
-        
+
         Base from traits, override by state (fatigue/engagement).
         """
         base_verbosity = self.persona.psychology.communication.verbosity
         verbosity_enum = self.traits.influences_verbosity(base_verbosity)
-        
+
         current = ctx.base_enum(
             field_name="verbosity.trait_derived",
             target_field="communication_style.verbosity",
             value=verbosity_enum.value,
             effect=f"Trait-derived verbosity ({verbosity_enum.value})"
         )
-        
+
         # State overrides
         modifier = self.state.get_verbosity_modifier()
-        
+
         if modifier == -1 and verbosity_enum != Verbosity.BRIEF:
             ctx.enum(
                 source_type="state",
@@ -790,7 +789,7 @@ class TurnPlanner:
                 weight=0.6
             )
             return Verbosity.BRIEF
-        
+
         if modifier == 1 and verbosity_enum != Verbosity.DETAILED:
             ctx.enum(
                 source_type="state",
@@ -803,9 +802,9 @@ class TurnPlanner:
                 weight=0.6
             )
             return Verbosity.DETAILED
-        
+
         return verbosity_enum
-    
+
     def _compute_communication_style(
         self,
         interaction_mode: InteractionMode,
@@ -813,13 +812,12 @@ class TurnPlanner:
     ) -> tuple[float, float]:
         """
         Compute formality and directness using canonical sequence.
-        
+
         Sequence: base → role → trait → state → constraints
-        
+
         Returns: (formality, directness)
         """
-        from persona_engine.planner.trace_context import clamp01
-        
+
         # ==================================================================
         # 1. BASE CITATIONS (clean trail start)
         # ==================================================================
@@ -829,15 +827,15 @@ class TurnPlanner:
             value=self.persona.psychology.communication.formality,
             effect=f"Base formality from persona ({self.persona.psychology.communication.formality:.2f})"
         )
-        
+
         directness = ctx.base(
             field_name="communication.directness",
             target_field="communication_style.directness",
             value=self.persona.psychology.communication.directness,
             effect=f"Base directness from persona ({self.persona.psychology.communication.directness:.2f})"
         )
-        
-        # ================================================================== 
+
+        # ==================================================================
         # 2. ROLE BLEND (70% role, 30% base)
         # ==================================================================
         role_mode = self.rules.get_social_role_mode(interaction_mode)
@@ -847,7 +845,7 @@ class TurnPlanner:
             directness,
             self.persona.psychology.communication.emotional_expressiveness
         )
-        
+
         formality = ctx.num(
             source_type="rule",
             source_id=f"social_role_{role_mode}",
@@ -859,7 +857,7 @@ class TurnPlanner:
             weight=1.0,
             reason=f"interaction_mode={interaction_mode.value}"
         )
-        
+
         directness = ctx.num(
             source_type="rule",
             source_id=f"social_role_{role_mode}",
@@ -871,13 +869,13 @@ class TurnPlanner:
             weight=1.0,
             reason=f"interaction_mode={interaction_mode.value}"
         )
-        
+
         # ==================================================================
         # 3. TRAIT MODIFIER (agreeableness affects directness)
         # ==================================================================
         before_directness = directness
         directness_after_trait = self.traits.influences_directness(directness)
-        
+
         directness = ctx.num(
             source_type="trait",
             source_id="agreeableness",
@@ -889,7 +887,7 @@ class TurnPlanner:
             weight=0.8,
             reason=f"A={self.persona.psychology.big_five.agreeableness:.2f} → modifier={directness_after_trait - before_directness:+.3f}"
         )
-        
+
         # ==================================================================
         # 4. STATE MODIFIER (patience affects directness)
         # ==================================================================
@@ -897,7 +895,7 @@ class TurnPlanner:
         if patience < PATIENCE_THRESHOLD:
             before_patience = directness
             directness = min(1.0, directness + DIRECTNESS_IMPATIENCE_BUMP)
-            
+
             directness = ctx.num(
                 source_type="state",
                 source_id="patience",
@@ -909,7 +907,7 @@ class TurnPlanner:
                 weight=0.5,
                 reason=f"patience={patience:.2f} < {PATIENCE_THRESHOLD} → +{DIRECTNESS_IMPATIENCE_BUMP} directness"
             )
-        
+
         # ==================================================================
         # 5. CONSTRAINTS CLAMP (bounds check with safety plan recording)
         # ==================================================================
@@ -919,16 +917,16 @@ class TurnPlanner:
             target_field="communication_style.formality",
             value=formality
         )
-        
+
         directness = clamp01(
             ctx,
             field_name="directness",
             target_field="communication_style.directness",
             value=directness
         )
-        
+
         return formality, directness
-    
+
     def _compute_disclosure(
         self,
         topic_signature: str,
@@ -936,13 +934,12 @@ class TurnPlanner:
     ) -> float:
         """
         Compute disclosure level with canonical composition.
-        
+
         Sequence: base → trait modifier → state modifier → privacy clamp → topic clamp → bounds
-        
+
         This is P1 critical: all clamps must be recorded in SafetyPlan.
         """
-        from persona_engine.planner.trace_context import clamp01
-        
+
         # ==================================================================
         # 1. BASE (from disclosure policy)
         # ==================================================================
@@ -952,7 +949,7 @@ class TurnPlanner:
             value=self.persona.disclosure_policy.base_openness,
             effect=f"Base disclosure from persona policy ({self.persona.disclosure_policy.base_openness:.2f})"
         )
-        
+
         # ==================================================================
         # 2. TRAIT MODIFIER (extraversion)
         # ==================================================================
@@ -968,7 +965,7 @@ class TurnPlanner:
             weight=0.7,
             reason=f"E={self.persona.psychology.big_five.extraversion:.2f}"
         )
-        
+
         # ==================================================================
         # 3. STATE MODIFIER (mood/stress/fatigue)
         # ==================================================================
@@ -985,13 +982,13 @@ class TurnPlanner:
                 weight=0.6,
                 reason="Mood/stress/fatigue influence"
             )
-        
+
         # ==================================================================
         # 4. PRIVACY FILTER CLAMP (P1: records in SafetyPlan)
         # ==================================================================
         privacy_filter = self.rules.get_privacy_filter_level(topic_signature)
         max_disclosure_privacy = 1.0 - max(self.persona.privacy_sensitivity, privacy_filter)
-        
+
         if disclosure > max_disclosure_privacy:
             disclosure = ctx.clamp(
                 field_name="disclosure_level",
@@ -1002,7 +999,7 @@ class TurnPlanner:
                 constraint_name="privacy_filter",
                 reason=f"Privacy filter limits disclosure (max={max_disclosure_privacy:.2f})"
             )
-        
+
         # ==================================================================
         # 5. TOPIC SENSITIVITY CLAMP (P1: can chain with privacy clamp)
         # ==================================================================
@@ -1024,7 +1021,7 @@ class TurnPlanner:
                 # topic_sensitivities list order; only the first matching topic
                 # applies its constraint. This is intentional for predictability.
                 break
-        
+
         # ==================================================================
         # 6. FINAL BOUNDS CLAMP [0, 1]
         # ==================================================================
@@ -1034,9 +1031,9 @@ class TurnPlanner:
             target_field="knowledge_disclosure.disclosure_level",
             value=disclosure
         )
-        
+
         return disclosure
-    
+
     def _infer_claim_type(
         self,
         proficiency: float,
@@ -1046,20 +1043,20 @@ class TurnPlanner:
         """Infer knowledge claim type"""
         # Check if domain matches persona's knowledge
         is_domain_specific = any(
-            k.domain.lower() == domain.lower() 
+            k.domain.lower() == domain.lower()
             for k in self.persona.knowledge_domains
         )
-        
+
         # TODO: Detect if claim is from personal experience
         is_personal_experience = False
-        
+
         return infer_knowledge_claim_type(
             proficiency,
             uncertainty_action,
             is_personal_experience,
             is_domain_specific
         )
-    
+
     def _generate_intent(
         self,
         user_intent: str,
@@ -1070,7 +1067,7 @@ class TurnPlanner:
     ) -> str:
         """
         Generate meaningful response intent using template logic.
-        
+
         Intent describes what the persona plans to do, not just cosmetic label.
         Uses user_intent + uncertainty_action to determine response approach.
         """
@@ -1081,7 +1078,7 @@ class TurnPlanner:
             needs_clarification=needs_clarification,
             ctx=ctx
         )
-    
+
     def _apply_patterns_safely(
         self,
         context: ConversationContext,
@@ -1090,10 +1087,10 @@ class TurnPlanner:
     ) -> None:
         """Apply response patterns with safety checks (P1: populates SafetyPlan)"""
         pattern = self.rules.check_response_pattern(context.user_input)
-        
+
         if not pattern:
             return
-        
+
         privacy_filter = self.rules.get_privacy_filter_level(context.topic_signature)
         modifications = apply_response_pattern_safely(
             pattern,
@@ -1103,7 +1100,7 @@ class TurnPlanner:
             self.persona.invariants.must_avoid,
             context.topic_signature
         )
-        
+
         if modifications.get("pattern_blocked"):
             # P1: populate SafetyPlan
             ctx.activate_constraint("pattern_safety")
@@ -1111,7 +1108,7 @@ class TurnPlanner:
                 pattern_trigger=pattern.trigger if hasattr(pattern, 'trigger') else 'unknown_pattern',
                 reason=modifications["block_reason"]
             )
-            
+
             # Keep citation for audit trail
             ctx.add_basic_citation(
                 source_type="rule",
@@ -1119,7 +1116,7 @@ class TurnPlanner:
                 effect=f"BLOCKED: {modifications['block_reason']}",
                 weight=1.0
             )
-            
+
         elif modifications.get("pattern_constrained"):
             ctx.add_basic_citation(
                 source_type="rule",
@@ -1131,7 +1128,7 @@ class TurnPlanner:
 
 def create_turn_planner(
     persona: Persona,
-    determinism: Optional[DeterminismManager] = None
+    determinism: DeterminismManager | None = None
 ) -> TurnPlanner:
     """Factory function to create turn planner"""
     return TurnPlanner(persona, determinism)
