@@ -10,6 +10,7 @@ from persona_engine.generation.llm_adapter import (
     AnthropicAdapter,
     OpenAIAdapter,
     MockLLMAdapter,
+    TemplateAdapter,
     create_adapter,
 )
 from persona_engine.generation.prompt_builder import IRPromptBuilder
@@ -26,6 +27,7 @@ __all__ = [
     "AnthropicAdapter",
     "OpenAIAdapter",
     "MockLLMAdapter",
+    "TemplateAdapter",
     "create_adapter",
     # Prompt building
     "IRPromptBuilder",

@@ -11,7 +11,7 @@ from datetime import datetime
 
 from persona_engine.schema.ir_schema import IntermediateRepresentation
 from persona_engine.schema.persona_schema import Persona
-from persona_engine.generation.llm_adapter import BaseLLMAdapter, create_adapter
+from persona_engine.generation.llm_adapter import BaseLLMAdapter, TemplateAdapter, create_adapter
 from persona_engine.generation.prompt_builder import IRPromptBuilder
 from persona_engine.generation.style_modulator import StyleModulator, ConstraintViolation
 
@@ -112,48 +112,65 @@ class ResponseGenerator:
         Returns:
             GeneratedResponse with text and metadata
         """
-        # Build generation prompt
+        # Template backend: bypass prompt building, generate from IR directly
+        if isinstance(self.adapter, TemplateAdapter):
+            raw_text = self.adapter.generate_from_ir(
+                ir=ir,
+                user_input=user_input,
+                persona=self.persona,
+            )
+            violations = self.style_modulator.validate_constraints(raw_text, ir)
+            return GeneratedResponse(
+                text=raw_text,
+                ir=ir,
+                raw_text=raw_text,
+                model=self.adapter.get_model_name(),
+                violations=violations,
+                estimated_tokens=len(raw_text) // 4,
+            )
+
+        # LLM backends (anthropic, openai, mock): build prompt from IR
         generation_prompt = self.prompt_builder.build_generation_prompt(
             ir=ir,
             user_input=user_input,
-            persona=self.persona
+            persona=self.persona,
         )
-        
+
         # Determine temperature from IR confidence
         if temperature is None:
             # Higher confidence = lower temperature (more deterministic)
             # Lower confidence = higher temperature (more hedging/variation)
             confidence = ir.response_structure.confidence
             temperature = max(0.3, 1.0 - (confidence * 0.5))
-        
+
         # Generate response
         raw_text = self.adapter.generate(
             system_prompt=self._system_prompt,
             user_prompt=generation_prompt,
             max_tokens=max_tokens,
-            temperature=temperature
+            temperature=temperature,
         )
-        
+
         # Post-process
         processed_text = self.style_modulator.enforce_verbosity(
             raw_text,
             ir.communication_style.verbosity,
-            strict=self.strict_mode
+            strict=self.strict_mode,
         )
-        
+
         # Validate constraints
         violations = self.style_modulator.validate_constraints(processed_text, ir)
-        
+
         # Estimate tokens (rough: 1 token ≈ 4 chars)
         estimated_tokens = len(self._system_prompt + generation_prompt + processed_text) // 4
-        
+
         return GeneratedResponse(
             text=processed_text,
             ir=ir,
             raw_text=raw_text,
             model=self.adapter.get_model_name(),
             violations=violations,
-            estimated_tokens=estimated_tokens
+            estimated_tokens=estimated_tokens,
         )
     
     def get_system_prompt(self) -> str:
