@@ -186,3 +186,6 @@ class DeterminismManager:
     def reset_call_count(self) -> None:
         """Reset call counter (e.g., at start of new turn)"""
         self.call_count = 0
+
+# NOTE: create_turn_seed lives in trace_context.py (uses SHA-256 for better distribution)
+# Canonical import: from persona_engine.planner.trace_context import create_turn_seed
