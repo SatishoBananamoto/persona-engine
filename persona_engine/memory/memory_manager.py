@@ -432,7 +432,11 @@ class MemoryManager:
         if "discussed" in lower:
             parts = lower.split("discussed")
             if len(parts) > 1:
-                return parts[1].strip().split(".")[0].strip()
+                # Take first segment, split on common separators
+                raw = parts[1].strip()
+                for sep in (":", ".", ",", " — ", " - "):
+                    raw = raw.split(sep)[0]
+                return raw.strip()
         return lower[:50]
 
     @staticmethod

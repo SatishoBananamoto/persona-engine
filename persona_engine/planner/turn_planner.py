@@ -13,7 +13,7 @@ This ensures:
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 from persona_engine.behavioral import (
     BehavioralRulesEngine,
@@ -28,7 +28,7 @@ from persona_engine.behavioral import (
     resolve_uncertainty_action,
     validate_stance_against_invariants,
 )
-from persona_engine.memory import StanceCache
+from persona_engine.memory import MemoryManager, StanceCache
 from persona_engine.planner.domain_detection import (
     compute_topic_relevance,
     detect_domain,
@@ -48,6 +48,7 @@ from persona_engine.schema.ir_schema import (
     KnowledgeAndDisclosure,
     KnowledgeClaimType,
     MemoryOps,
+    MemoryWriteIntent,
     ResponseStructure,
     Tone,
     UncertaintyAction,
@@ -111,10 +112,12 @@ class TurnPlanner:
     def __init__(
         self,
         persona: Persona,
-        determinism: DeterminismManager | None = None
+        determinism: DeterminismManager | None = None,
+        memory_manager: MemoryManager | None = None,
     ):
         self.persona = persona
         self.determinism = determinism or DeterminismManager()
+        self.memory = memory_manager
 
         # Initialize all interpreters
         self.traits = TraitInterpreter(persona.psychology.big_five)
@@ -172,6 +175,37 @@ class TurnPlanner:
             turn_number=context.turn_number
         )
         self.determinism.set_seed(turn_seed)
+
+        # ====================================================================
+        # 0. MEMORY CONTEXT (read before planning)
+        # ====================================================================
+        memory_context: dict[str, Any] = {}
+        if self.memory:
+            memory_context = self.memory.get_context_for_turn(
+                topic=context.topic_signature,
+                current_turn=context.turn_number,
+            )
+            if memory_context.get("known_facts"):
+                ctx.add_basic_citation(
+                    source_type="memory",
+                    source_id="fact_store",
+                    effect=f"Loaded {len(memory_context['known_facts'])} known facts from memory",
+                    weight=0.8,
+                )
+            if memory_context.get("active_preferences"):
+                ctx.add_basic_citation(
+                    source_type="memory",
+                    source_id="preference_store",
+                    effect=f"Loaded {len(memory_context['active_preferences'])} active preferences",
+                    weight=0.6,
+                )
+            if memory_context.get("previously_discussed"):
+                ctx.add_basic_citation(
+                    source_type="memory",
+                    source_id="episodic_store",
+                    effect=f"Topic '{context.topic_signature}' previously discussed",
+                    weight=0.7,
+                )
 
         # ====================================================================
         # 1. TOPIC RELEVANCE (computed before state evolution)
@@ -418,7 +452,35 @@ class TurnPlanner:
                 )
 
         # ====================================================================
-        # 14. ASSEMBLE IR (P0/P1: includes SafetyPlan + MemoryOps)
+        # 14. POPULATE MEMORY WRITE INTENTS
+        # ====================================================================
+        write_intents: list[MemoryWriteIntent] = []
+
+        # Auto-generate memory write intents from this turn
+        if self.memory:
+            # Always record an episode summary
+            write_intents.append(MemoryWriteIntent(
+                content_type="episode",
+                content=f"Discussed {context.topic_signature}: persona {uncertainty_action.value}ed with {claim_enum.value} claim",
+                confidence=0.9,
+                privacy_level=0.2,
+                source="observed_behavior",
+            ))
+
+            # If persona took a stance, remember it as a relationship signal
+            if stance and confidence > 0.5:
+                write_intents.append(MemoryWriteIntent(
+                    content_type="relationship",
+                    content=f"Engaged on {context.topic_signature} — shared {claim_enum.value} perspective",
+                    confidence=0.7,
+                    privacy_level=0.1,
+                    source="observed_behavior",
+                ))
+
+            memory_ops = MemoryOps(write_intents=write_intents)
+
+        # ====================================================================
+        # 15. ASSEMBLE IR (P0/P1: includes SafetyPlan + MemoryOps)
         # ====================================================================
         ir = IntermediateRepresentation(
             conversation_frame=ConversationFrame(
@@ -459,7 +521,7 @@ class TurnPlanner:
         )
 
         # ====================================================================
-        # 15. CACHE STANCE (for future consistency)
+        # 16. CACHE STANCE (for future consistency)
         # ====================================================================
         if stance:
             context.stance_cache.store_stance(
@@ -470,6 +532,16 @@ class TurnPlanner:
                 elasticity=elasticity,
                 confidence=confidence,
                 turn_number=context.turn_number
+            )
+
+        # ====================================================================
+        # 17. PROCESS MEMORY WRITES (after IR is final)
+        # ====================================================================
+        if self.memory and ir.memory_ops.write_intents:
+            self.memory.process_write_intents(
+                intents=ir.memory_ops.write_intents,
+                turn=context.turn_number,
+                conversation_id=context.conversation_id,
             )
 
         return ir
@@ -1128,7 +1200,8 @@ class TurnPlanner:
 
 def create_turn_planner(
     persona: Persona,
-    determinism: DeterminismManager | None = None
+    determinism: DeterminismManager | None = None,
+    memory_manager: MemoryManager | None = None,
 ) -> TurnPlanner:
     """Factory function to create turn planner"""
-    return TurnPlanner(persona, determinism)
+    return TurnPlanner(persona, determinism, memory_manager=memory_manager)

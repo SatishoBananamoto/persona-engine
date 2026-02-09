@@ -85,22 +85,35 @@ Do NOT break character or acknowledge that you are an AI.
         self,
         ir: IntermediateRepresentation,
         user_input: str,
-        persona: Optional[Persona] = None
+        persona: Optional[Persona] = None,
+        memory_context: Optional[dict] = None,
     ) -> str:
         """
         Build the generation prompt with IR constraints.
-        
+
         Args:
             ir: The Intermediate Representation with behavioral constraints
             user_input: The user's message to respond to
             persona: Optional persona for additional context
-            
+            memory_context: Optional memory context from MemoryManager
+
         Returns:
             User prompt with generation constraints
         """
         prompt = f"""USER MESSAGE: {user_input}
 
-=== RESPONSE CONSTRAINTS (FOLLOW EXACTLY) ===
+"""
+        # Memory context section (if available)
+        if memory_context:
+            memory_lines = self._format_memory_context(memory_context)
+            if memory_lines:
+                prompt += f"""=== WHAT YOU REMEMBER ABOUT THIS USER ===
+
+{memory_lines}
+
+"""
+
+        prompt += """=== RESPONSE CONSTRAINTS (FOLLOW EXACTLY) ===
 
 """
         # Communication style
@@ -254,3 +267,31 @@ Generate your response now:
             UncertaintyAction.REFUSE: "Politely decline to answer",
         }
         return descriptions.get(action, action.value)
+
+    @staticmethod
+    def _format_memory_context(memory_context: dict) -> str:
+        """Format memory context into prompt-friendly text."""
+        lines: list[str] = []
+
+        # Known facts
+        for fact in memory_context.get("known_facts", []):
+            lines.append(f"- FACT: {fact['content']} (confidence: {fact['confidence']:.0%})")
+
+        # Active preferences
+        for pref in memory_context.get("active_preferences", []):
+            lines.append(f"- PREFERENCE: {pref['content']} (strength: {pref['strength']:.0%})")
+
+        # Relationship
+        rel = memory_context.get("relationship", {})
+        if rel.get("trust") is not None:
+            lines.append(f"- TRUST LEVEL: {rel['trust']:.0%}, RAPPORT: {rel['rapport']:.0%}")
+
+        # Previous discussion on topic
+        if memory_context.get("previously_discussed"):
+            lines.append("- You have discussed this topic before with this user")
+
+        # Topic episodes
+        for ep in memory_context.get("topic_episodes", []):
+            lines.append(f"- PREVIOUS: {ep['content']}")
+
+        return "\n".join(lines)
