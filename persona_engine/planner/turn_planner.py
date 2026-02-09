@@ -30,6 +30,7 @@ from persona_engine.behavioral import (
 )
 from persona_engine.memory import MemoryManager, StanceCache
 from persona_engine.planner.domain_detection import (
+    compute_domain_adjacency,
     compute_topic_relevance,
     detect_domain,
     detect_evidence_strength,
@@ -86,6 +87,10 @@ DISCLOSURE_MAX = 1.0
 
 # Evidence/Stress
 EVIDENCE_STRESS_THRESHOLD = 0.4  # Evidence strength above this triggers conflict stress
+
+# Competence
+UNKNOWN_DOMAIN_BASE = 0.10       # Floor competence for completely unknown topics
+OPENNESS_COMPETENCE_WEIGHT = 0.1 # How much openness boosts comfort with unknown topics
 
 
 @dataclass
@@ -346,9 +351,10 @@ class TurnPlanner:
         )
 
         # ====================================================================
-        # 5-7. REMAINING METRICS (confidence, tone, verbosity)
+        # 5-7. REMAINING METRICS (confidence, competence, tone, verbosity)
         # ====================================================================
         confidence = self._compute_confidence(proficiency, ctx)
+        competence = self._compute_competence(domain, proficiency, persona_domains, ctx)
         tone = self._select_tone(ctx)
         verbosity = self._compute_verbosity(ctx)
 
@@ -500,7 +506,8 @@ class TurnPlanner:
 
                 rationale=rationale,
                 elasticity=elasticity,
-                confidence=confidence
+                confidence=confidence,
+                competence=competence,
             ),
             communication_style=CommunicationStyle(
                 tone=tone,
@@ -785,6 +792,90 @@ class TurnPlanner:
         )
 
         return confidence
+
+    def _compute_competence(
+        self,
+        domain: str,
+        proficiency: float,
+        persona_domains: list[dict],
+        ctx: "TraceContext",
+    ) -> float:
+        """
+        Compute how equipped the persona is to engage with this topic.
+
+        Distinct from confidence: competence measures knowledge depth,
+        confidence measures certainty. A knowledgeable persona can feel
+        uncertain (low confidence, high competence), and vice versa.
+
+        Sequence: direct match | adjacency fallback → openness modifier → clamp
+        """
+        # Step 1: Direct domain match
+        is_direct_match = any(
+            kd.domain.lower() == domain.lower()
+            for kd in self.persona.knowledge_domains
+        )
+
+        if is_direct_match:
+            competence = ctx.base(
+                field_name="competence.domain_match",
+                target_field="response_structure.competence",
+                value=proficiency,
+                effect=f"Direct domain match '{domain}' — competence = proficiency ({proficiency:.2f})",
+            )
+        else:
+            # Step 2: Adjacency fallback
+            adjacency_score, nearest = compute_domain_adjacency(
+                detected_domain=domain,
+                persona_domains=persona_domains,
+                ctx=ctx,
+            )
+
+            if adjacency_score > 0 and nearest:
+                competence = ctx.base(
+                    field_name="competence.adjacency",
+                    target_field="response_structure.competence",
+                    value=adjacency_score,
+                    effect=(
+                        f"No direct match for '{domain}' — adjacent to "
+                        f"'{nearest}' (adjacency={adjacency_score:.3f})"
+                    ),
+                )
+            else:
+                # Step 3: Unknown domain floor
+                competence = ctx.base(
+                    field_name="competence.unknown",
+                    target_field="response_structure.competence",
+                    value=UNKNOWN_DOMAIN_BASE,
+                    effect=f"No domain match or adjacency for '{domain}' — base floor ({UNKNOWN_DOMAIN_BASE})",
+                )
+
+        # Step 4: Openness modifier (comfort with novelty)
+        openness = self.persona.psychology.big_five.openness
+        openness_boost = openness * OPENNESS_COMPETENCE_WEIGHT
+        before = competence
+        competence = competence + openness_boost
+
+        competence = ctx.num(
+            source_type="trait",
+            source_id="openness",
+            target_field="response_structure.competence",
+            operation="add",
+            before=before,
+            after=competence,
+            effect=f"Openness ({openness:.2f}) adds novelty comfort ({openness_boost:.3f})",
+            weight=0.5,
+            reason=f"O={openness:.2f} * weight={OPENNESS_COMPETENCE_WEIGHT}",
+        )
+
+        # Step 5: Clamp [0, 1]
+        competence = clamp01(
+            ctx,
+            field_name="competence",
+            target_field="response_structure.competence",
+            value=competence,
+        )
+
+        return competence
 
     def _select_tone(self, ctx: "TraceContext") -> Tone:
         """

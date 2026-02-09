@@ -158,6 +158,18 @@ class ResponseStructure(BaseModel):
         description="Certainty in the response (0=very uncertain, 1=very certain)"
     )
 
+    competence: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "How equipped the persona is to engage with this topic "
+            "(0=completely out of depth, 1=deep expert). "
+            "Distinct from confidence: a knowledgeable persona can feel uncertain "
+            "(low confidence, high competence), and vice versa."
+        ),
+    )
+
 
 class CommunicationStyle(BaseModel):
     """How the message should be delivered"""

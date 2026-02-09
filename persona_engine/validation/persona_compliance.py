@@ -59,6 +59,7 @@ def _check_knowledge_boundaries(
     """Verify knowledge claims align with persona's expertise."""
     claim = ir.knowledge_disclosure.knowledge_claim_type
     confidence = ir.response_structure.confidence
+    competence = ir.response_structure.competence
 
     # Find the best matching domain proficiency from citations
     domain_proficiency = _get_domain_proficiency(ir, persona)
@@ -92,6 +93,21 @@ def _check_knowledge_boundaries(
                 field_path="response_structure.confidence",
                 suggested_fix="Lower confidence to align with domain proficiency",
             ))
+
+    # Rule 3: Dunning-Kruger check — low competence + high confidence is an error
+    # unless bias_simulator intentionally produces it for specific trait profiles
+    if competence < 0.3 and confidence > 0.7:
+        violations.append(ValidationViolation(
+            violation_type="competence_confidence_mismatch",
+            severity="error",
+            message=(
+                f"Low competence ({competence:.2f}) with high confidence "
+                f"({confidence:.2f}) — persona claims certainty in a topic "
+                "they are not equipped to discuss"
+            ),
+            field_path="response_structure.competence",
+            suggested_fix="Lower confidence to align with competence, or investigate bias",
+        ))
 
     # Rule 3: Check cannot_claim against claim type
     if persona.invariants and persona.invariants.cannot_claim:

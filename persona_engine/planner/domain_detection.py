@@ -347,6 +347,113 @@ def detect_domain(
 
 
 # =============================================================================
+# DOMAIN ADJACENCY (for competence computation)
+# =============================================================================
+
+# Decay factor for adjacency: adjacent domain proficiency is reduced by this
+ADJACENCY_DECAY = 0.4
+
+
+def compute_domain_adjacency(
+    detected_domain: str,
+    persona_domains: list[dict] | None = None,
+    ctx: Optional["TraceContext"] = None,
+) -> tuple[float, str | None]:
+    """
+    Compute how close the detected domain is to the persona's known domains.
+
+    Uses keyword overlap between the detected domain's keyword set and
+    each persona domain's keyword set. Returns the best adjacent domain's
+    proficiency * decay factor.
+
+    Args:
+        detected_domain: The domain detected from user input
+        persona_domains: List of persona knowledge_domain dicts with
+                         'domain', 'proficiency', 'subdomains' keys
+        ctx: TraceContext for citations
+
+    Returns:
+        (adjacency_score, nearest_domain_name) — score in [0, 1], or
+        (0.0, None) if no adjacency found
+    """
+    if not persona_domains:
+        return 0.0, None
+
+    detected_lower = detected_domain.lower()
+
+    # Direct match → not adjacency, handled elsewhere
+    for pd in persona_domains:
+        if (_get_field(pd, "domain") or "").strip().lower() == detected_lower:
+            return 0.0, None
+
+    # Build keyword set for detected domain from registry
+    detected_keywords: set[str] = set()
+    for entry in DOMAIN_REGISTRY:
+        if entry.domain_id.lower() == detected_lower:
+            detected_keywords = set(entry.keywords.keys())
+            break
+
+    # If detected domain not in registry, tokenize the domain name itself
+    if not detected_keywords:
+        detected_keywords = set(_extract_keywords(detected_domain, filter_short=True))
+
+    if not detected_keywords:
+        return 0.0, None
+
+    # Score each persona domain by keyword overlap with detected domain
+    best_score = 0.0
+    best_domain: str | None = None
+
+    for pd in persona_domains:
+        domain_name = (_get_field(pd, "domain") or "").strip().lower()
+        proficiency = float(_get_field(pd, "proficiency", 0.0))
+        subdomains = _get_field(pd, "subdomains", [])
+
+        # Build keyword set for this persona domain
+        persona_keywords: set[str] = set()
+
+        # From registry
+        for entry in DOMAIN_REGISTRY:
+            if entry.domain_id.lower() == domain_name:
+                persona_keywords.update(entry.keywords.keys())
+                break
+
+        # From domain name + subdomains
+        persona_keywords.update(_extract_keywords(domain_name, filter_short=True))
+        for sd in subdomains:
+            persona_keywords.update(_extract_keywords(sd, filter_short=True))
+
+        if not persona_keywords:
+            continue
+
+        # Jaccard-like overlap
+        overlap = len(detected_keywords & persona_keywords)
+        union = len(detected_keywords | persona_keywords)
+        if union == 0:
+            continue
+
+        similarity = overlap / union
+        adjacency = proficiency * similarity * ADJACENCY_DECAY
+
+        if adjacency > best_score:
+            best_score = adjacency
+            best_domain = domain_name
+
+    if ctx and best_domain:
+        ctx.add_basic_citation(
+            source_type="rule",
+            source_id="domain_adjacency",
+            effect=(
+                f"Nearest domain to '{detected_domain}' is '{best_domain}' "
+                f"(adjacency={best_score:.3f})"
+            ),
+            weight=0.7,
+        )
+
+    return best_score, best_domain
+
+
+# =============================================================================
 # TOPIC RELEVANCE
 # =============================================================================
 

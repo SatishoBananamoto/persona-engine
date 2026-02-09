@@ -127,6 +127,7 @@ VERBOSITY: {self._format_verbosity(style.verbosity)}
         # Response structure
         structure = ir.response_structure
         prompt += f"""CONFIDENCE: {self._format_float(structure.confidence)} ({self._describe_confidence(structure.confidence)})
+COMPETENCE: {self._format_float(structure.competence)} ({self._describe_competence(structure.competence)})
 """
         if structure.stance:
             prompt += f"""YOUR STANCE ON THIS TOPIC: {structure.stance}
@@ -245,6 +246,37 @@ Generate your response now:
         else:
             return "very confident, authoritative statements"
     
+    def _describe_competence(self, value: float) -> str:
+        """Describe competence level — controls vocabulary depth and content accuracy."""
+        if value < 0.2:
+            return (
+                "almost no familiarity with this topic. Use everyday language only. "
+                "It is acceptable to say 'I don't really know.' "
+                "Do NOT use domain-specific terminology correctly"
+            )
+        elif value < 0.4:
+            return (
+                "surface-level awareness only. Use general language with occasional "
+                "terms picked up casually. Allow vagueness and minor inaccuracies. "
+                "Pivot to familiar topics when possible"
+            )
+        elif value < 0.6:
+            return (
+                "moderate familiarity, possibly from adjacent experience. "
+                "Can discuss at a conceptual level but should NOT provide "
+                "detailed technical explanations"
+            )
+        elif value < 0.8:
+            return (
+                "knowledgeable. Can use domain terminology accurately and provide "
+                "substantive discussion, but may lack cutting-edge or specialized depth"
+            )
+        else:
+            return (
+                "highly competent. Full domain vocabulary, detailed knowledge, "
+                "can provide expert-level discussion"
+            )
+
     def _format_claim_type(self, claim_type: KnowledgeClaimType) -> str:
         """Format knowledge claim type."""
         # Map actual KnowledgeClaimType enum values to descriptions
