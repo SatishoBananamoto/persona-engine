@@ -99,7 +99,7 @@ def test_object_access_support():
         ctx=ctx
     )
     
-    assert dom == "cooking", f"Expected domain 'cooking', got '{dom}'"
+    assert dom in ("cooking", "food"), f"Expected domain 'cooking' or 'food', got '{dom}'"
     print("✓ detect_domain works with Objects")
     
     # Topic Relevance

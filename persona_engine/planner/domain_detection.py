@@ -208,6 +208,22 @@ DOMAIN_REGISTRY: list[DomainEntry] = [
         },
         negative_keywords=[],
     ),
+    DomainEntry(
+        domain_id="food",
+        keywords={
+            "food": 1.0, "cook": 0.9, "cooking": 0.9, "chef": 0.9, "kitchen": 0.8,
+            "recipe": 0.9, "cuisine": 0.9, "restaurant": 0.8, "meal": 0.7,
+            "ingredient": 0.8, "sauce": 0.8, "bake": 0.7, "baking": 0.7,
+            "grill": 0.7, "roast": 0.7, "ferment": 0.7, "fermentation": 0.7,
+            "pastry": 0.8, "butcher": 0.7, "butchery": 0.7, "flavor": 0.7,
+            "flavour": 0.7, "culinary": 0.9, "gastronomy": 0.9, "dish": 0.6,
+            "menu": 0.7, "plating": 0.7, "seasoning": 0.7, "spice": 0.6,
+            "broth": 0.7, "stock": 0.5, "knife": 0.6, "oven": 0.6,
+            "saut\u00e9": 0.7, "simmer": 0.7, "blanch": 0.7, "frozen": 0.4,
+            "fresh": 0.4, "organic": 0.5, "farm": 0.5, "table": 0.3,
+        },
+        negative_keywords=["computer", "software", "code"],
+    ),
 ]
 
 
