@@ -18,29 +18,32 @@ if TYPE_CHECKING:
 
 class BaseLLMAdapter(ABC):
     """Abstract base class for LLM adapters."""
-    
+
     @abstractmethod
     def generate(
         self,
         system_prompt: str,
         user_prompt: str,
         max_tokens: int = 1024,
-        temperature: float = 0.7
+        temperature: float = 0.7,
+        conversation_history: Optional[list[dict[str, str]]] = None,
     ) -> str:
         """
         Generate a response from the LLM.
-        
+
         Args:
             system_prompt: System/persona identity prompt
-            user_prompt: User message and generation constraints
+            user_prompt: Current turn's generation prompt (constraints + user message)
             max_tokens: Maximum tokens in response
             temperature: Randomness (0=deterministic, 1=creative)
-            
+            conversation_history: Prior turns as
+                ``[{"role": "user", "content": ...}, {"role": "assistant", "content": ...}, ...]``
+
         Returns:
             Generated text response
         """
         pass
-    
+
     @abstractmethod
     def get_model_name(self) -> str:
         """Return the model name being used."""
@@ -95,18 +98,23 @@ class AnthropicAdapter(BaseLLMAdapter):
         user_prompt: str,
         max_tokens: int = 1024,
         temperature: float = 0.7,
+        conversation_history: Optional[list[dict[str, str]]] = None,
     ) -> str:
         """Generate response using Claude."""
+        messages: list[dict[str, str]] = []
+        if conversation_history:
+            messages.extend(conversation_history)
+        messages.append({"role": "user", "content": user_prompt})
         message = self.client.messages.create(
             model=self.model,
             max_tokens=max_tokens,
             temperature=temperature,
             system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
+            messages=messages,
         )
         text_block = message.content[0]
         return text_block.text if hasattr(text_block, "text") else str(text_block)
-    
+
     def get_model_name(self) -> str:
         return self.model
 
@@ -159,20 +167,24 @@ class OpenAIAdapter(BaseLLMAdapter):
         user_prompt: str,
         max_tokens: int = 1024,
         temperature: float = 0.7,
+        conversation_history: Optional[list[dict[str, str]]] = None,
     ) -> str:
         """Generate response using GPT."""
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": system_prompt},
+        ]
+        if conversation_history:
+            messages.extend(conversation_history)
+        messages.append({"role": "user", "content": user_prompt})
         response = self.client.chat.completions.create(
             model=self.model,
             max_tokens=max_tokens,
             temperature=temperature,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+            messages=messages,
         )
         content = response.choices[0].message.content
         return content if content is not None else ""
-    
+
     def get_model_name(self) -> str:
         return self.model
 
@@ -202,16 +214,18 @@ class MockLLMAdapter(BaseLLMAdapter):
         system_prompt: str,
         user_prompt: str,
         max_tokens: int = 1024,
-        temperature: float = 0.7
+        temperature: float = 0.7,
+        conversation_history: Optional[list[dict[str, str]]] = None,
     ) -> str:
         """Generate mock response."""
         self.last_system_prompt = system_prompt
         self.last_user_prompt = user_prompt
+        self.last_conversation_history = conversation_history
         self.call_count += 1
-        
+
         if self.response_template:
             return self.response_template
-        
+
         # Generate a reasonable mock response based on detected constraints
         return self._generate_contextual_mock(system_prompt, user_prompt)
     
@@ -279,6 +293,7 @@ class TemplateAdapter(BaseLLMAdapter):
         user_prompt: str,
         max_tokens: int = 1024,
         temperature: float = 0.7,
+        conversation_history: Optional[list[dict[str, str]]] = None,
     ) -> str:
         """Fallback when called without IR (standard interface)."""
         return f"[Template fallback - no IR provided for: {user_prompt[:50]}]"

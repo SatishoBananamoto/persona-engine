@@ -26,8 +26,10 @@ Usage::
 
 from __future__ import annotations
 
+import json
 import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Optional
 
 import yaml  # type: ignore[import-untyped]
@@ -69,6 +71,7 @@ class ChatResult:
     validation: IRValidationResult
     response: GeneratedResponse
     turn_number: int
+    _user_input: str = ""
 
     @property
     def citations(self) -> list:
@@ -221,7 +224,9 @@ class PersonaEngine:
             topic or "", current_turn=turn,
         )
         response = self._generator.generate(
-            ir, user_input, memory_context=memory_ctx,
+            ir, user_input,
+            memory_context=memory_ctx,
+            conversation_history=self._build_conversation_history(),
         )
 
         # 4. Write memory
@@ -239,6 +244,7 @@ class PersonaEngine:
             validation=validation,
             response=response,
             turn_number=turn,
+            _user_input=user_input,
         )
         self._history.append(result)
         return result
@@ -334,8 +340,71 @@ class PersonaEngine:
             self._validator.reset()
 
     # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
+
+    def save(self, path: str | Path) -> None:
+        """Save conversation state to a JSON file.
+
+        Saves: persona path hint, conversation_id, turn_number, and
+        the message history (user inputs + assistant texts).  Does NOT
+        save the full IR or memory stores — those are ephemeral.
+        """
+        data = {
+            "conversation_id": self._conversation_id,
+            "turn_number": self._turn_number,
+            "persona_id": self._persona.persona_id,
+            "messages": [
+                {"user_input": r.response.ir.conversation_frame.goal.value,
+                 "text": r.text, "turn": r.turn_number}
+                for r in self._history
+            ],
+            "memory_stats": self._memory.stats(),
+        }
+        Path(path).write_text(json.dumps(data, indent=2, default=str))
+
+    @classmethod
+    def load(
+        cls,
+        state_path: str | Path,
+        persona_path: str,
+        **kwargs: Any,
+    ) -> PersonaEngine:
+        """Reload an engine from a saved state file + persona YAML.
+
+        Restores conversation_id and turn_number so cross-turn
+        validation and determinism continue from where they left off.
+        History is NOT replayed (no LLM calls); turns are fast-forwarded.
+        """
+        state = json.loads(Path(state_path).read_text())
+        engine = cls.from_yaml(persona_path, **kwargs)
+        engine._conversation_id = state["conversation_id"]
+        engine._turn_number = state.get("turn_number", 0)
+        return engine
+
+    # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
+
+    def _build_conversation_history(
+        self,
+        max_turns: int = 10,
+    ) -> list[dict[str, str]] | None:
+        """Build a conversation_history list from past ChatResults.
+
+        Returns None when there is no history (turn 1).  Limits to the
+        most recent *max_turns* exchanges to avoid context overflow.
+        """
+        if not self._history:
+            return None
+        recent = self._history[-max_turns:]
+        messages: list[dict[str, str]] = []
+        for r in recent:
+            # Reconstruct the user message from the IR (we stored user_input via prompt)
+            # We'll store user_input on ChatResult for this purpose.
+            messages.append({"role": "user", "content": r._user_input})
+            messages.append({"role": "assistant", "content": r.text})
+        return messages or None
 
     def _generate_ir(
         self,

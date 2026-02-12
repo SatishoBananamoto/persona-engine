@@ -100,6 +100,7 @@ class ResponseGenerator:
         max_tokens: int = 1024,
         temperature: Optional[float] = None,
         memory_context: Optional[dict] = None,
+        conversation_history: Optional[list[dict[str, str]]] = None,
     ) -> GeneratedResponse:
         """
         Generate a response based on IR constraints.
@@ -110,6 +111,8 @@ class ResponseGenerator:
             max_tokens: Maximum tokens in response
             temperature: Override temperature (if None, uses IR-derived value)
             memory_context: Optional memory context from MemoryManager
+            conversation_history: Prior turns as
+                ``[{"role": "user"|"assistant", "content": ...}, ...]``
 
         Returns:
             GeneratedResponse with text and metadata
@@ -152,6 +155,7 @@ class ResponseGenerator:
             user_prompt=generation_prompt,
             max_tokens=max_tokens,
             temperature=temperature,
+            conversation_history=conversation_history,
         )
 
         # Post-process
