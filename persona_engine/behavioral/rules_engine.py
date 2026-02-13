@@ -53,10 +53,23 @@ class BehavioralRulesEngine:
             InteractionMode.SMALL_TALK: "friend",
             InteractionMode.SURVEY: "default",
             InteractionMode.COACHING: "default",
-            InteractionMode.DEBATE: "default",
+            InteractionMode.DEBATE: "debate",
         }
 
         role = mode_to_role.get(interaction_mode, "default")
+
+        # Synthesize debate role from default if not defined
+        if role == "debate" and role not in self.social_roles:
+            if "default" in self.social_roles:
+                default_role = self.social_roles["default"]
+                from persona_engine.schema.persona_schema import SocialRole
+                self.social_roles["debate"] = SocialRole(
+                    formality=min(1.0, default_role.formality + 0.10),
+                    directness=min(1.0, default_role.directness + 0.15),
+                    emotional_expressiveness=min(1.0, default_role.emotional_expressiveness + 0.10),
+                )
+            else:
+                role = "default"
 
         # Ensure role exists in persona's social_roles
         if role not in self.social_roles:

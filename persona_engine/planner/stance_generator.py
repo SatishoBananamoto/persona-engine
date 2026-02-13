@@ -165,6 +165,30 @@ def _generate_opinion_stance(
     return base_stance
 
 
+def _extract_topic_hint(user_input: str) -> str | None:
+    """Extract a brief topic descriptor from user input for stance specificity."""
+    import re
+
+    user_lower = user_input.lower()
+
+    # "What do you think about X?"
+    match = re.search(r"(?:about|regarding|on|of)\s+(.{5,40}?)(?:\?|$)", user_lower)
+    if match:
+        return match.group(1).strip().rstrip("?.,")
+
+    # "How should we approach X?"
+    match = re.search(r"(?:approach|handle|deal with|manage|make|cook|prepare)\s+(.{5,30})", user_lower)
+    if match:
+        return match.group(1).strip().rstrip("?.,")
+
+    # "What's the best way to X?"
+    match = re.search(r"(?:best way to|how to|how do you)\s+(.{5,30})", user_lower)
+    if match:
+        return match.group(1).strip().rstrip("?.,")
+
+    return None
+
+
 def _generate_expert_stance(
     primary_value: str,
     proficiency: float,
@@ -175,15 +199,29 @@ def _generate_expert_stance(
     Generate expert stance (can include informed assertions).
 
     Still values-informed but can make factual claims based on expertise.
+    Uses user_input to make stance topic-specific rather than generic.
     """
+    topic_hint = _extract_topic_hint(user_input)
 
-    # Expert templates (can include assertions, but still value-colored)
+    # Expert templates — now input-aware
     if proficiency > 0.8:
-        stance = f"Based on my experience, this approach works well when {primary_value} is a priority"
+        if topic_hint:
+            stance = (
+                f"When it comes to {topic_hint}, I have a clear perspective "
+                f"shaped by hands-on experience and a focus on {primary_value}"
+            )
+        else:
+            stance = (
+                f"Based on my experience, I have a strong view on this, "
+                f"particularly when {primary_value} is at stake"
+            )
     elif proficiency > 0.6:
-        stance = f"In most cases I've seen, {primary_value}-driven solutions tend to succeed here"
+        if topic_hint:
+            stance = f"In most cases I've encountered around {topic_hint}, {primary_value}-focused approaches tend to work"
+        else:
+            stance = f"In most cases I've seen, {primary_value}-driven solutions tend to succeed here"
     else:
-        stance = f"I'd approach this with {primary_value} in mind, though context matters significantly"
+        stance = f"I'd approach {topic_hint or 'this'} with {primary_value} in mind, though context matters significantly"
 
     # Add nuance for high cognitive complexity
     if nuance_capacity > 0.7:

@@ -488,12 +488,12 @@ class TestNeedsClarificationTrue:
     """Cases where needs_clarification should be True."""
 
     def test_very_short_input_four_words(self, ctx: TraceContext) -> None:
-        """< 5 words triggers needs clarification."""
+        """4 words >= 3 threshold, so does NOT trigger clarification anymore."""
         _, _, _, needs = analyze_intent(
             "Tell me right away",
             InteractionMode.CASUAL_CHAT, ConversationGoal.BUILD_RAPPORT, ctx,
         )
-        assert needs is True
+        assert needs is False
 
     def test_very_short_input_two_words(self, ctx: TraceContext) -> None:
         _, _, _, needs = analyze_intent(
@@ -518,77 +518,74 @@ class TestNeedsClarificationTrue:
         assert needs is True
 
     def test_multiple_question_marks_three(self, ctx: TraceContext) -> None:
-        """Exactly 3 > 2 still triggers."""
+        """Exactly 3 <= 3 threshold, so does NOT trigger clarification anymore."""
         _, _, _, needs = analyze_intent(
             "What is happening? Is it bad? And will it get well?",
             InteractionMode.CASUAL_CHAT, ConversationGoal.BUILD_RAPPORT, ctx,
         )
-        assert needs is True
+        assert needs is False
 
-    def test_ambiguous_word_or(self, ctx: TraceContext) -> None:
-        """Substring 'or' in input triggers needs clarification."""
+    def test_ambiguous_word_or_no_longer_triggers(self, ctx: TraceContext) -> None:
+        """'or' in normal sentences no longer triggers clarification (Fix 6)."""
         _, _, _, needs = analyze_intent(
             "I want red or blue as the main design theme picked this time",
             InteractionMode.CASUAL_CHAT, ConversationGoal.BUILD_RAPPORT, ctx,
         )
-        assert needs is True
+        assert needs is False
 
-    def test_ambiguous_word_either(self, ctx: TraceContext) -> None:
+    def test_ambiguous_word_either_no_longer_triggers(self, ctx: TraceContext) -> None:
         _, _, _, needs = analyze_intent(
             "I like either the new plan submitted next week and the backup plan",
             InteractionMode.CASUAL_CHAT, ConversationGoal.BUILD_RAPPORT, ctx,
         )
-        assert needs is True
+        assert needs is False
 
-    def test_ambiguous_word_maybe(self, ctx: TraceContext) -> None:
+    def test_ambiguous_word_maybe_no_longer_triggers(self, ctx: TraceContext) -> None:
         _, _, _, needs = analyze_intent(
             "I was thinking maybe the new timeline is a bad call at all times",
             InteractionMode.CASUAL_CHAT, ConversationGoal.BUILD_RAPPORT, ctx,
         )
-        assert needs is True
+        assert needs is False
 
-    def test_ambiguous_word_not_sure(self, ctx: TraceContext) -> None:
+    def test_ambiguous_word_not_sure_only_in_phrase(self, ctx: TraceContext) -> None:
+        """Standalone 'not sure' no longer triggers; only 'not sure what' does."""
         _, _, _, needs = analyze_intent(
             "I am not sure if the latest design is the right call at all",
             InteractionMode.CASUAL_CHAT, ConversationGoal.BUILD_RAPPORT, ctx,
         )
-        assert needs is True
+        assert needs is False
 
-    def test_ambiguous_word_kind_of(self, ctx: TraceContext) -> None:
+    def test_ambiguous_word_kind_of_no_longer_triggers(self, ctx: TraceContext) -> None:
         _, _, _, needs = analyze_intent(
             "This seems kind of like a big deal and I am quite invested in it",
             InteractionMode.CASUAL_CHAT, ConversationGoal.BUILD_RAPPORT, ctx,
         )
-        assert needs is True
+        assert needs is False
 
-    def test_vague_question_ask_plus_short(self, ctx: TraceContext) -> None:
-        """intent='ask' AND < 8 words triggers needs clarification."""
+    def test_vague_question_no_longer_triggers(self, ctx: TraceContext) -> None:
+        """Short questions (< 8 words) no longer trigger clarification (Fix 6)."""
         _, _, intent, needs = analyze_intent(
             "What exactly is the right plan ahead?",
             InteractionMode.CASUAL_CHAT, ConversationGoal.BUILD_RAPPORT, ctx,
         )
-        # 7 words >= 5 (not short), 1 ? <= 2 (not multi-?), no ambiguous words
-        # But intent == "ask" and 7 < 8 => True
         assert intent == "ask"
-        assert needs is True
+        assert needs is False
 
-    def test_or_as_substring_inside_another_word(self, ctx: TraceContext) -> None:
-        """Substring 'or' inside 'informatics' still triggers (substring match)."""
+    def test_or_as_substring_no_longer_triggers(self, ctx: TraceContext) -> None:
+        """Substring 'or' inside 'informatics' no longer triggers (Fix 6)."""
         _, _, _, needs = analyze_intent(
             "I am studying informatics at the lab all week and all night",
             InteractionMode.CASUAL_CHAT, ConversationGoal.BUILD_RAPPORT, ctx,
         )
-        # "informatics" contains "or" as substring: inf-OR-matics
-        assert needs is True
+        assert needs is False
 
-    def test_or_in_common_word_for(self, ctx: TraceContext) -> None:
-        """Substring 'or' inside 'for' triggers (substring match)."""
+    def test_or_in_common_word_for_no_longer_triggers(self, ctx: TraceContext) -> None:
+        """Substring 'or' inside 'for' no longer triggers (Fix 6)."""
         _, _, _, needs = analyze_intent(
             "I am studying new things at the lab all week and waiting for results",
             InteractionMode.CASUAL_CHAT, ConversationGoal.BUILD_RAPPORT, ctx,
         )
-        # "for" contains "or" as substring: f-OR
-        assert needs is True
+        assert needs is False
 
 
 class TestNeedsClarificationFalse:
@@ -875,8 +872,8 @@ class TestEdgeCases:
         assert mode == InteractionMode.BRAINSTORM  # "brainstorm" keyword
         assert goal == ConversationGoal.EDUCATE    # "?" + "how"
         assert intent == "ask"                     # "?"
-        # "brainstorm" contains "or" as substring (brainst-OR-m), so needs=True
-        assert needs is True
+        # Substring 'or' no longer triggers clarification (Fix 6)
+        assert needs is False
 
     def test_multiple_clarification_triggers_at_once(self, ctx: TraceContext) -> None:
         """Short + ambiguous + vague question all fire simultaneously."""

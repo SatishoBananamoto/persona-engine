@@ -446,13 +446,26 @@ class MemoryManager:
         trust_d = 0.0
         rapport_d = 0.0
 
-        # Positive signals
-        if any(w in lower for w in ["agreed", "trust", "validated", "confirmed"]):
+        # Positive trust signals
+        if any(w in lower for w in [
+            "agreed", "trust", "validated", "confirmed",
+            "expertise", "knowledgeable", "helpful", "accurate",
+            "substantive", "insightful",
+        ]):
             trust_d += 0.05
-        if any(w in lower for w in ["rapport", "friendly", "connected", "warm", "laughed"]):
+
+        # Positive rapport signals
+        if any(w in lower for w in [
+            "rapport", "friendly", "connected", "warm", "laughed",
+            "exchange", "explored", "enjoyed", "casual",
+        ]):
             rapport_d += 0.05
         if any(w in lower for w in ["shared personal", "opened up", "disclosed"]):
             rapport_d += 0.08
+
+        # Baseline engagement signal — any engagement is mild rapport
+        if "engaged" in lower:
+            rapport_d += 0.02
 
         # Negative signals
         if any(w in lower for w in ["challenged", "disagreed", "questioned expertise"]):

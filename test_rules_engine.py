@@ -185,8 +185,8 @@ class TestGetSocialRoleMode:
     def test_coaching_maps_to_default(self, engine):
         assert engine.get_social_role_mode(InteractionMode.COACHING) == "default"
 
-    def test_debate_maps_to_default(self, engine):
-        assert engine.get_social_role_mode(InteractionMode.DEBATE) == "default"
+    def test_debate_maps_to_debate(self, engine):
+        assert engine.get_social_role_mode(InteractionMode.DEBATE) == "debate"
 
     # --- BRAINSTORM is NOT in the mapping dict -> falls back to "default" ---
 

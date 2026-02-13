@@ -152,10 +152,12 @@ def analyze_intent(
     # ========================================================================
 
     needs_clarification = (
-        len(user_input.split()) < 5  # Very short
-        or user_input.count("?") > 2  # Multiple questions
-        or any(word in user_lower for word in ["or", "either", "maybe", "not sure", "kind of"])  # Ambiguous
-        or (user_intent == "ask" and len(user_input.split()) < 8)  # Vague question
+        len(user_input.split()) < 3  # Truly tiny input
+        or user_input.count("?") > 3  # 4+ questions is genuinely ambiguous
+        or any(phrase in user_lower for phrase in [
+            "not sure what", "kind of confused",
+            "what do you mean", "can you clarify",
+        ])
     )
 
     return mode, goal, user_intent, needs_clarification

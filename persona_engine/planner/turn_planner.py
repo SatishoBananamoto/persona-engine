@@ -57,6 +57,7 @@ from persona_engine.schema.ir_schema import (
 )
 from persona_engine.schema.persona_schema import Persona
 from persona_engine.utils import DeterminismManager
+from persona_engine.validation.cross_turn import TurnSnapshot
 
 # =============================================================================
 # CONFIGURATION CONSTANTS
@@ -91,6 +92,21 @@ EVIDENCE_STRESS_THRESHOLD = 0.4  # Evidence strength above this triggers conflic
 # Competence
 UNKNOWN_DOMAIN_BASE = 0.10       # Floor competence for completely unknown topics
 OPENNESS_COMPETENCE_WEIGHT = 0.1 # How much openness boosts comfort with unknown topics
+
+# Cross-Turn Dynamics
+CROSS_TURN_INERTIA = 0.15        # 15% anchor to previous turn's values
+FAMILIARITY_BOOST_PER_EPISODE = 0.05  # Competence boost per prior topic episode
+FAMILIARITY_BOOST_CAP = 0.15     # Maximum familiarity boost
+
+# Dynamic Time Pressure
+TIME_PRESSURE_TURN_THRESHOLD = 5  # Pressure starts building after this turn
+TIME_PRESSURE_PER_TURN = 0.03    # Pressure increase per turn past threshold
+TIME_PRESSURE_MAX_BUILDUP = 0.15 # Max additional pressure from conversation length
+
+
+def _smooth(prev: float, new: float, alpha: float) -> float:
+    """Cross-turn inertia smoothing: blend previous and current values."""
+    return prev * alpha + new * (1 - alpha)
 
 
 @dataclass
@@ -149,6 +165,9 @@ class TurnPlanner:
 
         # Track bias modifiers for current turn (reset per turn)
         self._current_bias_modifiers: list[BiasModifier] = []
+
+        # Cross-turn dynamics: previous turn's IR snapshot for inertia smoothing
+        self._prior_snapshot: TurnSnapshot | None = None
 
     def generate_ir(self, context: ConversationContext) -> IntermediateRepresentation:
         """
@@ -354,6 +373,25 @@ class TurnPlanner:
         # 5-7. REMAINING METRICS (confidence, competence, tone, verbosity)
         # ====================================================================
         confidence = self._compute_confidence(proficiency, ctx)
+
+        # Fix 4: Cross-turn inertia smoothing — confidence
+        # Smooth BEFORE uncertainty resolver / claim type use the value
+        if self._prior_snapshot:
+            before_smooth = confidence
+            confidence = _smooth(self._prior_snapshot.confidence, confidence, CROSS_TURN_INERTIA)
+            if abs(confidence - before_smooth) > 0.001:
+                ctx.num(
+                    source_type="cross_turn",
+                    source_id="inertia_smoothing",
+                    target_field="response_structure.confidence",
+                    operation="blend",
+                    before=before_smooth,
+                    after=confidence,
+                    effect=f"Cross-turn inertia: {before_smooth:.3f} → {confidence:.3f} (prev={self._prior_snapshot.confidence:.3f})",
+                    weight=0.7,
+                    reason=f"inertia={CROSS_TURN_INERTIA}"
+                )
+
         competence = self._compute_competence(domain, proficiency, persona_domains, ctx)
         tone = self._select_tone(ctx)
         verbosity = self._compute_verbosity(ctx)
@@ -366,6 +404,38 @@ class TurnPlanner:
             ctx
         )
 
+        # Fix 4: Cross-turn inertia smoothing — formality + directness
+        if self._prior_snapshot:
+            before_f = formality
+            formality = _smooth(self._prior_snapshot.formality, formality, CROSS_TURN_INERTIA)
+            if abs(formality - before_f) > 0.001:
+                ctx.num(
+                    source_type="cross_turn",
+                    source_id="inertia_smoothing",
+                    target_field="communication_style.formality",
+                    operation="blend",
+                    before=before_f,
+                    after=formality,
+                    effect=f"Cross-turn inertia: {before_f:.3f} → {formality:.3f}",
+                    weight=0.7,
+                    reason=f"inertia={CROSS_TURN_INERTIA}"
+                )
+
+            before_d = directness
+            directness = _smooth(self._prior_snapshot.directness, directness, CROSS_TURN_INERTIA)
+            if abs(directness - before_d) > 0.001:
+                ctx.num(
+                    source_type="cross_turn",
+                    source_id="inertia_smoothing",
+                    target_field="communication_style.directness",
+                    operation="blend",
+                    before=before_d,
+                    after=directness,
+                    effect=f"Cross-turn inertia: {before_d:.3f} → {directness:.3f}",
+                    weight=0.7,
+                    reason=f"inertia={CROSS_TURN_INERTIA}"
+                )
+
         # ====================================================================
         # 9. DISCLOSURE (P1: multi-clamp with SafetyPlan)
         # ====================================================================
@@ -374,9 +444,31 @@ class TurnPlanner:
             ctx
         )
 
+        # Fix 4: Cross-turn inertia smoothing — disclosure
+        if self._prior_snapshot:
+            before_disc = disclosure_level
+            disclosure_level = _smooth(self._prior_snapshot.disclosure, disclosure_level, CROSS_TURN_INERTIA)
+            if abs(disclosure_level - before_disc) > 0.001:
+                ctx.num(
+                    source_type="cross_turn",
+                    source_id="inertia_smoothing",
+                    target_field="knowledge_disclosure.disclosure_level",
+                    operation="blend",
+                    before=before_disc,
+                    after=disclosure_level,
+                    effect=f"Cross-turn inertia: {before_disc:.3f} → {disclosure_level:.3f}",
+                    weight=0.7,
+                    reason=f"inertia={CROSS_TURN_INERTIA}"
+                )
+
         # ====================================================================
         # 10. UNCERTAINTY ACTION (single resolver)
         # ====================================================================
+        # Fix 8: Dynamic time pressure (mode + conversation length)
+        time_pressure = self._compute_time_pressure(
+            context.interaction_mode, context.turn_number, ctx
+        )
+
         # Use separate list to avoid bypassing TraceContext's structured API
         resolver_citations: list[Citation] = []
         uncertainty_action = resolve_uncertainty_action(
@@ -384,7 +476,7 @@ class TurnPlanner:
             confidence=confidence,
             risk_tolerance=self.cognitive.style.risk_tolerance,
             need_for_closure=self.cognitive.style.need_for_closure,
-            time_pressure=self.persona.time_scarcity,
+            time_pressure=time_pressure,
             claim_policy_lookup_behavior=self.persona.claim_policy.lookup_behavior,
             citations=resolver_citations  # Isolated list
         )
@@ -473,11 +565,20 @@ class TurnPlanner:
                 source="observed_behavior",
             ))
 
-            # If persona took a stance, remember it as a relationship signal
+            # Fix 1A: Richer relationship content that triggers delta detection
             if stance and confidence > 0.5:
+                rel_content = f"Engaged on {context.topic_signature}"
+                if confidence > 0.7:
+                    rel_content += " — validated shared expertise"
+                if claim_enum.value == "personal_experience":
+                    rel_content += " — shared personal perspective"
+                if user_intent == "challenge":
+                    rel_content += " — challenged viewpoint"
+                elif user_intent == "share":
+                    rel_content += " — friendly exchange"
                 write_intents.append(MemoryWriteIntent(
                     content_type="relationship",
-                    content=f"Engaged on {context.topic_signature} — shared {claim_enum.value} perspective",
+                    content=rel_content,
                     confidence=0.7,
                     privacy_level=0.1,
                     source="observed_behavior",
@@ -550,6 +651,13 @@ class TurnPlanner:
                 turn=context.turn_number,
                 conversation_id=context.conversation_id,
             )
+
+        # ====================================================================
+        # 18. STORE SNAPSHOT FOR CROSS-TURN DYNAMICS
+        # ====================================================================
+        self._prior_snapshot = TurnSnapshot.from_ir(
+            ir, context.turn_number, context.topic_signature
+        )
 
         return ir
 
@@ -867,6 +975,29 @@ class TurnPlanner:
             reason=f"O={openness:.2f} * weight={OPENNESS_COMPETENCE_WEIGHT}",
         )
 
+        # Step 4.5: Familiarity boost from repeated topic engagement (Fix 3)
+        if self.memory:
+            previously_discussed = self.memory.episodes.has_discussed(domain)
+            topic_episodes = self.memory.episodes.get_by_topic(domain)
+            if previously_discussed and topic_episodes:
+                boost = min(
+                    len(topic_episodes) * FAMILIARITY_BOOST_PER_EPISODE,
+                    FAMILIARITY_BOOST_CAP,
+                )
+                before_fam = competence
+                competence = competence + boost
+                ctx.num(
+                    source_type="memory",
+                    source_id="topic_familiarity",
+                    target_field="response_structure.competence",
+                    operation="add",
+                    before=before_fam,
+                    after=competence,
+                    effect=f"Familiarity boost: +{boost:.3f} ({len(topic_episodes)} prior episodes on '{domain}')",
+                    weight=0.6,
+                    reason=f"episodes={len(topic_episodes)}, boost_per={FAMILIARITY_BOOST_PER_EPISODE}, cap={FAMILIARITY_BOOST_CAP}",
+                )
+
         # Step 5: Clamp [0, 1]
         competence = clamp01(
             ctx,
@@ -1034,6 +1165,25 @@ class TurnPlanner:
         )
 
         # ==================================================================
+        # 2.5. MODE-SPECIFIC OVERLAY (Fix 7B: debate differentiation)
+        # ==================================================================
+        if interaction_mode == InteractionMode.DEBATE:
+            before_d_debate = directness
+            directness = min(1.0, directness + 0.15)
+            if abs(directness - before_d_debate) > 0.001:
+                ctx.num(
+                    source_type="rule",
+                    source_id="debate_mode_overlay",
+                    target_field="communication_style.directness",
+                    operation="add",
+                    before=before_d_debate,
+                    after=directness,
+                    effect="Debate mode: +0.15 directness for argumentative stance",
+                    weight=0.9,
+                    reason="interaction_mode=debate"
+                )
+
+        # ==================================================================
         # 3. TRAIT MODIFIER (agreeableness affects directness)
         # ==================================================================
         before_directness = directness
@@ -1147,6 +1297,30 @@ class TurnPlanner:
             )
 
         # ==================================================================
+        # 3.5. TRUST MODIFIER (relationship store → disclosure)
+        # ==================================================================
+        # Fix 2: Wire trust into disclosure using the already-defined
+        # disclosure_policy.factors["trust_level"] coefficient
+        trust = self.memory.relationships.trust if self.memory else 0.5
+        trust_factor = self.persona.disclosure_policy.factors.get("trust_level", 0.0)
+        if abs(trust_factor) > 0.001:
+            trust_mod = (trust - 0.5) * trust_factor * 2
+            if abs(trust_mod) > 0.001:
+                before_trust = disclosure
+                disclosure = disclosure + trust_mod
+                ctx.num(
+                    source_type="memory",
+                    source_id="trust_modifier",
+                    target_field="knowledge_disclosure.disclosure_level",
+                    operation="add",
+                    before=before_trust,
+                    after=disclosure,
+                    effect=f"Trust modifier: {trust_mod:+.3f} (trust={trust:.2f}, factor={trust_factor:.2f})",
+                    weight=0.7,
+                    reason=f"trust={trust:.2f}, base=0.5, factor={trust_factor}"
+                )
+
+        # ==================================================================
         # 4. PRIVACY FILTER CLAMP (P1: records in SafetyPlan)
         # ==================================================================
         privacy_filter = self.rules.get_privacy_filter_level(topic_signature)
@@ -1196,6 +1370,59 @@ class TurnPlanner:
         )
 
         return disclosure
+
+    def _compute_time_pressure(
+        self,
+        interaction_mode: InteractionMode,
+        turn_number: int,
+        ctx: "TraceContext",
+    ) -> float:
+        """
+        Compute context-sensitive time pressure.
+
+        Base from persona.time_scarcity, modified by interaction mode and
+        conversation length. Debate/coaching reduce pressure; surveys increase it.
+        """
+        base = self.persona.time_scarcity
+
+        mode_modifiers = {
+            InteractionMode.DEBATE: -0.25,
+            InteractionMode.COACHING: -0.20,
+            InteractionMode.INTERVIEW: -0.15,
+            InteractionMode.BRAINSTORM: -0.20,
+            InteractionMode.CASUAL_CHAT: -0.10,
+            InteractionMode.SMALL_TALK: -0.05,
+            InteractionMode.CUSTOMER_SUPPORT: 0.0,
+            InteractionMode.SURVEY: 0.10,
+        }
+
+        mode_mod = mode_modifiers.get(interaction_mode, 0.0)
+        adjusted = base + mode_mod
+
+        # Conversation length: pressure builds after threshold
+        if turn_number > TIME_PRESSURE_TURN_THRESHOLD:
+            length_pressure = min(
+                TIME_PRESSURE_MAX_BUILDUP,
+                (turn_number - TIME_PRESSURE_TURN_THRESHOLD) * TIME_PRESSURE_PER_TURN,
+            )
+            adjusted += length_pressure
+
+        adjusted = max(0.0, min(1.0, adjusted))
+
+        if abs(adjusted - base) > 0.01:
+            ctx.num(
+                source_type="state",
+                source_id="dynamic_time_pressure",
+                target_field="time_pressure",
+                operation="add",
+                before=base,
+                after=adjusted,
+                effect=f"Mode={interaction_mode.value} → time_pressure {base:.2f} → {adjusted:.2f}",
+                weight=0.8,
+                reason=f"mode_mod={mode_mod:+.2f}"
+            )
+
+        return adjusted
 
     def _infer_claim_type(
         self,
