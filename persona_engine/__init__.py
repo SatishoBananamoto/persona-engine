@@ -7,6 +7,7 @@ A psychologically-grounded system for creating behaviorally coherent synthetic p
 __version__ = "0.1.0"
 
 from persona_engine.engine import ChatResult, PersonaEngine
+from persona_engine.persona_builder import PersonaBuilder
 from persona_engine.schema.ir_schema import (
     CommunicationStyle,
     ConversationFrame,
@@ -23,6 +24,7 @@ from persona_engine.schema.persona_schema import (
 
 __all__ = [
     "PersonaEngine",
+    "PersonaBuilder",
     "ChatResult",
     "Persona",
     "PersonalityProfile",

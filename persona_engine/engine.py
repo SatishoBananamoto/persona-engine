@@ -45,6 +45,7 @@ from persona_engine.schema.ir_schema import (
     InteractionMode,
     IntermediateRepresentation,
 )
+from persona_engine.persona_builder import PersonaBuilder
 from persona_engine.schema.persona_schema import Persona
 from persona_engine.utils.determinism import DeterminismManager
 from persona_engine.validation import PipelineValidator
@@ -178,6 +179,32 @@ class PersonaEngine:
         if "domains" in data and "knowledge_domains" not in data:
             data["knowledge_domains"] = data.pop("domains")
         persona = Persona(**data)
+        return cls(persona, **kwargs)
+
+    @classmethod
+    def from_description(
+        cls,
+        description: str,
+        **kwargs: Any,
+    ) -> PersonaEngine:
+        """Create an engine from a natural-language persona description.
+
+        No LLM required — uses heuristic parsing to extract name,
+        occupation, age, location, and personality adjectives, then
+        fills in ~50 psychological parameters with sensible defaults.
+
+        Example::
+
+            engine = PersonaEngine.from_description(
+                "A 45-year-old French chef named Marcus, passionate and direct"
+            )
+            result = engine.chat("What makes a good sauce?")
+
+        Args:
+            description: Natural-language persona description.
+            **kwargs:    Forwarded to ``PersonaEngine.__init__``.
+        """
+        persona = PersonaBuilder.from_description(description)
         return cls(persona, **kwargs)
 
     # ------------------------------------------------------------------
