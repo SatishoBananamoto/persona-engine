@@ -660,6 +660,10 @@ class PersonaBuilder:
         Available: expert, coach, creative, analyst, caregiver, leader.
         Archetype values override the neutral baseline (0.5) but are then
         further modified by any ``trait()`` calls.
+
+        Example::
+
+            persona = PersonaBuilder("Dr. Li", "Physicist").archetype("expert").build()
         """
         name_lower = name.lower().strip()
         if name_lower not in ARCHETYPES:
@@ -697,7 +701,12 @@ class PersonaBuilder:
     # ------------------------------------------------------------------
 
     def build(self) -> Persona:
-        """Construct the full Persona object with all defaults filled in."""
+        """Construct the full Persona object with all defaults filled in.
+
+        Example::
+
+            persona = PersonaBuilder("Alice", "Data Scientist").trait("curious").build()
+        """
         persona_id = self._generate_id()
         identity = self._build_identity()
         psychology = self._build_psychology()

@@ -191,6 +191,12 @@ class PersonaEngine:
         # History
         self._history: list[ChatResult] = []
 
+    def __repr__(self) -> str:
+        return (
+            f"PersonaEngine(persona={self._persona.label!r}, "
+            f"turns={self._turn_number})"
+        )
+
     # ------------------------------------------------------------------
     # Construction helpers
     # ------------------------------------------------------------------
@@ -202,6 +208,11 @@ class PersonaEngine:
         **kwargs: Any,
     ) -> PersonaEngine:
         """Load a persona from a YAML file and return a ready engine.
+
+        Example::
+
+            engine = PersonaEngine.from_yaml("personas/chef.yaml", llm_provider="mock")
+            result = engine.chat("What makes a good sauce?")
 
         Args:
             path:   Path to persona YAML file.
@@ -255,12 +266,11 @@ class PersonaEngine:
     ) -> ChatResult:
         """Process a user message through the full pipeline.
 
-        Steps:
-        1. Generate IR via TurnPlanner
-        2. Validate IR (if enabled)
-        3. Generate LLM response
-        4. Write memory intents
-        5. Return bundled ChatResult
+        Example::
+
+            result = engine.chat("Tell me about quantum physics")
+            print(result.text)
+            print(result.ir.response_structure.competence)
 
         Args:
             user_input: The user's message.
@@ -320,6 +330,12 @@ class PersonaEngine:
         Useful for testing, debugging, and inspecting the planning layer
         without spending API credits.
 
+        Example::
+
+            ir = engine.plan("What do you think about AI?")
+            print(ir.response_structure.confidence)
+            print(ir.conversation_frame.goal)
+
         Same turn-counting and memory semantics as ``chat()``.
         """
         user_input = _validate_user_input(user_input)
@@ -366,22 +382,51 @@ class PersonaEngine:
         return self._validator
 
     def memory_stats(self) -> dict[str, Any]:
-        """Get memory system statistics."""
+        """Get memory system statistics.
+
+        Example::
+
+            stats = engine.memory_stats()
+            print(stats["facts_count"], stats["episodes_count"])
+        """
         return self._memory.stats()
 
     def system_prompt(self) -> str:
-        """Return the system prompt being sent with every LLM call."""
+        """Return the system prompt being sent with every LLM call.
+
+        Example::
+
+            print(engine.system_prompt()[:200])
+        """
         return self._generator.get_system_prompt()
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
+    def __enter__(self) -> PersonaEngine:
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        self.close()
+
+    def close(self) -> None:
+        """Release resources (LLM client connections, pending memory)."""
+        # Flush any pending state; currently a no-op but provides a
+        # clean extension point for future async adapters / connection pools.
+        pass
+
     def reset(self) -> None:
         """Reset conversation state for a new conversation.
 
         Clears turn counter, history, memory, stance cache, and
         cross-turn validation state. The persona and components remain.
+
+        Example::
+
+            engine.chat("Hello")
+            engine.reset()          # fresh conversation
+            engine.chat("Hi again") # turn 1 again
         """
         self._turn_number = 0
         self._conversation_id = uuid.uuid4().hex[:12]
@@ -403,6 +448,11 @@ class PersonaEngine:
 
         Saves: conversation metadata, message history, and full memory
         store contents so that ``load()`` can restore a usable engine.
+
+        Example::
+
+            engine.chat("Hello")
+            engine.save("state.json")
 
         Format is versioned for forward compatibility.
         """
@@ -460,6 +510,12 @@ class PersonaEngine:
         Restores conversation_id, turn_number, and memory stores so the
         engine can continue where it left off. History is NOT replayed
         (no LLM calls); turns are fast-forwarded.
+
+        Example::
+
+            engine = PersonaEngine.load("state.json", "personas/chef.yaml",
+                                        llm_provider="mock")
+            engine.chat("Continue our conversation")
         """
         from persona_engine.memory.models import (
             Episode, Fact, Preference, RelationshipMemory,

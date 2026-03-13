@@ -21,23 +21,49 @@ A psychologically-grounded persona engine that creates behaviorally coherent syn
 ## Quick Start
 
 ```python
-from persona_engine import PersonaEngine, Persona
+from persona_engine import PersonaEngine
 
-# Load a persona
-engine = PersonaEngine()
-persona = engine.load_persona("personas/ux_researcher.yaml")
+# Load a persona from YAML
+engine = PersonaEngine.from_yaml("personas/ux_researcher.yaml", llm_provider="mock")
 
-# Start a conversation
-conversation = persona.start_conversation(
-    interaction_mode="casual_chat",
-    seed=42  # Deterministic
-)
-
-response = conversation.send("What do you think about AI in UX research?")
-print(response.text)
+# Full round-trip: planning → generation → validation
+result = engine.chat("What do you think about AI in UX research?")
+print(result.text)
 
 # Inspect the IR for debugging
-print(response.ir.citations)  # See which traits/values influenced the response
+print(result.ir.citations)  # See which traits/values influenced the response
+print(result.validation.passed)  # Check if response is persona-consistent
+```
+
+### Create a persona from a description (no YAML needed)
+
+```python
+from persona_engine import PersonaEngine
+
+engine = PersonaEngine.from_description(
+    "A 45-year-old French chef named Marcus, passionate and direct",
+    llm_provider="mock",
+)
+
+result = engine.chat("What makes a perfect sauce?")
+print(result.text)
+```
+
+### IR-only mode (no LLM calls)
+
+```python
+# Inspect the planning layer without spending API credits
+ir = engine.plan("Tell me about molecular gastronomy")
+print(ir.response_structure.competence)
+print(ir.conversation_frame.goal)
+```
+
+### Multi-turn conversations
+
+```python
+r1 = engine.chat("Tell me about sauces.")
+r2 = engine.chat("And what about soups?")  # turn 2, memory active
+print(f"Turn {r2.turn_number}: {r2.text}")
 ```
 
 ## Installation
@@ -57,6 +83,23 @@ pytest
 
 # Run validation suite
 python -m persona_engine.validation.qa_suite --personas personas/
+```
+
+## Builder API
+
+```python
+from persona_engine import PersonaEngine, PersonaBuilder
+
+persona = (
+    PersonaBuilder("Alice", "Data Scientist")
+    .archetype("analyst")
+    .trait("curious")
+    .trait("methodical")
+    .build()
+)
+
+engine = PersonaEngine(persona, llm_provider="mock")
+result = engine.chat("How would you approach this dataset?")
 ```
 
 ## Project Status

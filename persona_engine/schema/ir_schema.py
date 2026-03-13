@@ -514,6 +514,16 @@ class IntermediateRepresentation(BaseModel):
         description="Random seed used for this turn (for deterministic reproduction)"
     )
 
+    def __repr__(self) -> str:
+        stance = self.response_structure.stance or ""
+        snippet = (stance[:50] + "...") if len(stance) > 50 else stance
+        return (
+            f"IR(mode={self.conversation_frame.interaction_mode.value!r}, "
+            f"comp={self.response_structure.competence:.2f}, "
+            f"conf={self.response_structure.confidence:.2f}, "
+            f"stance={snippet!r})"
+        )
+
     def normalize(self, ndigits: int = 3) -> "IntermediateRepresentation":
         """Return normalized copy for deterministic comparison (test/QA only)"""
         return normalize_ir(self, ndigits=ndigits)
