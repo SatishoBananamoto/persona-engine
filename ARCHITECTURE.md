@@ -459,12 +459,12 @@ classDiagram
 
 | Enum | Values |
 |---|---|
-| **Tone** (17) | `warm_enthusiastic`, `excited_engaged`, `thoughtful_engaged`, `warm_confident`, `friendly_relaxed`, `content_calm`, `satisfied_peaceful`, `neutral_calm`, `professional_composed`, `matter_of_fact`, `frustrated_tense`, `anxious_stressed`, `defensive_agitated`, `concerned_empathetic`, `disappointed_resigned`, `sad_subdued`, `tired_withdrawn` |
-| **InteractionMode** (8) | `casual_chat`, `interview`, `customer_support`, `survey`, `coaching`, `debate`, `small_talk`, `brainstorm` |
-| **ConversationGoal** (7) | `gather_info`, `resolve_issue`, `build_rapport`, `persuade`, `educate`, `entertain`, `explore_ideas` |
-| **Verbosity** (3) | `brief` (1-2 sent.), `medium` (3-5), `detailed` (6+) |
-| **UncertaintyAction** (4) | `answer`, `hedge`, `ask_clarifying`, `refuse` |
-| **KnowledgeClaimType** (5) | `personal_experience`, `general_common_knowledge`, `domain_expert`, `speculative`, `none` |
+| **Tone** (26) | `warm_enthusiastic`, `excited_engaged`, `thoughtful_engaged`, `warm_confident`, `friendly_relaxed`, `content_calm`, `satisfied_peaceful`, `neutral_calm`, `professional_composed`, `matter_of_fact`, `frustrated_tense`, `anxious_stressed`, `defensive_agitated`, `concerned_empathetic`, `disappointed_resigned`, `sad_subdued`, `tired_withdrawn`, `eager_anticipatory`, `amused_playful`, `curious_intrigued`, `surprised_caught_off_guard`, `contemptuous_dismissive`, `confused_uncertain`, `guarded_wary`, `grieving_sorrowful`, `nostalgic_wistful` |
+| **InteractionMode** (15) | `casual_chat`, `interview`, `customer_support`, `survey`, `coaching`, `debate`, `small_talk`, `brainstorm`, `therapy_counseling`, `negotiation`, `storytelling`, `venting`, `teaching`, `mediation`, `confession` |
+| **ConversationGoal** (13) | `gather_info`, `resolve_issue`, `build_rapport`, `persuade`, `educate`, `entertain`, `explore_ideas`, `emotional_release`, `seek_validation`, `display_status`, `reconcile`, `avoid_engage`, `commiserate` |
+| **Verbosity** (4) | `minimal` (single word/phrase), `brief` (1-2 sent.), `medium` (3-5), `detailed` (6+) |
+| **UncertaintyAction** (9) | `answer`, `hedge`, `ask_clarifying`, `refuse`, `speculate_with_disclaimer`, `defer_to_authority`, `reframe_question`, `offer_partial`, `acknowledge_and_redirect` |
+| **KnowledgeClaimType** (10) | `personal_experience`, `general_common_knowledge`, `domain_expert`, `speculative`, `none`, `anecdotal`, `academic_cited`, `inferential`, `hypothetical`, `received_wisdom` |
 | **SchwartzValueType** (10) | `self_direction`, `stimulation`, `hedonism`, `achievement`, `power`, `security`, `conformity`, `tradition`, `benevolence`, `universalism` |
 
 ### 2.5 Persona-to-IR Data Flow
@@ -550,14 +550,14 @@ All numeric fields use **cross-turn inertia smoothing**: `smoothed = prev × 0.1
 | **Stance** | cache check → generate new (expert template OR values-based opinion) → validate invariants |
 | **Confidence** | proficiency base → trait (C, N) → cognitive style → authority bias → clamp [0, 1] |
 | **Competence** | direct domain match OR adjacency fallback → openness modifier → memory familiarity boost |
-| **Tone** | mood valence/arousal → stress → negativity bias → map to 17-tone enum |
-| **Verbosity** | conscientiousness-derived → fatigue override (brief) OR engagement override (detailed) |
+| **Tone** | mood valence/arousal → stress → negativity bias → trait gates → map to 26-tone enum |
+| **Verbosity** | conscientiousness-derived → fatigue override (brief) OR engagement override (detailed) OR extreme introversion (minimal) |
 | **Formality** | base prefs → 70/30 social role blend → trait → state → clamp [0, 1] |
 | **Directness** | base prefs → 70/30 social role blend → agreeableness → patience → clamp [0, 1] |
 
 #### Stage 4 — Knowledge & Safety
 1. **Disclosure**: base openness → extraversion → state → trust modifier → privacy filter clamp → topic sensitivity clamp
-2. **Uncertainty Action**: proficiency + confidence + risk tolerance + need for closure → `ANSWER|HEDGE|ASK|REFUSE`
+2. **Uncertainty Action**: proficiency + confidence + risk tolerance + need for closure + cognitive complexity + competence → `ANSWER|HEDGE|ASK|REFUSE|SPECULATE_WITH_DISCLAIMER|DEFER_TO_AUTHORITY|REFRAME_QUESTION|OFFER_PARTIAL|ACKNOWLEDGE_AND_REDIRECT`
 3. **Claim Type**: proficiency + uncertainty action + domain specificity → claim enum
 4. **Response Patterns**: trigger matching → safety filtering (must_avoid veto)
 5. **Invariant Validation**: stance vs cannot_claim + must_avoid
@@ -679,7 +679,7 @@ graph TB
 
 **Confidence modifier**: `clamp(0.1, 0.95, proficiency + (C - 0.5) × 0.1 - N × 0.15)`
 
-**Tone selection**: Decision tree combining mood_valence, mood_arousal, stress, and trait modifiers → maps to one of 17 `Tone` enum values. Stress gate (`> 0.6 AND N > 0.6`), extraversion bonus (`> 0.7` → +0.2 arousal), openness gate (`> 0.6` → `THOUGHTFUL_ENGAGED`).
+**Tone selection**: Decision tree combining mood_valence, mood_arousal, stress, and trait modifiers → maps to one of 26 `Tone` enum values. Stress gate (`> 0.6 AND N > 0.6`), extraversion bonus (`> 0.7` → +0.2 arousal), openness gate (`> 0.6` → `THOUGHTFUL_ENGAGED`). Trait-gated expansions: high E + low N → `AMUSED_PLAYFUL`, high O + moderate arousal → `CURIOUS_INTRIGUED`, very low valence + high N → `GRIEVING_SORROWFUL`, high A + moderate valence → `NOSTALGIC_WISTFUL`, low A + negative valence → `CONTEMPTUOUS_DISMISSIVE`, neutral arousal spike → `SURPRISED_CAUGHT_OFF_GUARD`, low confidence + moderate arousal → `CONFUSED_UNCERTAIN`, low trust + high N → `GUARDED_WARY`, high E + high arousal → `EAGER_ANTICIPATORY`.
 
 ### 4.3 ValuesInterpreter (Schwartz Values)
 
@@ -907,7 +907,7 @@ temperature = max(0.3, 1.0 - confidence × 0.5)
 
 ### 6.4 Template Adapter Pipeline
 
-1. **Opener** from `_OPENERS[tone]` (17 tone-specific openers)
+1. **Opener** from `_OPENERS[tone]` (26 tone-specific openers)
 2. **Confidence framing**: `< 0.4` → "I think...", `0.4-0.7` → "In my experience,", `≥ 0.7` → direct assertion
 3. **Rationale** (medium/detailed verbosity only)
 4. **Uncertainty action** sentence

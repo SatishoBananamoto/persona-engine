@@ -491,11 +491,31 @@ Key outcomes:
 
 ---
 
-### Deferred to Phase 8+
+### Phase 8: Enum Expansion (Behavioral Coverage)
+
+**Status:** ✅ Complete
+**Date:** 2026-03-13
+
+Added 35 new enum values across 6 enums grounded in psychological research (Russell's circumplex, Plutchik's wheel, Schwartz values, speech act theory):
+
+| Enum | Added | New Total |
+|------|-------|-----------|
+| Tone | +9 (eager, amused, curious, surprised, contemptuous, confused, guarded, grieving, nostalgic) | 26 |
+| Verbosity | +1 (minimal) | 4 |
+| UncertaintyAction | +5 (speculate_with_disclaimer, defer_to_authority, reframe_question, offer_partial, acknowledge_and_redirect) | 9 |
+| KnowledgeClaimType | +5 (anecdotal, academic_cited, inferential, hypothetical, received_wisdom) | 10 |
+| InteractionMode | +7 (therapy_counseling, negotiation, storytelling, venting, teaching, mediation, confession) | 15 |
+| ConversationGoal | +6 (emotional_release, seek_validation, display_status, reconcile, avoid_engage, commiserate) | 13 |
+
+All downstream consumers updated (15 source files). Safety net: 128 exhaustive parametrized tests ensure every enum member exists in all consumer dicts. See `ENUM_EXPANSION_TRACKER.md` for per-file completion status.
+
+---
+
+### Deferred to Phase 9+
 
 | Item | Reason |
 |------|--------|
-| **Trait marker scorer** | Needs response text analysis (LLM-in-the-loop), better suited for Phase 8 persona library testing |
+| **Trait marker scorer** | Needs response text analysis (LLM-in-the-loop), better suited for persona library testing |
 | **Distributional guarantees** | Requires large-scale statistical testing infrastructure, post-MVP |
 | **Deterministic failure reproduction** | Partially covered by Fix 6.9 (property-based with seeds); full replay system is post-MVP |
 | **Confirmation bias proxy refinement** | topic_relevance as value_alignment proxy is acceptable for MVP; true value-alignment detection requires semantic analysis |
