@@ -100,7 +100,12 @@ Do NOT break character or acknowledge that you are an AI.
         Returns:
             User prompt with generation constraints
         """
-        prompt = f"""USER MESSAGE: {user_input}
+        # Escape user input to prevent prompt injection — delimit clearly
+        safe_input = user_input.replace("```", "` ` `")
+        prompt = f"""USER MESSAGE (respond to this):
+```
+{safe_input}
+```
 
 """
         # Memory context section (if available)

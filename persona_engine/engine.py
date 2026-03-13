@@ -56,13 +56,40 @@ from persona_engine.validation import PipelineValidator
 # Input validation
 # ---------------------------------------------------------------------------
 
-MAX_INPUT_LENGTH = 100_000  # characters — generous limit to catch abuse
+MAX_INPUT_LENGTH = 10_000  # characters — configurable via _validate_user_input param
+
+# Control characters to strip (C0 controls except tab/newline/carriage-return)
+_CONTROL_CHARS = {chr(c) for c in range(0x00, 0x20)} - {'\t', '\n', '\r'}
+_CONTROL_CHARS.add(chr(0x7F))  # DEL
 
 
-def _validate_user_input(user_input: str) -> str:
+def _sanitize_text(text: str) -> str:
+    """Remove control characters and neutralise prompt-injection patterns.
+
+    This is a defence-in-depth measure: the primary boundary is the LLM
+    prompt template, but we strip obvious manipulation attempts here.
+    """
+    # 1. Strip control characters (null bytes, escape sequences, etc.)
+    sanitized = "".join(ch for ch in text if ch not in _CONTROL_CHARS)
+
+    # 2. Collapse multiple consecutive newlines (limits injection surface)
+    import re
+    sanitized = re.sub(r'\n{3,}', '\n\n', sanitized)
+
+    return sanitized
+
+
+def _validate_user_input(
+    user_input: str,
+    *,
+    max_length: int = MAX_INPUT_LENGTH,
+) -> str:
     """Validate and sanitise user input.
 
-    Returns the stripped input string on success.
+    Checks type, emptiness, and length, then strips control characters
+    and collapses excessive newlines to reduce prompt-injection surface.
+
+    Returns the sanitised input string on success.
 
     Raises:
         InputValidationError: If input is empty, wrong type, or too long.
@@ -76,13 +103,14 @@ def _validate_user_input(user_input: str) -> str:
     if not stripped:
         raise InputValidationError("user_input must not be empty or whitespace-only")
 
-    if len(stripped) > MAX_INPUT_LENGTH:
+    if len(stripped) > max_length:
         raise InputValidationError(
-            f"user_input exceeds maximum length of {MAX_INPUT_LENGTH:,} characters "
+            f"user_input exceeds maximum length of {max_length:,} characters "
             f"(got {len(stripped):,})"
         )
 
-    return stripped
+    # Sanitise after length check (sanitisation can only shrink text)
+    return _sanitize_text(stripped)
 
 
 # ---------------------------------------------------------------------------

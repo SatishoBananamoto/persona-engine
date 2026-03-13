@@ -35,14 +35,14 @@ print(f"  Directness: {cs.directness:.3f}")
 # Inspect knowledge & disclosure
 kd = ir.knowledge_disclosure
 print("\n=== Knowledge & Disclosure ===")
-print(f"  Claim type: {kd.claim_type.value}")
+print(f"  Claim type: {kd.knowledge_claim_type.value}")
 print(f"  Uncertainty action: {kd.uncertainty_action.value}")
 print(f"  Disclosure level: {kd.disclosure_level:.3f}")
 
 # Inspect citations (trait/value changes)
 print(f"\n=== Citations ({len(ir.citations)}) ===")
 for c in ir.citations[:5]:
-    print(f"  [{c.field}] {c.value_before} → {c.value_after} (source: {c.source})")
+    print(f"  [{c.target_field}] {c.value_before} → {c.value_after} (source: {c.source_type}/{c.source_id})")
 
 # Safety plan
 sp = ir.safety_plan
