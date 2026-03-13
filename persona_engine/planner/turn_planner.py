@@ -485,6 +485,8 @@ class TurnPlanner:
             time_pressure=time_pressure,
             claim_policy_lookup_behavior=self.persona.claim_policy.lookup_behavior,
             citations=resolver_citations,
+            stress=self.state.get_stress(),
+            fatigue=self.state.get_fatigue(),
         )
         for cite in resolver_citations:
             ctx.citations.append(cite)
@@ -607,7 +609,7 @@ class TurnPlanner:
             conversation_frame=ConversationFrame(
                 interaction_mode=context.interaction_mode,
                 goal=context.goal,
-                success_criteria=None,
+                success_criteria=self._derive_success_criteria(),
             ),
             response_structure=ResponseStructure(
                 intent=self._generate_intent(
@@ -1405,6 +1407,22 @@ class TurnPlanner:
         )
 
         return disclosure
+
+    def _derive_success_criteria(self) -> list[str] | None:
+        """Derive success_criteria from persona's active goals (top 1-3 by weight)."""
+        all_goals = []
+        for g in self.persona.primary_goals:
+            all_goals.append((g.goal, g.weight * 1.0))  # primary weight as-is
+        for g in self.persona.secondary_goals:
+            all_goals.append((g.goal, g.weight * 0.5))  # secondary discounted
+
+        if not all_goals:
+            return None
+
+        # Sort by effective weight, take top 3
+        all_goals.sort(key=lambda x: x[1], reverse=True)
+        criteria = [g[0] for g in all_goals[:3]]
+        return criteria
 
     def _compute_time_pressure(
         self,

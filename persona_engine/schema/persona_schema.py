@@ -11,7 +11,9 @@ callables, or engine dependencies should be stored in these models.
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+import warnings
+
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # ============================================================================
 # Enums and Constants
@@ -389,7 +391,10 @@ class Persona(BaseModel):
 
     # Knowledge
     knowledge_domains: list[DomainKnowledge] = Field(default_factory=list)
-    languages: list[LanguageKnowledge] = Field(default_factory=list)
+    languages: list[LanguageKnowledge] = Field(
+        default_factory=list,
+        description="Reserved for future multi-language support. Currently unused by the planner pipeline.",
+    )
     cultural_knowledge: CulturalKnowledge | None = None
 
     # Goals & motivations
@@ -438,6 +443,19 @@ class Persona(BaseModel):
         if 'default' not in v:
             raise ValueError("social_roles must include a 'default' role")
         return v
+
+    @model_validator(mode='after')
+    def warn_unused_languages(self) -> "Persona":
+        """Emit a warning if languages[] is populated since it's not yet wired."""
+        if self.languages:
+            warnings.warn(
+                f"Persona '{self.persona_id}': languages field is populated with "
+                f"{len(self.languages)} entries but is currently unused by the planner "
+                f"pipeline. Multi-language support is planned for a future release.",
+                UserWarning,
+                stacklevel=2,
+            )
+        return self
 
     def to_dict(self) -> dict:
         """Export persona as a plain dictionary (YAML-compatible)."""

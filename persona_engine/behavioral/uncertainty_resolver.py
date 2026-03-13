@@ -16,7 +16,9 @@ def resolve_uncertainty_action(
     need_for_closure: float,
     time_pressure: float,
     claim_policy_lookup_behavior: str,
-    citations: list[Citation]
+    citations: list[Citation],
+    stress: float = 0.0,
+    fatigue: float = 0.0,
 ) -> UncertaintyAction:
     """
     Single authoritative decision for uncertainty handling.
@@ -24,7 +26,7 @@ def resolve_uncertainty_action(
     Precedence (highest to lowest):
     1. Hard constraints (claim policy + proficiency)
     2. Time pressure (overrides preferences)
-    3. Cognitive style (default behavior)
+    3. Cognitive style (default behavior, modulated by stress/fatigue)
 
     Args:
         proficiency: Domain proficiency (0-1)
@@ -34,10 +36,31 @@ def resolve_uncertainty_action(
         time_pressure: Time scarcity (0-1)
         claim_policy_lookup_behavior: "ask" | "hedge" | "refuse" | "speculate"
         citations: List to append citations to
+        stress: Current stress level (0-1). High stress lowers effective confidence.
+        fatigue: Current fatigue level (0-1). High fatigue biases toward HEDGE/REFUSE.
 
     Returns:
         Resolved UncertaintyAction
     """
+    # Apply dynamic state to effective confidence
+    # High stress → second-guessing (lowers confidence)
+    # High fatigue → avoids effortful reasoning (lowers confidence)
+    stress_penalty = stress * 0.15
+    fatigue_penalty = fatigue * 0.10
+    effective_confidence = max(0.0, min(1.0, confidence - stress_penalty - fatigue_penalty))
+
+    if stress > 0.3 or fatigue > 0.3:
+        state_effects = []
+        if stress > 0.3:
+            state_effects.append(f"stress={stress:.2f}")
+        if fatigue > 0.3:
+            state_effects.append(f"fatigue={fatigue:.2f}")
+        citations.append(Citation(
+            source_type="state",
+            source_id="dynamic_state",
+            effect=f"Dynamic state ({', '.join(state_effects)}) reduces effective confidence: {confidence:.2f} → {effective_confidence:.2f}",
+            weight=stress_penalty + fatigue_penalty,
+        ))
 
     # 1. Hard constraint: Very low proficiency → enforce claim policy
     if proficiency < 0.3:
@@ -68,8 +91,8 @@ def resolve_uncertainty_action(
             ))
             return UncertaintyAction.ASK_CLARIFYING
 
-    # 2. Time pressure override (only if confidence is moderate)
-    if time_pressure > 0.7 and confidence > 0.4:
+    # 2. Time pressure override (only if effective confidence is moderate)
+    if time_pressure > 0.7 and effective_confidence > 0.4:
         citations.append(Citation(
             source_type="state",
             source_id="time_scarcity",
@@ -78,14 +101,24 @@ def resolve_uncertainty_action(
         ))
         return UncertaintyAction.ANSWER
 
-    # 3. Cognitive style default behavior
+    # 3. Cognitive style default behavior (uses effective_confidence)
+
+    # High fatigue biases toward HEDGE/REFUSE regardless of confidence
+    if fatigue > 0.7 and effective_confidence < 0.7:
+        citations.append(Citation(
+            source_type="state",
+            source_id="fatigue",
+            effect=f"High fatigue ({fatigue:.2f}) biases toward hedging",
+            weight=0.7,
+        ))
+        return UncertaintyAction.HEDGE
 
     # High confidence → answer
-    if confidence > 0.7:
+    if effective_confidence > 0.7:
         return UncertaintyAction.ANSWER
 
     # Moderate confidence
-    elif confidence > 0.4:
+    elif effective_confidence > 0.4:
         if risk_tolerance > 0.6:
             citations.append(Citation(
                 source_type="trait",

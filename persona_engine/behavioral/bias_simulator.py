@@ -49,6 +49,13 @@ NEGATIVE_MARKERS = frozenset([
     "risk", "danger", "threat", "fear", "anxiety"
 ])
 
+# Negation words that reverse the sentiment of a following negative marker
+NEGATION_WORDS = frozenset([
+    "not", "no", "don't", "doesn't", "isn't", "wasn't", "weren't",
+    "never", "nothing", "none", "won't", "can't", "couldn't",
+    "shouldn't", "wouldn't", "hardly", "barely", "neither",
+])
+
 
 # =============================================================================
 # Data Structures
@@ -70,6 +77,58 @@ class BiasModifier:
     modifier: float  # The actual adjustment value (bounded by MAX_BIAS_IMPACT)
     trigger: str  # What triggered this bias
     strength: float  # 0-1, how strongly the bias is active
+
+
+# =============================================================================
+# Negation Detection
+# =============================================================================
+
+def _count_unnegated_markers(text: str) -> int:
+    """
+    Count negative markers that are NOT preceded by a negation word
+    within a 3-token window.
+
+    Examples:
+        "not bad" → 0 (negated)
+        "this is bad" → 1 (not negated)
+        "no problem at all" → 0 (negated)
+        "serious problem" → 1 (not negated)
+    """
+    tokens = text.split()
+    count = 0
+
+    for i, token in enumerate(tokens):
+        # Check if this token matches a negative marker
+        # Handle multi-word markers by checking token sequences
+        matched = False
+        for marker in NEGATIVE_MARKERS:
+            marker_tokens = marker.split()
+            if len(marker_tokens) == 1:
+                if token == marker:
+                    matched = True
+                    break
+            else:
+                # Multi-word marker: check if tokens[i:i+len] match
+                end = i + len(marker_tokens)
+                if end <= len(tokens) and tokens[i:end] == marker_tokens:
+                    matched = True
+                    break
+
+        if not matched:
+            continue
+
+        # Check preceding 1-3 tokens for negation
+        negated = False
+        window_start = max(0, i - 3)
+        for j in range(window_start, i):
+            if tokens[j].rstrip("'") in NEGATION_WORDS or tokens[j] in NEGATION_WORDS:
+                negated = True
+                break
+
+        if not negated:
+            count += 1
+
+    return count
 
 
 # =============================================================================
@@ -205,11 +264,11 @@ class BiasSimulator:
         if self.neuroticism < NEGATIVITY_NEUROTICISM_THRESHOLD:
             return None  # Not neurotic enough to trigger
 
-        # Count negative markers
-        negative_count = sum(1 for marker in NEGATIVE_MARKERS if marker in input_lower)
+        # Count negative markers, filtering out negated ones
+        negative_count = _count_unnegated_markers(input_lower)
 
         if negative_count == 0:
-            return None  # No negative content
+            return None  # No negative content (or all negated)
 
         # Strength based on marker density and neuroticism
         marker_strength = min(negative_count / 3.0, 1.0)  # Cap at 3 markers

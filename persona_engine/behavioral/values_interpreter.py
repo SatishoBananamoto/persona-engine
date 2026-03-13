@@ -5,6 +5,7 @@ Translates Schwartz's 10 basic values into motivational priorities and
 resolves conflicts between competing values.
 """
 
+from dataclasses import dataclass, field
 from typing import Any
 
 from persona_engine.schema.persona_schema import Persona, SchwartzValues
@@ -22,6 +23,31 @@ VALUE_CONFLICTS = {
     "benevolence": ["power", "achievement"],
     "universalism": ["power", "achievement"],
 }
+
+# Schwartz circumplex adjacency: values that are neighbors on the circle
+# reinforce each other and resolve more easily when in tension.
+SCHWARTZ_ADJACENCY: dict[str, list[str]] = {
+    "self_direction": ["stimulation", "universalism"],
+    "stimulation": ["self_direction", "hedonism"],
+    "hedonism": ["stimulation", "achievement"],
+    "achievement": ["hedonism", "power"],
+    "power": ["achievement", "security"],
+    "security": ["power", "conformity"],
+    "conformity": ["security", "tradition"],
+    "tradition": ["conformity", "benevolence"],
+    "benevolence": ["tradition", "universalism"],
+    "universalism": ["benevolence", "self_direction"],
+}
+
+
+@dataclass
+class ConflictResolution:
+    """Result of a value conflict resolution."""
+    winner: str
+    confidence: float  # 0-1, how clean the resolution was
+    is_adjacent: bool
+    is_opposing: bool
+    citations: list[dict[str, Any]] = field(default_factory=list)
 
 
 class ValuesInterpreter:
@@ -139,8 +165,35 @@ class ValuesInterpreter:
         Returns:
             Dominant value name
         """
+        resolution = self.resolve_conflict_detailed(value_1, value_2, context)
+        return resolution.winner
+
+    def resolve_conflict_detailed(
+        self,
+        value_1: str,
+        value_2: str,
+        context: str = "general"
+    ) -> ConflictResolution:
+        """
+        Resolve a value conflict with full detail including adjacency effects.
+
+        Adjacent values on the Schwartz circumplex resolve more easily.
+        Opposing values produce lower confidence and conflict citations.
+
+        Args:
+            value_1: First value name
+            value_2: Second value name
+            context: Situational context ("work", "personal", "social", "general")
+
+        Returns:
+            ConflictResolution with winner, confidence, and citations
+        """
         weight_1 = self._value_dict[value_1]
         weight_2 = self._value_dict[value_2]
+
+        # Determine circumplex relationship
+        is_adjacent = value_2 in SCHWARTZ_ADJACENCY.get(value_1, [])
+        is_opposing = value_2 in VALUE_CONFLICTS.get(value_1, [])
 
         # Context biases (some values stronger in certain contexts)
         context_biases = {
@@ -156,7 +209,51 @@ class ValuesInterpreter:
         adjusted_1 = weight_1 + bias_1
         adjusted_2 = weight_2 + bias_2
 
-        return value_1 if adjusted_1 >= adjusted_2 else value_2
+        citations: list[dict[str, Any]] = []
+
+        # Apply adjacency effects
+        if is_adjacent:
+            # Adjacent values reinforce — boost the winner slightly for smooth resolution
+            if adjusted_1 >= adjusted_2:
+                adjusted_1 += 0.05
+            else:
+                adjusted_2 += 0.05
+            citations.append({
+                "source_type": "value",
+                "source_id": "schwartz_adjacency",
+                "effect": f"{value_1} and {value_2} are adjacent on Schwartz circumplex — easy resolution",
+                "weight": 0.3,
+            })
+        elif is_opposing:
+            # Opposing values create genuine tension — reduce both slightly
+            citations.append({
+                "source_type": "value",
+                "source_id": "schwartz_opposition",
+                "effect": f"{value_1} and {value_2} are opposing on Schwartz circumplex — conflicted resolution",
+                "weight": 0.7,
+            })
+
+        winner = value_1 if adjusted_1 >= adjusted_2 else value_2
+
+        # Compute resolution confidence
+        margin = abs(adjusted_1 - adjusted_2)
+        if is_adjacent:
+            # Adjacent: high confidence even with small margins
+            confidence = min(1.0, 0.7 + margin)
+        elif is_opposing:
+            # Opposing: lower confidence, especially with small margins
+            confidence = min(0.8, 0.3 + margin)
+        else:
+            # Neutral relationship
+            confidence = min(1.0, 0.5 + margin)
+
+        return ConflictResolution(
+            winner=winner,
+            confidence=confidence,
+            is_adjacent=is_adjacent,
+            is_opposing=is_opposing,
+            citations=citations,
+        )
 
     def get_value_influence_on_stance(
         self,

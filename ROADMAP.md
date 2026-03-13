@@ -62,12 +62,12 @@ Build **Persona Engine + Turn Planner (IR) + Validator + Local SDK** with 10-15 
   - [x] Knowledge boundary coherence (expert domain claims, unknown domain humility)
   - [x] Citation integrity (all behavioral floats cited, clamps recorded)
   - [x] Determinism coherence (same seed = identical IR)
-- [ ] Build IR validator (checks plan before generation)
-- [ ] Implement invariant checks (no contradictions, knowledge boundaries)
+- [x] Build IR validator (checks plan before generation)
+- [x] Implement invariant checks (no contradictions, knowledge boundaries)
 - [ ] Create trait marker scorer (across domains)
-- [ ] Add style drift detection (verbosity/formality variance over turns)
-- [ ] Build knowledge boundary enforcer
-- [ ] Implement property-based testing framework
+- [x] Add style drift detection (verbosity/formality variance over turns)
+- [x] Build knowledge boundary enforcer
+- [x] Implement property-based testing framework
 - [ ] Add distributional guarantees (trait markers within range)
 - [ ] Create deterministic failure reproduction (seeded)
 
