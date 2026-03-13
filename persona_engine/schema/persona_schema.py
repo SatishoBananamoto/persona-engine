@@ -431,3 +431,27 @@ class Persona(BaseModel):
         if 'default' not in v:
             raise ValueError("social_roles must include a 'default' role")
         return v
+
+    def to_dict(self) -> dict:
+        """Export persona as a plain dictionary (YAML-compatible)."""
+        return self.model_dump(mode="python")
+
+    def to_yaml(self, path: str | None = None) -> str:
+        """Export persona as YAML string. Optionally write to file.
+
+        Args:
+            path: If provided, write YAML to this file path.
+
+        Returns:
+            The YAML string.
+        """
+        import yaml as _yaml
+        from pathlib import Path as _Path
+
+        data = self.model_dump(mode="json")
+        yaml_str = _yaml.dump(
+            data, default_flow_style=False, sort_keys=False, allow_unicode=True,
+        )
+        if path is not None:
+            _Path(path).write_text(yaml_str)
+        return yaml_str

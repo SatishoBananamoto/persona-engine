@@ -1,4 +1,11 @@
-"""Response generation module - converts IR to natural language text."""
+"""Response generation module - converts IR to natural language text.
+
+.. deprecated::
+    Direct use of response adapters is discouraged.  Prefer
+    :class:`~persona_engine.PersonaEngine` with ``llm_provider`` which
+    manages adapter lifecycle automatically.  The standalone adapter
+    classes remain available for advanced / custom integrations.
+"""
 
 from persona_engine.response.adapters import (
     AnthropicAdapter,

@@ -18,6 +18,7 @@ import pytest
 from persona_engine.persona_builder import (
     ARCHETYPES,
     OCCUPATION_DOMAINS,
+    OCCUPATION_SUBDOMAINS,
     TRAIT_MODIFIERS,
     PersonaBuilder,
     _extract_adjectives,
@@ -677,3 +678,141 @@ class TestArchetypeCoverage:
     def test_archetype_shortcut(self, archetype: str):
         p = PersonaBuilder.archetype_persona(archetype)
         assert isinstance(p, Persona)
+
+
+# ============================================================================
+# Subdomain Inference
+# ============================================================================
+
+
+class TestSubdomainInference:
+    def test_chef_food_has_subdomains(self):
+        domains = _infer_domains("Chef")
+        food = next(d for d in domains if d.domain == "Food")
+        assert len(food.subdomains) > 0
+        assert "French cuisine" in food.subdomains
+
+    def test_chef_business_has_subdomains(self):
+        domains = _infer_domains("Chef")
+        biz = next(d for d in domains if d.domain == "Business")
+        assert "Restaurant management" in biz.subdomains
+
+    def test_lawyer_law_has_subdomains(self):
+        domains = _infer_domains("Lawyer")
+        law = next(d for d in domains if d.domain == "Law")
+        assert len(law.subdomains) > 0
+        assert "Corporate Law" in law.subdomains
+
+    def test_software_engineer_has_subdomains(self):
+        domains = _infer_domains("Software Engineer")
+        tech = next(d for d in domains if d.domain == "Technology")
+        assert "Programming" in tech.subdomains
+
+    def test_unknown_occupation_has_no_subdomains(self):
+        domains = _infer_domains("Space Cowboy")
+        assert domains[0].subdomains == []
+
+    def test_occupation_without_subdomain_entry_has_empty_subdomains(self):
+        """Occupations in OCCUPATION_DOMAINS but not in OCCUPATION_SUBDOMAINS get empty lists."""
+        # Find an occupation key that has no subdomain entry
+        missing = set(OCCUPATION_DOMAINS) - set(OCCUPATION_SUBDOMAINS)
+        if missing:
+            key = next(iter(missing))
+            domains = _infer_domains(key)
+            for d in domains:
+                assert d.subdomains == []
+
+    @pytest.mark.parametrize("occ", list(OCCUPATION_SUBDOMAINS.keys())[:15])
+    def test_subdomain_keys_match_domain_keys(self, occ: str):
+        """Every domain key in OCCUPATION_SUBDOMAINS must also appear in the
+        domains returned by OCCUPATION_DOMAINS for the same occupation."""
+        if occ not in OCCUPATION_DOMAINS:
+            pytest.skip(f"{occ} not in OCCUPATION_DOMAINS")
+        domain_names = {d for d, _ in OCCUPATION_DOMAINS[occ]}
+        subdomain_domains = set(OCCUPATION_SUBDOMAINS[occ].keys())
+        assert subdomain_domains.issubset(domain_names), (
+            f"Subdomain domains {subdomain_domains - domain_names} "
+            f"not in OCCUPATION_DOMAINS for '{occ}'"
+        )
+
+
+# ============================================================================
+# YAML Export
+# ============================================================================
+
+
+class TestYAMLExport:
+    def test_to_dict_returns_dict(self):
+        persona = PersonaBuilder("Marcus", "Chef").build()
+        d = persona.to_dict()
+        assert isinstance(d, dict)
+        assert "persona_id" in d
+        assert "identity" in d
+
+    def test_to_yaml_returns_string(self):
+        persona = PersonaBuilder("Marcus", "Chef").build()
+        yaml_str = persona.to_yaml()
+        assert isinstance(yaml_str, str)
+        assert "persona_id:" in yaml_str
+        assert "Marcus" in yaml_str
+
+    def test_to_yaml_roundtrips(self):
+        import yaml
+        persona = PersonaBuilder("Marcus", "Chef").age(41).build()
+        yaml_str = persona.to_yaml()
+        data = yaml.safe_load(yaml_str)
+        assert data["identity"]["age"] == 41
+        assert data["identity"]["occupation"] == "Chef"
+
+    def test_to_yaml_writes_file(self, tmp_path):
+        persona = PersonaBuilder("Marcus", "Chef").build()
+        out = tmp_path / "persona.yaml"
+        persona.to_yaml(path=str(out))
+        assert out.exists()
+        content = out.read_text()
+        assert "Marcus" in content
+
+    def test_save_yaml_builds_and_writes(self, tmp_path):
+        out = tmp_path / "chef.yaml"
+        persona = PersonaBuilder("Marcus", "Chef").age(41).save_yaml(str(out))
+        assert isinstance(persona, Persona)
+        assert out.exists()
+        import yaml
+        data = yaml.safe_load(out.read_text())
+        assert data["identity"]["age"] == 41
+
+    def test_to_dict_subdomains_present(self):
+        persona = PersonaBuilder("Marcus", "Chef").build()
+        d = persona.to_dict()
+        domains = d["knowledge_domains"]
+        food = next(dom for dom in domains if dom["domain"] == "Food")
+        assert len(food["subdomains"]) > 0
+
+
+# ============================================================================
+# Builder → Engine integration
+# ============================================================================
+
+
+class TestBuilderEngineIntegration:
+    def test_builder_persona_works_with_engine(self):
+        from persona_engine import PersonaEngine
+        persona = PersonaBuilder("Marcus", "Chef").age(41).trait("passionate", "direct").build()
+        engine = PersonaEngine(persona=persona, llm_provider="mock")
+        ir = engine.plan("What's the best way to cook a steak?")
+        assert ir is not None
+        assert ir.response_structure.confidence > 0
+
+    def test_archetype_persona_works_with_engine(self):
+        from persona_engine import PersonaEngine
+        persona = PersonaBuilder("Dr. Lee", "Physicist").archetype("expert").build()
+        engine = PersonaEngine(persona=persona, llm_provider="mock")
+        ir = engine.plan("Tell me about quantum mechanics")
+        assert ir is not None
+
+    def test_builder_subdomains_visible_in_engine_persona(self):
+        from persona_engine import PersonaEngine
+        persona = PersonaBuilder("Marcus", "Chef").build()
+        engine = PersonaEngine(persona=persona, llm_provider="mock")
+        food = next(d for d in engine.persona.knowledge_domains if d.domain == "Food")
+        assert len(food.subdomains) > 0

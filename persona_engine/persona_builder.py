@@ -314,6 +314,117 @@ OCCUPATION_DOMAINS: dict[str, list[tuple[str, float]]] = {
     "electrician": [("Technology", 0.60)],
 }
 
+# Maps (occupation_key, domain) → subdomains for richer domain detection.
+OCCUPATION_SUBDOMAINS: dict[str, dict[str, list[str]]] = {
+    "chef": {
+        "Food": ["French cuisine", "Fermentation", "Butchery", "Pastry", "Farm-to-table", "Food safety"],
+        "Business": ["Restaurant management", "Supply chain", "Cost control"],
+        "Health": ["Nutrition basics", "Food allergies", "Dietary restrictions"],
+    },
+    "lawyer": {
+        "Law": ["Corporate Law", "Contract Law", "Litigation", "International Law"],
+        "Business": ["Corporate finance", "Governance", "Compliance"],
+    },
+    "software engineer": {
+        "Technology": ["Programming", "System architecture", "Testing", "DevOps"],
+    },
+    "developer": {
+        "Technology": ["Web development", "APIs", "Databases", "Version control"],
+    },
+    "data scientist": {
+        "Technology": ["Machine learning", "Data pipelines", "Visualization"],
+        "Science": ["Statistics", "Experimental design"],
+    },
+    "researcher": {
+        "Science": ["Research methods", "Data analysis", "Experimental design"],
+        "Technology": ["Scientific computing", "Data tools"],
+    },
+    "ux researcher": {
+        "Psychology": ["UX research", "Behavioral science", "Cognitive psychology"],
+        "Technology": ["UX tools", "Data analysis", "Web technologies"],
+        "Business": ["Project management", "Stakeholder management"],
+    },
+    "physicist": {
+        "Science": ["Quantum Physics", "Theoretical Physics", "Mathematics"],
+        "Technology": ["Scientific computing", "Simulation"],
+    },
+    "doctor": {
+        "Health": ["Diagnosis", "Treatment", "Patient care", "Clinical research"],
+        "Science": ["Medical research", "Pharmacology"],
+    },
+    "nurse": {
+        "Health": ["Patient care", "Clinical procedures", "Health education"],
+    },
+    "therapist": {
+        "Psychology": ["Counseling", "CBT", "Trauma therapy", "Group therapy"],
+        "Health": ["Mental health", "Wellness"],
+    },
+    "psychologist": {
+        "Psychology": ["Clinical assessment", "Research methods", "Behavioral analysis"],
+        "Health": ["Mental health", "Neuropsychology"],
+    },
+    "teacher": {
+        "Education": ["Curriculum design", "Classroom management", "Assessment"],
+    },
+    "professor": {
+        "Education": ["University teaching", "Research supervision", "Academic publishing"],
+        "Science": ["Research methodology", "Peer review"],
+    },
+    "accountant": {
+        "Finance": ["Tax preparation", "Auditing", "Financial reporting"],
+        "Business": ["Compliance", "Payroll", "Budgeting"],
+    },
+    "financial advisor": {
+        "Finance": ["Portfolio management", "Retirement planning", "Tax strategy"],
+        "Business": ["Client relations", "Regulatory compliance"],
+    },
+    "musician": {
+        "Arts": ["Jazz", "Music theory", "Improvisation", "Music history"],
+    },
+    "designer": {
+        "Arts": ["Visual design", "Typography", "Branding", "UI/UX"],
+        "Technology": ["Design tools", "Prototyping", "Web design"],
+    },
+    "journalist": {
+        "Arts": ["Investigative reporting", "Feature writing", "Interviewing"],
+        "Business": ["Media industry", "Publishing"],
+    },
+    "architect": {
+        "Arts": ["Architectural design", "Urban planning", "Sustainability"],
+        "Technology": ["CAD", "Building information modeling"],
+        "Business": ["Project management", "Client relations"],
+    },
+    "consultant": {
+        "Business": ["Strategy", "Process improvement", "Change management"],
+    },
+    "entrepreneur": {
+        "Business": ["Startup strategy", "Fundraising", "Product development"],
+        "Finance": ["Venture capital", "Cash flow management"],
+    },
+    "fitness coach": {
+        "Sports": ["Strength training", "Nutrition", "Exercise science"],
+        "Health": ["Injury prevention", "Wellness"],
+    },
+    "veterinarian": {
+        "Health": ["Animal medicine", "Surgery", "Preventive care"],
+        "Science": ["Zoology", "Pathology"],
+    },
+    "pharmacist": {
+        "Health": ["Medication management", "Drug interactions", "Patient counseling"],
+        "Science": ["Pharmacology", "Chemistry"],
+    },
+    "pilot": {
+        "Technology": ["Avionics", "Navigation systems", "Flight planning"],
+        "Science": ["Aerodynamics", "Meteorology"],
+    },
+    "mechanic": {
+        "Technology": ["Engine repair", "Diagnostics", "Electrical systems"],
+    },
+    "electrician": {
+        "Technology": ["Wiring", "Circuit design", "Safety codes", "Troubleshooting"],
+    },
+}
+
 
 # ============================================================================
 # Archetype Profiles
@@ -629,6 +740,19 @@ class PersonaBuilder:
             biases=biases,
             initial_state=initial_state,
         )
+
+    def save_yaml(self, path: str) -> Persona:
+        """Build the persona and write it to a YAML file.
+
+        Args:
+            path: File path to write YAML output.
+
+        Returns:
+            The built Persona object.
+        """
+        persona = self.build()
+        persona.to_yaml(path=path)
+        return persona
 
     # ------------------------------------------------------------------
     # from_description — parse natural language into builder calls
@@ -1092,14 +1216,19 @@ def _infer_education(occupation: str) -> str:
 
 
 def _infer_domains(occupation: str) -> list[DomainKnowledge]:
-    """Map occupation to knowledge domains."""
+    """Map occupation to knowledge domains with subdomains."""
     occ_lower = occupation.lower()
 
-    # Try exact match first, then substring
+    # Try exact match first, then substring (longest match wins)
     for key in sorted(OCCUPATION_DOMAINS, key=len, reverse=True):
         if key in occ_lower:
+            subdomain_map = OCCUPATION_SUBDOMAINS.get(key, {})
             return [
-                DomainKnowledge(domain=d, proficiency=p, subdomains=[])
+                DomainKnowledge(
+                    domain=d,
+                    proficiency=p,
+                    subdomains=subdomain_map.get(d, []),
+                )
                 for d, p in OCCUPATION_DOMAINS[key]
             ]
 
