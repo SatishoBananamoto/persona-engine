@@ -402,8 +402,9 @@ class TestIntrospection:
 
 class TestEdgeCases:
     def test_empty_input(self, engine):
-        result = engine.chat("")
-        assert isinstance(result, ChatResult)
+        from persona_engine.exceptions import InputValidationError
+        with pytest.raises(InputValidationError):
+            engine.chat("")
 
     def test_long_input(self, engine):
         result = engine.chat("Tell me everything about " + "software " * 200)

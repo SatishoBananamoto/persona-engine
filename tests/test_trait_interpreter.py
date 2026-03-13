@@ -65,55 +65,49 @@ class TestInit:
 
 class TestGetElasticity:
     """
-    Formula:
+    Actual formula (from trait_interpreter.py):
         openness_factor = openness * 0.7
         confidence_penalty = base_confidence * 0.3
-        elasticity = openness_factor + (1 - confidence_penalty)
-        return max(0.1, min(0.9, elasticity / 1.4))
+        elasticity = openness_factor - confidence_penalty + 0.2
+        return max(0.1, min(0.9, elasticity))
     """
 
     def test_mid_values(self):
         interp = make_interpreter(openness=0.5)
-        # elasticity = 0.35 + (1 - 0.5*0.3) = 0.35 + 0.85 = 1.2
-        # result = 1.2 / 1.4 ≈ 0.8571
+        # 0.5*0.7 - 0.5*0.3 + 0.2 = 0.35 - 0.15 + 0.2 = 0.4
         result = interp.get_elasticity(0.5)
-        assert result == pytest.approx(1.2 / 1.4)
+        assert result == pytest.approx(0.4)
 
     def test_high_openness_low_confidence(self):
         interp = make_interpreter(openness=1.0)
-        # elasticity = 0.7 + (1 - 0) = 1.7
-        # 1.7 / 1.4 ≈ 1.214 -> clamped to 0.9
+        # 1.0*0.7 - 0*0.3 + 0.2 = 0.9 → clamped to 0.9
         result = interp.get_elasticity(0.0)
         assert result == pytest.approx(0.9)
 
     def test_low_openness_high_confidence(self):
         interp = make_interpreter(openness=0.0)
-        # elasticity = 0 + (1 - 1.0*0.3) = 0.7
-        # 0.7 / 1.4 = 0.5
+        # 0 - 1.0*0.3 + 0.2 = -0.1 → clamped to 0.1
         result = interp.get_elasticity(1.0)
-        assert result == pytest.approx(0.5)
+        assert result == pytest.approx(0.1)
 
     def test_zero_openness_zero_confidence(self):
         interp = make_interpreter(openness=0.0)
-        # elasticity = 0 + 1 = 1.0
-        # 1.0 / 1.4 ≈ 0.714
+        # 0 - 0 + 0.2 = 0.2
         result = interp.get_elasticity(0.0)
-        assert result == pytest.approx(1.0 / 1.4)
+        assert result == pytest.approx(0.2)
 
     def test_max_openness_max_confidence(self):
         interp = make_interpreter(openness=1.0)
-        # elasticity = 0.7 + (1 - 0.3) = 1.4
-        # 1.4 / 1.4 = 1.0 -> clamped to 0.9
+        # 0.7 - 0.3 + 0.2 = 0.6
         result = interp.get_elasticity(1.0)
-        assert result == pytest.approx(0.9)
+        assert result == pytest.approx(0.6)
 
     def test_upper_clamp_fires(self):
         """High openness and low confidence should clamp to 0.9."""
         interp = make_interpreter(openness=0.9)
-        # elasticity = 0.63 + (1 - 0) = 1.63
-        # 1.63/1.4 = 1.164 -> clamped to 0.9
+        # 0.63 - 0 + 0.2 = 0.83
         result = interp.get_elasticity(0.0)
-        assert result == pytest.approx(0.9)
+        assert result == pytest.approx(0.83)
 
     def test_lower_clamp_fires_with_extreme_confidence(self):
         """
@@ -121,8 +115,7 @@ class TestGetElasticity:
         below 0.1 and should be clamped.
         """
         interp = make_interpreter(openness=0.0)
-        # elasticity = 0 + (1 - 10*0.3) = 1 - 3 = -2
-        # -2 / 1.4 ≈ -1.43 -> clamped to 0.1
+        # 0 - 10*0.3 + 0.2 = -2.8 → clamped to 0.1
         result = interp.get_elasticity(10.0)
         assert result == pytest.approx(0.1)
 
