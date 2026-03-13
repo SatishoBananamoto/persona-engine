@@ -39,12 +39,13 @@ class TraitInterpreter:
         Returns:
             Elasticity score (0-1)
         """
-        # High openness increases elasticity, but confidence reduces it
+        # High openness increases elasticity, confidence reduces it.
+        # openness=0,conf=0 → ~0.2 (rigid); openness=1,conf=0 → ~0.7 (flexible)
         openness_factor = self.traits.openness * 0.7
         confidence_penalty = base_confidence * 0.3
 
-        elasticity = openness_factor + (1 - confidence_penalty)
-        return max(0.1, min(0.9, elasticity / 1.4))  # Normalize to 0.1-0.9
+        elasticity = openness_factor - confidence_penalty
+        return max(0.1, min(0.9, elasticity + 0.2))  # Shift up, clamp to 0.1-0.9
 
     def influences_abstract_reasoning(self) -> bool:
         """High openness (>0.7) → more abstract/metaphorical thinking"""

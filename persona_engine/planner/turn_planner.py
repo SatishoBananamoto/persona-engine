@@ -504,7 +504,8 @@ class TurnPlanner:
         knowledge_claim_type = self._infer_claim_type(
             proficiency,
             uncertainty_action,
-            domain
+            domain,
+            user_input=context.user_input
         )
 
         # Enum citation for claim type (derived from inference, not base)
@@ -536,7 +537,8 @@ class TurnPlanner:
             stance,
             rationale,
             self.persona.invariants.identity_facts,
-            self.persona.invariants.cannot_claim
+            self.persona.invariants.cannot_claim,
+            must_avoid=self.persona.invariants.must_avoid,
         )
 
         if not validation["valid"]:
@@ -585,6 +587,10 @@ class TurnPlanner:
                 ))
 
             memory_ops = MemoryOps(write_intents=write_intents)
+
+        # Propagate invariants into safety plan for post-generation checks
+        ctx.safety_plan.cannot_claim = list(self.persona.invariants.cannot_claim)
+        ctx.safety_plan.must_avoid = list(self.persona.invariants.must_avoid)
 
         # ====================================================================
         # 15. ASSEMBLE IR (P0/P1: includes SafetyPlan + MemoryOps)
@@ -1428,7 +1434,8 @@ class TurnPlanner:
         self,
         proficiency: float,
         uncertainty_action: UncertaintyAction,
-        domain: str
+        domain: str,
+        user_input: str = "",
     ) -> str:
         """Infer knowledge claim type"""
         # Check if domain matches persona's knowledge
@@ -1437,8 +1444,10 @@ class TurnPlanner:
             for k in self.persona.knowledge_domains
         )
 
-        # TODO: Detect if claim is from personal experience
-        is_personal_experience = False
+        # Detect if user is asking about personal experience
+        is_personal_experience = self._detect_personal_experience(
+            user_input, domain, is_domain_specific
+        )
 
         return infer_knowledge_claim_type(
             proficiency,
@@ -1446,6 +1455,50 @@ class TurnPlanner:
             is_personal_experience,
             is_domain_specific
         )
+
+    def _detect_personal_experience(
+        self,
+        user_input: str,
+        domain: str,
+        is_domain_specific: bool,
+    ) -> bool:
+        """Detect if user is asking about personal experience.
+
+        Checks for personal-experience question patterns AND whether
+        the persona has relevant domain knowledge or preferences.
+        """
+        if not user_input:
+            return False
+
+        input_lower = user_input.lower()
+
+        # Personal experience question patterns
+        experience_patterns = [
+            "have you ever",
+            "have you tried",
+            "what's your experience",
+            "what is your experience",
+            "do you like",
+            "do you prefer",
+            "what do you think about",
+            "how do you feel about",
+            "in your experience",
+            "your opinion on",
+            "your thoughts on",
+            "what's your take",
+            "what is your take",
+            "from your perspective",
+            "personally",
+            "your favorite",
+            "your favourite",
+        ]
+
+        asks_personal = any(pat in input_lower for pat in experience_patterns)
+        if not asks_personal:
+            return False
+
+        # Only mark as personal experience if persona has relevant knowledge
+        return is_domain_specific
 
     def _generate_intent(
         self,

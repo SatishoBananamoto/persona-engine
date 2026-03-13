@@ -256,13 +256,8 @@ class PersonaEngine:
             conversation_history=self._build_conversation_history(),
         )
 
-        # 4. Write memory
-        if ir.memory_ops and ir.memory_ops.write_intents:
-            self._memory.process_write_intents(
-                ir.memory_ops.write_intents,
-                turn=turn,
-                conversation_id=self._conversation_id,
-            )
+        # 4. Memory writes are handled by TurnPlanner.generate_ir() (section 17).
+        #    Do NOT write here — that causes double-write corruption.
 
         # 5. Bundle
         result = ChatResult(
@@ -294,13 +289,8 @@ class PersonaEngine:
         self._turn_number += 1
         ir = self._generate_ir(user_input, mode=mode, goal=goal, topic=topic)
 
-        # Write memory (IR may contain write intents even without LLM call)
-        if ir.memory_ops and ir.memory_ops.write_intents:
-            self._memory.process_write_intents(
-                ir.memory_ops.write_intents,
-                turn=self._turn_number,
-                conversation_id=self._conversation_id,
-            )
+        # Memory writes are handled by TurnPlanner.generate_ir() (section 17).
+        # Do NOT write here — that causes double-write corruption.
 
         return ir
 
@@ -382,7 +372,7 @@ class PersonaEngine:
             "turn_number": self._turn_number,
             "persona_id": self._persona.persona_id,
             "messages": [
-                {"user_input": r.response.ir.conversation_frame.goal.value,
+                {"user_input": r._user_input,
                  "text": r.text, "turn": r.turn_number}
                 for r in self._history
             ],

@@ -107,7 +107,8 @@ def validate_stance_against_invariants(
     stance: str,
     rationale: str,
     identity_facts: list[str],
-    cannot_claim: list[str]
+    cannot_claim: list[str],
+    must_avoid: list[str] | None = None,
 ) -> dict[str, Any]:
     """
     Validate stance doesn't contradict persona invariants.
@@ -117,14 +118,16 @@ def validate_stance_against_invariants(
         rationale: Reasoning for stance
         identity_facts: Immutable identity facts
         cannot_claim: Roles/credentials persona cannot claim
+        must_avoid: Topics persona must never engage with
 
     Returns:
         Validation result with any violations
     """
     violations = []
 
-    # Check cannot_claim
     combined_text = f"{stance} {rationale}".lower()
+
+    # Check cannot_claim
     for forbidden_claim in cannot_claim:
         if forbidden_claim.lower() in combined_text:
             violations.append({
@@ -132,6 +135,16 @@ def validate_stance_against_invariants(
                 "claim": forbidden_claim,
                 "severity": "error",
                 "message": f"Stance/rationale implies forbidden claim: {forbidden_claim}"
+            })
+
+    # Check must_avoid
+    for avoided_topic in (must_avoid or []):
+        if avoided_topic.lower() in combined_text:
+            violations.append({
+                "type": "must_avoid",
+                "claim": avoided_topic,
+                "severity": "error",
+                "message": f"Stance/rationale mentions must_avoid topic: {avoided_topic}"
             })
 
     # Check identity contradictions (simplified - in production use embeddings)

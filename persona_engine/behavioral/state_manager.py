@@ -184,7 +184,9 @@ class StateManager:
         # High stress affects mood
         if self.state.stress > 0.6:
             self.state.mood_valence -= 0.15
+            self.state.mood_valence = max(-1.0, self.state.mood_valence)
             self.state.mood_arousal += 0.2  # Stress increases arousal
+            self.state.mood_arousal = min(1.0, self.state.mood_arousal)
 
     def reduce_stress(self) -> None:
         """Gradual stress decay (recovery)"""

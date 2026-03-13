@@ -444,6 +444,16 @@ class SafetyPlan(BaseModel):
         examples=[["Pattern 'share_work_story' blocked: mentions must_avoid 'employer_name'"]]
     )
 
+    cannot_claim: list[str] = Field(
+        default_factory=list,
+        description="Roles/credentials persona cannot claim (from invariants)",
+    )
+
+    must_avoid: list[str] = Field(
+        default_factory=list,
+        description="Topics persona must never engage with (from invariants)",
+    )
+
 
 # ============================================================================
 # Main IR Model

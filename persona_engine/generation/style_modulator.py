@@ -140,11 +140,15 @@ class StyleModulator:
         text: str,
         ir: IntermediateRepresentation
     ) -> List[ConstraintViolation]:
-        """Check for safety constraint violations."""
+        """Check for safety constraint violations.
+
+        Checks blocked_topics from the safety plan AND cannot_claim /
+        must_avoid from the persona invariants (stored on the IR safety plan).
+        """
         violations = []
         text_lower = text.lower()
-        
-        # Check topics to avoid
+
+        # Check blocked topics (from safety plan)
         if ir.safety_plan.blocked_topics:
             for topic in ir.safety_plan.blocked_topics:
                 if topic.lower() in text_lower:
@@ -154,7 +158,27 @@ class StyleModulator:
                         actual=f"Text contains '{topic}'",
                         severity="error"
                     ))
-        
+
+        # Check cannot_claim items
+        for claim in getattr(ir.safety_plan, "cannot_claim", []):
+            if claim.lower() in text_lower:
+                violations.append(ConstraintViolation(
+                    constraint="cannot_claim",
+                    expected=f"Must not claim '{claim}'",
+                    actual=f"Text contains forbidden claim '{claim}'",
+                    severity="error"
+                ))
+
+        # Check must_avoid items
+        for avoided in getattr(ir.safety_plan, "must_avoid", []):
+            if avoided.lower() in text_lower:
+                violations.append(ConstraintViolation(
+                    constraint="must_avoid",
+                    expected=f"Must avoid '{avoided}'",
+                    actual=f"Text mentions avoided topic '{avoided}'",
+                    severity="error"
+                ))
+
         return violations
     
     def _check_knowledge_claims(
