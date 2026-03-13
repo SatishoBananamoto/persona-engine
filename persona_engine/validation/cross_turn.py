@@ -41,6 +41,8 @@ class TurnSnapshot:
     claim_type: str
     stance: str | None
     topic: str
+    elasticity: float = 0.5
+    competence: float = 0.5
 
     @classmethod
     def from_ir(cls, ir: IntermediateRepresentation, turn: int, topic: str = "") -> TurnSnapshot:
@@ -54,6 +56,8 @@ class TurnSnapshot:
             claim_type=ir.knowledge_disclosure.knowledge_claim_type.value,
             stance=ir.response_structure.stance,
             topic=topic,
+            elasticity=ir.response_structure.elasticity,
+            competence=ir.response_structure.competence,
         )
 
 

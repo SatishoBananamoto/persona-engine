@@ -36,6 +36,7 @@ from persona_engine.planner.domain_detection import (
     detect_evidence_strength,
     generate_intent_string,
 )
+from persona_engine.planner.engine_config import DEFAULT_CONFIG, EngineConfig
 from persona_engine.planner.intent_analyzer import analyze_intent
 from persona_engine.planner.stance_generator import generate_stance_safe
 from persona_engine.planner.trace_context import TraceContext, clamp01, create_turn_seed
@@ -60,48 +61,28 @@ from persona_engine.utils import DeterminismManager
 from persona_engine.validation.cross_turn import TurnSnapshot
 
 # =============================================================================
-# CONFIGURATION CONSTANTS
+# CONFIGURATION CONSTANTS (backward-compatible aliases from EngineConfig)
 # =============================================================================
-# Extracted magic numbers for maintainability and tuning
-
-# Domain & Expertise
-DEFAULT_PROFICIENCY = 0.3            # Proficiency for unknown domains
-EXPERT_THRESHOLD = 0.7               # Min proficiency for expert assertions
-
-# Topic Relevance
-# (Now computed dynamically via domain_detection.compute_topic_relevance)
-DEFAULT_TOPIC_RELEVANCE = 0.5  # Fallback for sparse personas
-
-# Communication Style
-FORMALITY_ROLE_WEIGHT = 0.7          # Role's weight in formality blend
-FORMALITY_BASE_WEIGHT = 0.3          # Base's weight in formality blend
-DIRECTNESS_IMPATIENCE_BUMP = 0.1     # Directness increase when patience < threshold
-PATIENCE_THRESHOLD = 0.3             # Below this, persona gets more direct
-
-# Elasticity
-ELASTICITY_MIN = 0.1
-ELASTICITY_MAX = 0.9
-
-# Disclosure
-DISCLOSURE_MIN = 0.0
-DISCLOSURE_MAX = 1.0
-
-# Evidence/Stress
-EVIDENCE_STRESS_THRESHOLD = 0.4  # Evidence strength above this triggers conflict stress
-
-# Competence
-UNKNOWN_DOMAIN_BASE = 0.10       # Floor competence for completely unknown topics
-OPENNESS_COMPETENCE_WEIGHT = 0.1 # How much openness boosts comfort with unknown topics
-
-# Cross-Turn Dynamics
-CROSS_TURN_INERTIA = 0.15        # 15% anchor to previous turn's values
-FAMILIARITY_BOOST_PER_EPISODE = 0.05  # Competence boost per prior topic episode
-FAMILIARITY_BOOST_CAP = 0.15     # Maximum familiarity boost
-
-# Dynamic Time Pressure
-TIME_PRESSURE_TURN_THRESHOLD = 5  # Pressure starts building after this turn
-TIME_PRESSURE_PER_TURN = 0.03    # Pressure increase per turn past threshold
-TIME_PRESSURE_MAX_BUILDUP = 0.15 # Max additional pressure from conversation length
+DEFAULT_PROFICIENCY = DEFAULT_CONFIG.default_proficiency
+EXPERT_THRESHOLD = DEFAULT_CONFIG.expert_threshold
+DEFAULT_TOPIC_RELEVANCE = DEFAULT_CONFIG.default_topic_relevance
+FORMALITY_ROLE_WEIGHT = DEFAULT_CONFIG.formality_role_weight
+FORMALITY_BASE_WEIGHT = DEFAULT_CONFIG.formality_base_weight
+DIRECTNESS_IMPATIENCE_BUMP = DEFAULT_CONFIG.directness_impatience_bump
+PATIENCE_THRESHOLD = DEFAULT_CONFIG.patience_threshold
+ELASTICITY_MIN = DEFAULT_CONFIG.elasticity_min
+ELASTICITY_MAX = DEFAULT_CONFIG.elasticity_max
+DISCLOSURE_MIN = DEFAULT_CONFIG.disclosure_min
+DISCLOSURE_MAX = DEFAULT_CONFIG.disclosure_max
+EVIDENCE_STRESS_THRESHOLD = DEFAULT_CONFIG.evidence_stress_threshold
+UNKNOWN_DOMAIN_BASE = DEFAULT_CONFIG.unknown_domain_base
+OPENNESS_COMPETENCE_WEIGHT = DEFAULT_CONFIG.openness_competence_weight
+CROSS_TURN_INERTIA = DEFAULT_CONFIG.cross_turn_inertia
+FAMILIARITY_BOOST_PER_EPISODE = DEFAULT_CONFIG.familiarity_boost_per_episode
+FAMILIARITY_BOOST_CAP = DEFAULT_CONFIG.familiarity_boost_cap
+TIME_PRESSURE_TURN_THRESHOLD = DEFAULT_CONFIG.time_pressure_turn_threshold
+TIME_PRESSURE_PER_TURN = DEFAULT_CONFIG.time_pressure_per_turn
+TIME_PRESSURE_MAX_BUILDUP = DEFAULT_CONFIG.time_pressure_max_buildup
 
 
 def _smooth(prev: float, new: float, alpha: float) -> float:
@@ -135,10 +116,12 @@ class TurnPlanner:
         persona: Persona,
         determinism: DeterminismManager | None = None,
         memory_manager: MemoryManager | None = None,
+        config: EngineConfig | None = None,
     ):
         self.persona = persona
         self.determinism = determinism or DeterminismManager()
         self.memory = memory_manager
+        self.config = config or DEFAULT_CONFIG
 
         # Initialize all interpreters
         self.traits = TraitInterpreter(persona.psychology.big_five)
@@ -173,37 +156,39 @@ class TurnPlanner:
         """
         Generate Intermediate Representation for a single turn.
 
-        This is the central orchestration method that coordinates all behavioral
-        interpreters using canonical modifier composition with full citation tracking.
-
-        P0/P1 PRODUCTION FEATURES:
-        - TraceContext for all citations + SafetyPlan
-        - Per-turn deterministic seeding
-        - Early intent analysis (mode/goal inference)
-        - Expert eligibility computed early (for stance guardrails)
-        - Multi-clamp chains preserved in SafetyPlan
-        - Pattern blocks recorded
+        Orchestrates five pipeline stages:
+        1. Foundation  — trace setup, memory context
+        2. Interpretation — topic relevance, bias, state, intent, domain, expert eligibility
+        3. Behavioral metrics — elasticity, stance, confidence, competence, tone, verbosity, comm style
+        4. Knowledge & safety — disclosure, uncertainty, claim type, patterns, constraints
+        5. Finalization — memory writes, IR assembly, stance cache, snapshot
         """
-        # Imports already at top level
+        ctx, turn_seed, memory_ops = self._stage_foundation(context)
+        foundation = self._stage_interpretation(context, ctx)
+        metrics = self._stage_behavioral_metrics(context, ctx, foundation)
+        knowledge = self._stage_knowledge_safety(context, ctx, foundation, metrics)
+        return self._stage_finalization(
+            context, ctx, turn_seed, memory_ops, foundation, metrics, knowledge
+        )
 
-        # ====================================================================
-        # SETUP: TraceContext + Per-Turn Seed
-        # ====================================================================
+    # ========================================================================
+    # Pipeline Stages
+    # ========================================================================
+
+    def _stage_foundation(
+        self, context: ConversationContext
+    ) -> tuple[TraceContext, int, MemoryOps]:
+        """Stage 1: TraceContext setup, per-turn seed, and memory context."""
         ctx = TraceContext()
         memory_ops = MemoryOps()
 
-        # Per-turn deterministic seed
         turn_seed = create_turn_seed(
             base_seed=self.determinism.seed if self.determinism.seed is not None else 0,
             conversation_id=context.conversation_id,
-            turn_number=context.turn_number
+            turn_number=context.turn_number,
         )
         self.determinism.set_seed(turn_seed)
 
-        # ====================================================================
-        # 0. MEMORY CONTEXT (read before planning)
-        # ====================================================================
-        memory_context: dict[str, Any] = {}
         if self.memory:
             memory_context = self.memory.get_context_for_turn(
                 topic=context.topic_signature,
@@ -231,151 +216,147 @@ class TurnPlanner:
                     weight=0.7,
                 )
 
-        # ====================================================================
-        # 1. TOPIC RELEVANCE (computed before state evolution)
-        # ====================================================================
-        # Compute topic relevance using real scoring (not hardcoded)
-        persona_domains = []
+        return ctx, turn_seed, memory_ops
+
+    def _stage_interpretation(
+        self, context: ConversationContext, ctx: TraceContext
+    ) -> dict[str, Any]:
+        """Stage 2: Topic relevance, bias, state evolution, intent, domain, expert eligibility."""
+        # Topic relevance
+        persona_domains: list[dict] = []
         if self.persona.knowledge_domains:
             for kd in self.persona.knowledge_domains:
                 persona_domains.append({
                     "domain": kd.domain,
                     "proficiency": kd.proficiency,
-                    "subdomains": getattr(kd, "subdomains", None) or []
+                    "subdomains": getattr(kd, "subdomains", None) or [],
                 })
 
-        persona_goals = []
-        if hasattr(self.persona, 'primary_goals'):
+        persona_goals: list[dict] = []
+        if hasattr(self.persona, "primary_goals"):
             for g in self.persona.primary_goals:
-                persona_goals.append({
-                    "goal": getattr(g, "goal", ""),
-                    "weight": getattr(g, "weight", 1.0)
-                })
-        if hasattr(self.persona, 'secondary_goals'):
+                persona_goals.append({"goal": getattr(g, "goal", ""), "weight": getattr(g, "weight", 1.0)})
+        if hasattr(self.persona, "secondary_goals"):
             for g in self.persona.secondary_goals:
-                persona_goals.append({
-                    "goal": getattr(g, "goal", ""),
-                    "weight": getattr(g, "weight", 0.5)
-                })
+                persona_goals.append({"goal": getattr(g, "goal", ""), "weight": getattr(g, "weight", 0.5)})
 
         topic_relevance = compute_topic_relevance(
             user_input=context.user_input,
             persona_domains=persona_domains,
             persona_goals=persona_goals,
             ctx=ctx,
-            default_relevance=DEFAULT_TOPIC_RELEVANCE
+            default_relevance=DEFAULT_TOPIC_RELEVANCE,
         )
 
-        # ====================================================================
-        # 1.5 COMPUTE BIAS MODIFIERS (Phase 2 - Bounded Bias Simulation)
-        # ====================================================================
-        # Use topic_relevance as proxy for value alignment
+        # Bias modifiers
         self._current_bias_modifiers = self.bias_simulator.compute_modifiers(
             user_input=context.user_input,
             value_alignment=topic_relevance,
             ctx=ctx,
         )
 
-        # ====================================================================
-        # 2. STATE EVOLUTION (before generating response)
-        # ====================================================================
-        # NOTE: Method name is "post_turn" because it updates state based on
-        # previous turn's metrics. This runs BEFORE generating the current response.
+        # State evolution
         self.state.evolve_state_post_turn(
             conversation_length=context.turn_number,
-            topic_relevance=topic_relevance  # Now using real computed value
+            topic_relevance=topic_relevance,
         )
 
-        # ====================================================================
-        # 1.5. INTENT ANALYSIS (EARLY - infers mode/goal if missing)
-        # ====================================================================
+        # Intent analysis
         inferred_mode, inferred_goal, user_intent, needs_clarification = analyze_intent(
             user_input=context.user_input,
             current_mode=context.interaction_mode,
             current_goal=context.goal,
-            ctx=ctx
+            ctx=ctx,
         )
-
-        # DESIGN NOTE: We intentionally mutate the caller's context object here.
-        # This is a side effect, but it's required because:
-        # 1. IR assembly needs the inferred mode/goal (not the original None values)
-        # 2. Downstream code (stance cache key, etc.) depends on the updated values
-        # 3. Callers expect context to reflect the "resolved" state after generate_ir()
-        # Alternative: return a new context, but that would break expected semantics.
         context.interaction_mode = inferred_mode
         context.goal = inferred_goal
 
-        # ====================================================================
-        # 3. DOMAIN + PROFICIENCY (with keyword scoring + citations)
-        # ====================================================================
+        # Domain + proficiency
         domain = context.domain or self._detect_domain(context.user_input, ctx=ctx)
         proficiency = self._get_domain_proficiency(domain)
-
         ctx.add_basic_citation(
             source_type="state",
             source_id="domain_proficiency",
             effect=f"Domain '{domain}' proficiency: {proficiency:.2f}",
-            weight=1.0
+            weight=1.0,
         )
 
-        # ====================================================================
-        # 2.5. EXPERT ELIGIBILITY (P1: compute EARLY for stance guardrails)
-        # ====================================================================
-        # Compute once; reused in _infer_claim_type via domain_context
+        # Expert eligibility
         is_domain_specific = any(
-            kd.domain.lower() == domain.lower()
-            for kd in self.persona.knowledge_domains
+            kd.domain.lower() == domain.lower() for kd in self.persona.knowledge_domains
         )
         expert_threshold = getattr(self.persona.claim_policy, "expert_threshold", EXPERT_THRESHOLD)
         expert_allowed = is_domain_specific and (proficiency >= expert_threshold)
-
         ctx.add_basic_citation(
             source_type="rule",
             source_id="expert_eligibility",
             effect=f"Expert allowed: {expert_allowed} (is_domain={is_domain_specific}, prof={proficiency:.2f}, thresh={expert_threshold:.2f})",
-            weight=1.0
+            weight=1.0,
         )
-        # NOTE: domain_context was previously stored here for reuse in _infer_claim_type,
-        # but _infer_claim_type currently recomputes is_domain_specific. If performance
-        # becomes a concern, pass domain_context as a parameter instead.
 
-        # ====================================================================
-        # 4. CORE METRICS (ELASTICITY) - Computed EARLY for cache logic
-        # ====================================================================
+        return {
+            "topic_relevance": topic_relevance,
+            "persona_domains": persona_domains,
+            "domain": domain,
+            "proficiency": proficiency,
+            "expert_allowed": expert_allowed,
+            "user_intent": user_intent,
+            "needs_clarification": needs_clarification,
+        }
+
+    def _stage_behavioral_metrics(
+        self,
+        context: ConversationContext,
+        ctx: TraceContext,
+        foundation: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Stage 3: Elasticity, stance, confidence, competence, tone, verbosity, communication style."""
+        domain = foundation["domain"]
+        proficiency = foundation["proficiency"]
+        persona_domains = foundation["persona_domains"]
+
+        # Elasticity (early for stance cache logic)
         elasticity = self._compute_elasticity(proficiency, ctx)
 
-        # ====================================================================
-        # 3. STANCE (with cache + expert guardrails + reconsideration)
-        # ====================================================================
-        # Detect evidence strength (challenge detection)
-        evidence_strength = detect_evidence_strength(context.user_input, ctx=ctx)
+        # Cross-turn inertia smoothing — elasticity
+        if self._prior_snapshot:
+            before_e = elasticity
+            elasticity = _smooth(self._prior_snapshot.elasticity, elasticity, CROSS_TURN_INERTIA)
+            if abs(elasticity - before_e) > 0.001:
+                ctx.num(
+                    source_type="cross_turn",
+                    source_id="inertia_smoothing",
+                    target_field="response_structure.elasticity",
+                    operation="blend",
+                    before=before_e,
+                    after=elasticity,
+                    effect=f"Cross-turn inertia: {before_e:.3f} → {elasticity:.3f} (prev={self._prior_snapshot.elasticity:.3f})",
+                    weight=0.7,
+                    reason=f"inertia={CROSS_TURN_INERTIA}",
+                )
 
-        # Apply stress if challenged
+        # Stance
+        evidence_strength = detect_evidence_strength(context.user_input, ctx=ctx)
         if evidence_strength > EVIDENCE_STRESS_THRESHOLD:
             self.state.apply_stress_trigger("conflict", intensity=evidence_strength)
             ctx.add_basic_citation(
                 source_type="state",
                 source_id="stress_trigger",
                 effect=f"Evidence {evidence_strength:.2f} > threshold {EVIDENCE_STRESS_THRESHOLD} → stress trigger",
-                weight=1.0
+                weight=1.0,
             )
 
         stance, rationale = self._generate_stance(
             context=context,
             proficiency=proficiency,
-            expert_allowed=expert_allowed,
+            expert_allowed=foundation["expert_allowed"],
             evidence_strength=evidence_strength,
             current_elasticity=elasticity,
-            ctx=ctx
+            ctx=ctx,
         )
 
-        # ====================================================================
-        # 5-7. REMAINING METRICS (confidence, competence, tone, verbosity)
-        # ====================================================================
+        # Confidence (+ cross-turn smoothing)
         confidence = self._compute_confidence(proficiency, ctx)
-
-        # Fix 4: Cross-turn inertia smoothing — confidence
-        # Smooth BEFORE uncertainty resolver / claim type use the value
         if self._prior_snapshot:
             before_smooth = confidence
             confidence = _smooth(self._prior_snapshot.confidence, confidence, CROSS_TURN_INERTIA)
@@ -389,22 +370,33 @@ class TurnPlanner:
                     after=confidence,
                     effect=f"Cross-turn inertia: {before_smooth:.3f} → {confidence:.3f} (prev={self._prior_snapshot.confidence:.3f})",
                     weight=0.7,
-                    reason=f"inertia={CROSS_TURN_INERTIA}"
+                    reason=f"inertia={CROSS_TURN_INERTIA}",
                 )
 
         competence = self._compute_competence(domain, proficiency, persona_domains, ctx)
+
+        # Cross-turn inertia smoothing — competence
+        if self._prior_snapshot:
+            before_comp = competence
+            competence = _smooth(self._prior_snapshot.competence, competence, CROSS_TURN_INERTIA)
+            if abs(competence - before_comp) > 0.001:
+                ctx.num(
+                    source_type="cross_turn",
+                    source_id="inertia_smoothing",
+                    target_field="response_structure.competence",
+                    operation="blend",
+                    before=before_comp,
+                    after=competence,
+                    effect=f"Cross-turn inertia: {before_comp:.3f} → {competence:.3f} (prev={self._prior_snapshot.competence:.3f})",
+                    weight=0.7,
+                    reason=f"inertia={CROSS_TURN_INERTIA}",
+                )
+
         tone = self._select_tone(ctx)
         verbosity = self._compute_verbosity(ctx)
 
-        # ====================================================================
-        # 8. COMMUNICATION STYLE (formality + directness)
-        # ====================================================================
-        formality, directness = self._compute_communication_style(
-            context.interaction_mode,
-            ctx
-        )
-
-        # Fix 4: Cross-turn inertia smoothing — formality + directness
+        # Communication style (+ cross-turn smoothing)
+        formality, directness = self._compute_communication_style(context.interaction_mode, ctx)
         if self._prior_snapshot:
             before_f = formality
             formality = _smooth(self._prior_snapshot.formality, formality, CROSS_TURN_INERTIA)
@@ -418,7 +410,7 @@ class TurnPlanner:
                     after=formality,
                     effect=f"Cross-turn inertia: {before_f:.3f} → {formality:.3f}",
                     weight=0.7,
-                    reason=f"inertia={CROSS_TURN_INERTIA}"
+                    reason=f"inertia={CROSS_TURN_INERTIA}",
                 )
 
             before_d = directness
@@ -433,18 +425,37 @@ class TurnPlanner:
                     after=directness,
                     effect=f"Cross-turn inertia: {before_d:.3f} → {directness:.3f}",
                     weight=0.7,
-                    reason=f"inertia={CROSS_TURN_INERTIA}"
+                    reason=f"inertia={CROSS_TURN_INERTIA}",
                 )
 
-        # ====================================================================
-        # 9. DISCLOSURE (P1: multi-clamp with SafetyPlan)
-        # ====================================================================
-        disclosure_level = self._compute_disclosure(
-            context.topic_signature,
-            ctx
-        )
+        return {
+            "elasticity": elasticity,
+            "stance": stance,
+            "rationale": rationale,
+            "confidence": confidence,
+            "competence": competence,
+            "tone": tone,
+            "verbosity": verbosity,
+            "formality": formality,
+            "directness": directness,
+        }
 
-        # Fix 4: Cross-turn inertia smoothing — disclosure
+    def _stage_knowledge_safety(
+        self,
+        context: ConversationContext,
+        ctx: TraceContext,
+        foundation: dict[str, Any],
+        metrics: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Stage 4: Disclosure, uncertainty action, claim type, patterns, constraints."""
+        proficiency = foundation["proficiency"]
+        domain = foundation["domain"]
+        confidence = metrics["confidence"]
+        stance = metrics["stance"]
+        rationale = metrics["rationale"]
+
+        # Disclosure (+ cross-turn smoothing)
+        disclosure_level = self._compute_disclosure(context.topic_signature, ctx)
         if self._prior_snapshot:
             before_disc = disclosure_level
             disclosure_level = _smooth(self._prior_snapshot.disclosure, disclosure_level, CROSS_TURN_INERTIA)
@@ -458,18 +469,13 @@ class TurnPlanner:
                     after=disclosure_level,
                     effect=f"Cross-turn inertia: {before_disc:.3f} → {disclosure_level:.3f}",
                     weight=0.7,
-                    reason=f"inertia={CROSS_TURN_INERTIA}"
+                    reason=f"inertia={CROSS_TURN_INERTIA}",
                 )
 
-        # ====================================================================
-        # 10. UNCERTAINTY ACTION (single resolver)
-        # ====================================================================
-        # Fix 8: Dynamic time pressure (mode + conversation length)
+        # Uncertainty action
         time_pressure = self._compute_time_pressure(
             context.interaction_mode, context.turn_number, ctx
         )
-
-        # Use separate list to avoid bypassing TraceContext's structured API
         resolver_citations: list[Citation] = []
         uncertainty_action = resolve_uncertainty_action(
             proficiency=proficiency,
@@ -478,15 +484,11 @@ class TurnPlanner:
             need_for_closure=self.cognitive.style.need_for_closure,
             time_pressure=time_pressure,
             claim_policy_lookup_behavior=self.persona.claim_policy.lookup_behavior,
-            citations=resolver_citations  # Isolated list
+            citations=resolver_citations,
         )
-
-        # Merge resolver citations into TraceContext (preserves audit trail)
         for cite in resolver_citations:
             ctx.citations.append(cite)
 
-
-        # Add enum citation for uncertainty_action (derived, not base)
         ctx.enum(
             source_type="rule",
             source_id="uncertainty_resolver",
@@ -495,20 +497,13 @@ class TurnPlanner:
             before="none",
             after=uncertainty_action.value,
             effect=f"Uncertainty action resolved: {uncertainty_action.value}",
-            weight=1.0
+            weight=1.0,
         )
 
-        # ====================================================================
-        # 11. KNOWLEDGE CLAIM TYPE
-        # ====================================================================
+        # Claim type
         knowledge_claim_type = self._infer_claim_type(
-            proficiency,
-            uncertainty_action,
-            domain,
-            user_input=context.user_input
+            proficiency, uncertainty_action, domain, user_input=context.user_input
         )
-
-        # Enum citation for claim type (derived from inference, not base)
         claim_enum = KnowledgeClaimType(knowledge_claim_type)
         ctx.enum(
             source_type="rule",
@@ -518,21 +513,13 @@ class TurnPlanner:
             before="none",
             after=claim_enum.value,
             effect=f"Knowledge claim type inferred: {claim_enum.value}",
-            weight=1.0
+            weight=1.0,
         )
 
-        # ====================================================================
-        # 12. APPLY RESPONSE PATTERNS (P1: populates SafetyPlan.pattern_blocks)
-        # ====================================================================
-        self._apply_patterns_safely(
-            context,
-            disclosure_level,
-            ctx
-        )
+        # Response patterns
+        self._apply_patterns_safely(context, disclosure_level, ctx)
 
-        # ====================================================================
-        # 13. VALIDATE CONSTRAINTS (invariants)
-        # ====================================================================
+        # Constraint validation
         validation = validate_stance_against_invariants(
             stance,
             rationale,
@@ -540,7 +527,6 @@ class TurnPlanner:
             self.persona.invariants.cannot_claim,
             must_avoid=self.persona.invariants.must_avoid,
         )
-
         if not validation["valid"]:
             ctx.activate_constraint("invariants")
             for violation in validation["violations"]:
@@ -548,17 +534,44 @@ class TurnPlanner:
                     source_type="rule",
                     source_id="invariant_violation",
                     effect=f"VIOLATION: {violation['message']}",
-                    weight=1.0
+                    weight=1.0,
                 )
 
-        # ====================================================================
-        # 14. POPULATE MEMORY WRITE INTENTS
-        # ====================================================================
-        write_intents: list[MemoryWriteIntent] = []
+        return {
+            "disclosure_level": disclosure_level,
+            "uncertainty_action": uncertainty_action,
+            "claim_enum": claim_enum,
+        }
 
-        # Auto-generate memory write intents from this turn
+    def _stage_finalization(
+        self,
+        context: ConversationContext,
+        ctx: TraceContext,
+        turn_seed: int,
+        memory_ops: MemoryOps,
+        foundation: dict[str, Any],
+        metrics: dict[str, Any],
+        knowledge: dict[str, Any],
+    ) -> IntermediateRepresentation:
+        """Stage 5: Memory writes, IR assembly, stance cache, snapshot."""
+        user_intent = foundation["user_intent"]
+        needs_clarification = foundation["needs_clarification"]
+        stance = metrics["stance"]
+        rationale = metrics["rationale"]
+        elasticity = metrics["elasticity"]
+        confidence = metrics["confidence"]
+        competence = metrics["competence"]
+        tone = metrics["tone"]
+        verbosity = metrics["verbosity"]
+        formality = metrics["formality"]
+        directness = metrics["directness"]
+        disclosure_level = knowledge["disclosure_level"]
+        uncertainty_action = knowledge["uncertainty_action"]
+        claim_enum = knowledge["claim_enum"]
+
+        # Memory write intents
+        write_intents: list[MemoryWriteIntent] = []
         if self.memory:
-            # Always record an episode summary
             write_intents.append(MemoryWriteIntent(
                 content_type="episode",
                 content=f"Discussed {context.topic_signature}: persona {uncertainty_action.value}ed with {claim_enum.value} claim",
@@ -566,8 +579,6 @@ class TurnPlanner:
                 privacy_level=0.2,
                 source="observed_behavior",
             ))
-
-            # Fix 1A: Richer relationship content that triggers delta detection
             if stance and confidence > 0.5:
                 rel_content = f"Engaged on {context.topic_signature}"
                 if confidence > 0.7:
@@ -585,21 +596,18 @@ class TurnPlanner:
                     privacy_level=0.1,
                     source="observed_behavior",
                 ))
-
             memory_ops = MemoryOps(write_intents=write_intents)
 
-        # Propagate invariants into safety plan for post-generation checks
+        # Propagate invariants into safety plan
         ctx.safety_plan.cannot_claim = list(self.persona.invariants.cannot_claim)
         ctx.safety_plan.must_avoid = list(self.persona.invariants.must_avoid)
 
-        # ====================================================================
-        # 15. ASSEMBLE IR (P0/P1: includes SafetyPlan + MemoryOps)
-        # ====================================================================
+        # Assemble IR
         ir = IntermediateRepresentation(
             conversation_frame=ConversationFrame(
                 interaction_mode=context.interaction_mode,
                 goal=context.goal,
-                success_criteria=None  # TODO: Implement goal-based criteria
+                success_criteria=None,
             ),
             response_structure=ResponseStructure(
                 intent=self._generate_intent(
@@ -607,10 +615,9 @@ class TurnPlanner:
                     conversation_goal=str(context.goal.value) if context.goal else "inform",
                     uncertainty_action=str(uncertainty_action.value),
                     needs_clarification=needs_clarification,
-                    ctx=ctx
+                    ctx=ctx,
                 ),
                 stance=stance,
-
                 rationale=rationale,
                 elasticity=elasticity,
                 confidence=confidence,
@@ -620,23 +627,21 @@ class TurnPlanner:
                 tone=tone,
                 verbosity=verbosity,
                 formality=formality,
-                directness=directness
+                directness=directness,
             ),
             knowledge_disclosure=KnowledgeAndDisclosure(
                 disclosure_level=disclosure_level,
                 uncertainty_action=uncertainty_action,
-                knowledge_claim_type=claim_enum  # Already validated above
+                knowledge_claim_type=claim_enum,
             ),
-            citations=ctx.citations,          # P0: delta-based citations
-            safety_plan=ctx.safety_plan,      # P1: clamps + blocks + constraints
-            memory_ops=memory_ops,             # P0: Phase 4 prep
+            citations=ctx.citations,
+            safety_plan=ctx.safety_plan,
+            memory_ops=memory_ops,
             turn_id=f"{context.conversation_id}_turn_{context.turn_number}",
-            seed=turn_seed                     # P0: per-turn seed
+            seed=turn_seed,
         )
 
-        # ====================================================================
-        # 16. CACHE STANCE (for future consistency)
-        # ====================================================================
+        # Cache stance
         if stance:
             context.stance_cache.store_stance(
                 topic_signature=context.topic_signature,
@@ -645,12 +650,10 @@ class TurnPlanner:
                 rationale=rationale,
                 elasticity=elasticity,
                 confidence=confidence,
-                turn_number=context.turn_number
+                turn_number=context.turn_number,
             )
 
-        # ====================================================================
-        # 17. PROCESS MEMORY WRITES (after IR is final)
-        # ====================================================================
+        # Process memory writes
         if self.memory and ir.memory_ops.write_intents:
             self.memory.process_write_intents(
                 intents=ir.memory_ops.write_intents,
@@ -658,9 +661,7 @@ class TurnPlanner:
                 conversation_id=context.conversation_id,
             )
 
-        # ====================================================================
-        # 18. STORE SNAPSHOT FOR CROSS-TURN DYNAMICS
-        # ====================================================================
+        # Store snapshot for cross-turn dynamics
         self._prior_snapshot = TurnSnapshot.from_ir(
             ir, context.turn_number, context.topic_signature
         )
@@ -1601,6 +1602,7 @@ def create_turn_planner(
     persona: Persona,
     determinism: DeterminismManager | None = None,
     memory_manager: MemoryManager | None = None,
+    config: EngineConfig | None = None,
 ) -> TurnPlanner:
     """Factory function to create turn planner"""
-    return TurnPlanner(persona, determinism, memory_manager=memory_manager)
+    return TurnPlanner(persona, determinism, memory_manager=memory_manager, config=config)
