@@ -73,6 +73,7 @@ class MemoryManager:
         self,
         initial_trust: float = 0.5,
         initial_rapport: float = 0.3,
+        stance_cache: StanceCache | None = None,
     ) -> None:
         self.facts = FactStore()
         self.preferences = PreferenceStore()
@@ -81,7 +82,9 @@ class MemoryManager:
             initial_rapport=initial_rapport,
         )
         self.episodes = EpisodicStore()
-        self.stance_cache = StanceCache()
+        # Accept injected StanceCache to avoid duplicate instances.
+        # The engine owns the canonical cache and passes it here.
+        self.stance_cache = stance_cache or StanceCache()
 
     # ========================================================================
     # Write: process MemoryWriteIntents from IR

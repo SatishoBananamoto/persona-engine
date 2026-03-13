@@ -22,8 +22,8 @@ from persona_engine.schema.ir_schema import (
 )
 from persona_engine.schema.persona_schema import Persona
 
-# Expert threshold matches turn_planner.py
-_EXPERT_THRESHOLD = 0.7
+# Default expert threshold — overridden by persona.claim_policy.expert_threshold
+_DEFAULT_EXPERT_THRESHOLD = 0.7
 
 
 def validate_persona_compliance(
@@ -65,14 +65,17 @@ def _check_knowledge_boundaries(
     domain_proficiency = _get_domain_proficiency(ir, persona)
 
     # Rule 1: Domain expert claim requires sufficient proficiency
+    expert_threshold = getattr(
+        persona.claim_policy, "expert_threshold", _DEFAULT_EXPERT_THRESHOLD
+    )
     if claim == KnowledgeClaimType.DOMAIN_EXPERT:
-        if domain_proficiency is not None and domain_proficiency < _EXPERT_THRESHOLD:
+        if domain_proficiency is not None and domain_proficiency < expert_threshold:
             violations.append(ValidationViolation(
                 violation_type="knowledge_boundary_exceeded",
                 severity="error",
                 message=(
                     f"Domain expert claim with proficiency {domain_proficiency:.2f} "
-                    f"— requires >= {_EXPERT_THRESHOLD:.2f}"
+                    f"— requires >= {expert_threshold:.2f}"
                 ),
                 field_path="knowledge_disclosure.knowledge_claim_type",
                 suggested_fix="Downgrade to personal_experience or speculative",

@@ -981,7 +981,7 @@ class TurnPlanner:
             reason=f"O={openness:.2f} * weight={OPENNESS_COMPETENCE_WEIGHT}",
         )
 
-        # Step 4.5: Familiarity boost from repeated topic engagement (Fix 3)
+        # Step 4.5: Familiarity boost from repeated topic engagement
         if self.memory:
             previously_discussed = self.memory.episodes.has_discussed(domain)
             topic_episodes = self.memory.episodes.get_by_topic(domain)
@@ -1002,6 +1002,27 @@ class TurnPlanner:
                     effect=f"Familiarity boost: +{boost:.3f} ({len(topic_episodes)} prior episodes on '{domain}')",
                     weight=0.6,
                     reason=f"episodes={len(topic_episodes)}, boost_per={FAMILIARITY_BOOST_PER_EPISODE}, cap={FAMILIARITY_BOOST_CAP}",
+                )
+
+        # Step 4.6: Known fact boost — relevant stored facts increase competence
+        if self.memory:
+            relevant_facts = self.memory.facts.search(
+                domain, current_turn=0, min_confidence=0.5,
+            )
+            if relevant_facts:
+                fact_boost = min(len(relevant_facts) * 0.03, 0.10)
+                before_fact = competence
+                competence = competence + fact_boost
+                ctx.num(
+                    source_type="memory",
+                    source_id="known_facts",
+                    target_field="response_structure.competence",
+                    operation="add",
+                    before=before_fact,
+                    after=competence,
+                    effect=f"Known facts boost: +{fact_boost:.3f} ({len(relevant_facts)} facts about '{domain}')",
+                    weight=0.5,
+                    reason=f"facts={len(relevant_facts)}, boost_per=0.03, cap=0.10",
                 )
 
         # Step 5: Clamp [0, 1]
@@ -1366,13 +1387,20 @@ class TurnPlanner:
                 break
 
         # ==================================================================
-        # 6. FINAL BOUNDS CLAMP [0, 1]
+        # 6. DISCLOSURE POLICY BOUNDS CLAMP
         # ==================================================================
-        disclosure = clamp01(
-            ctx,
+        # Use the persona's declared bounds instead of hardcoded [0, 1].
+        policy_bounds = self.persona.disclosure_policy.bounds
+        policy_min, policy_max = policy_bounds[0], policy_bounds[1]
+
+        disclosure = ctx.clamp(
             field_name="disclosure_level",
             target_field="knowledge_disclosure.disclosure_level",
-            value=disclosure
+            proposed=disclosure,
+            minimum=policy_min,
+            maximum=policy_max,
+            constraint_name="disclosure_policy_bounds",
+            reason=f"Disclosure policy bounds [{policy_min:.2f}, {policy_max:.2f}]",
         )
 
         return disclosure

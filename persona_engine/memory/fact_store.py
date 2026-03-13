@@ -3,6 +3,8 @@ Fact Store — stores and retrieves concrete user information.
 
 Facts are immutable records. Updates create new records with higher
 confidence, superseding older ones for the same category.
+
+Capacity-bounded with LRU eviction.
 """
 
 from __future__ import annotations
@@ -19,19 +21,39 @@ class FactStore:
     - Retrieve facts by category or keyword
     - Supersede outdated facts (new record wins if higher confidence)
     - Respect privacy thresholds when retrieving
+    - Capacity-bounded with LRU eviction (oldest facts evicted first)
     """
 
-    def __init__(self) -> None:
+    def __init__(self, max_capacity: int = 500) -> None:
         self._facts: list[Fact] = []
         self._by_category: dict[str, list[Fact]] = {}
+        self._max_capacity = max_capacity
 
     def store(self, fact: Fact) -> None:
-        """Store a new fact."""
+        """Store a new fact, evicting oldest if at capacity."""
+        if len(self._facts) >= self._max_capacity:
+            self._evict_oldest()
         self._facts.append(fact)
         cat = fact.category.lower()
         if cat not in self._by_category:
             self._by_category[cat] = []
         self._by_category[cat].append(fact)
+
+    def _evict_oldest(self) -> None:
+        """Remove the oldest fact (lowest turn_created)."""
+        if not self._facts:
+            return
+        # Find oldest by turn_created
+        oldest = min(self._facts, key=lambda f: f.turn_created)
+        self._facts.remove(oldest)
+        # Clean up category index
+        cat = oldest.category.lower()
+        if cat in self._by_category:
+            cat_list = self._by_category[cat]
+            if oldest in cat_list:
+                cat_list.remove(oldest)
+            if not cat_list:
+                del self._by_category[cat]
 
     def get_by_category(
         self,
@@ -104,6 +126,10 @@ class FactStore:
     @property
     def count(self) -> int:
         return len(self._facts)
+
+    @property
+    def max_capacity(self) -> int:
+        return self._max_capacity
 
     @property
     def categories(self) -> list[str]:

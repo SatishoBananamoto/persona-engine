@@ -139,10 +139,10 @@ class PersonaEngine:
         self._conversation_id = conversation_id or uuid.uuid4().hex[:12]
         self._turn_number = 0
 
-        # Core components
+        # Core components — single StanceCache shared between engine and memory manager
         self._determinism = DeterminismManager(seed=seed)
-        self._memory = MemoryManager()
         self._stance_cache = StanceCache()
+        self._memory = MemoryManager(stance_cache=self._stance_cache)
         self._planner = TurnPlanner(
             persona, self._determinism, memory_manager=self._memory,
         )
@@ -348,8 +348,8 @@ class PersonaEngine:
         self._turn_number = 0
         self._conversation_id = uuid.uuid4().hex[:12]
         self._history.clear()
-        self._memory = MemoryManager()
         self._stance_cache = StanceCache()
+        self._memory = MemoryManager(stance_cache=self._stance_cache)
         self._planner = TurnPlanner(
             self._persona, self._determinism, memory_manager=self._memory,
         )
@@ -363,11 +363,26 @@ class PersonaEngine:
     def save(self, path: str | Path) -> None:
         """Save conversation state to a JSON file.
 
-        Saves: persona path hint, conversation_id, turn_number, and
-        the message history (user inputs + assistant texts).  Does NOT
-        save the full IR or memory stores — those are ephemeral.
+        Saves: conversation metadata, message history, and full memory
+        store contents so that ``load()`` can restore a usable engine.
+
+        Format is versioned for forward compatibility.
         """
+        from dataclasses import asdict
+
+        def _serialize_records(records: list) -> list[dict]:
+            """Serialize frozen dataclass records to dicts."""
+            result = []
+            for r in records:
+                d = asdict(r)
+                # Convert datetime to ISO string
+                if "created_at" in d:
+                    d["created_at"] = str(d["created_at"])
+                result.append(d)
+            return result
+
         data = {
+            "version": 2,
             "conversation_id": self._conversation_id,
             "turn_number": self._turn_number,
             "persona_id": self._persona.persona_id,
@@ -376,6 +391,21 @@ class PersonaEngine:
                  "text": r.text, "turn": r.turn_number}
                 for r in self._history
             ],
+            "memory": {
+                "facts": _serialize_records(self._memory.facts.all_facts()),
+                "preferences": _serialize_records(
+                    [p for obs in self._memory.preferences._preferences.values()
+                     for p in obs]
+                ),
+                "relationship_events": _serialize_records(
+                    self._memory.relationships._events
+                ),
+                "relationship_base_trust": self._memory.relationships._base_trust,
+                "relationship_base_rapport": self._memory.relationships._base_rapport,
+                "episodes": _serialize_records(
+                    self._memory.episodes._episodes
+                ),
+            },
             "memory_stats": self._memory.stats(),
         }
         Path(path).write_text(json.dumps(data, indent=2, default=str))
@@ -389,14 +419,57 @@ class PersonaEngine:
     ) -> PersonaEngine:
         """Reload an engine from a saved state file + persona YAML.
 
-        Restores conversation_id and turn_number so cross-turn
-        validation and determinism continue from where they left off.
-        History is NOT replayed (no LLM calls); turns are fast-forwarded.
+        Restores conversation_id, turn_number, and memory stores so the
+        engine can continue where it left off. History is NOT replayed
+        (no LLM calls); turns are fast-forwarded.
         """
+        from persona_engine.memory.models import (
+            Episode, Fact, Preference, RelationshipMemory,
+            MemoryType, MemorySource,
+        )
+
         state = json.loads(Path(state_path).read_text())
         engine = cls.from_yaml(persona_path, **kwargs)
         engine._conversation_id = state["conversation_id"]
         engine._turn_number = state.get("turn_number", 0)
+
+        # Restore memory stores if saved (version 2+)
+        mem_data = state.get("memory")
+        if mem_data:
+            for fd in mem_data.get("facts", []):
+                fd.pop("created_at", None)
+                fd["memory_type"] = MemoryType(fd["memory_type"])
+                fd["source"] = MemorySource(fd["source"])
+                if "tags" in fd:
+                    fd["tags"] = tuple(fd["tags"])
+                engine._memory.facts.store(Fact(**fd))
+            for pd in mem_data.get("preferences", []):
+                pd.pop("created_at", None)
+                pd["memory_type"] = MemoryType(pd["memory_type"])
+                pd["source"] = MemorySource(pd["source"])
+                if "tags" in pd:
+                    pd["tags"] = tuple(pd["tags"])
+                engine._memory.preferences.store(Preference(**pd))
+            for rd in mem_data.get("relationship_events", []):
+                rd.pop("created_at", None)
+                rd["memory_type"] = MemoryType(rd["memory_type"])
+                rd["source"] = MemorySource(rd["source"])
+                if "tags" in rd:
+                    rd["tags"] = tuple(rd["tags"])
+                engine._memory.relationships.record_event(RelationshipMemory(**rd))
+            # Restore base trust/rapport (includes folded eviction deltas)
+            if "relationship_base_trust" in mem_data:
+                engine._memory.relationships._base_trust = mem_data["relationship_base_trust"]
+            if "relationship_base_rapport" in mem_data:
+                engine._memory.relationships._base_rapport = mem_data["relationship_base_rapport"]
+            for ed in mem_data.get("episodes", []):
+                ed.pop("created_at", None)
+                ed["memory_type"] = MemoryType(ed["memory_type"])
+                ed["source"] = MemorySource(ed["source"])
+                if "tags" in ed:
+                    ed["tags"] = tuple(ed["tags"])
+                engine._memory.episodes.store(Episode(**ed))
+
         return engine
 
     # ------------------------------------------------------------------

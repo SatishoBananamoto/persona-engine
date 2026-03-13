@@ -2,6 +2,7 @@
 Preference Store — tracks learned user behavioral patterns.
 
 Preferences strengthen or weaken over time based on repeated signals.
+Capacity-bounded by unique preference count.
 """
 
 from __future__ import annotations
@@ -18,17 +19,40 @@ class PreferenceStore:
     - Reinforce preferences when same signal observed again
     - Retrieve active preferences above strength threshold
     - Decay weak preferences over time
+    - Capacity-bounded by unique preference keys
     """
 
-    def __init__(self) -> None:
+    def __init__(self, max_capacity: int = 100) -> None:
         self._preferences: dict[str, list[Preference]] = {}  # keyed by content hash
+        self._max_capacity = max_capacity
 
     def store(self, pref: Preference) -> None:
-        """Store a new preference observation."""
+        """Store a new preference observation, evicting weakest if at capacity."""
         key = pref.content.lower().strip()
         if key not in self._preferences:
+            # New unique preference — check capacity
+            if len(self._preferences) >= self._max_capacity:
+                self._evict_weakest()
             self._preferences[key] = []
         self._preferences[key].append(pref)
+
+    def _evict_weakest(self) -> None:
+        """Remove the unique preference with lowest aggregated strength."""
+        if not self._preferences:
+            return
+        weakest_key = min(
+            self._preferences.keys(),
+            key=lambda k: self._aggregate_strength(k),
+        )
+        del self._preferences[weakest_key]
+
+    def _aggregate_strength(self, key: str) -> float:
+        """Compute aggregated strength for a preference key."""
+        observations = self._preferences.get(key, [])
+        if not observations:
+            return 0.0
+        latest = observations[-1]
+        return min(1.0, latest.strength + (len(observations) - 1) * 0.1)
 
     def get_active(
         self,
@@ -53,8 +77,7 @@ class PreferenceStore:
             if not observations:
                 continue
             latest = observations[-1]
-            # Aggregate strength: each observation reinforces
-            agg_strength = min(1.0, latest.strength + (len(observations) - 1) * 0.1)
+            agg_strength = self._aggregate_strength(key)
             if agg_strength >= min_strength:
                 results.append(latest)
         return sorted(results, key=lambda p: p.strength, reverse=True)
@@ -90,3 +113,7 @@ class PreferenceStore:
     @property
     def unique_count(self) -> int:
         return len(self._preferences)
+
+    @property
+    def max_capacity(self) -> int:
+        return self._max_capacity

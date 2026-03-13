@@ -266,6 +266,13 @@ class ClaimPolicy(BaseModel):
         description="What to do when knowledge is uncertain"
     )
 
+    expert_threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Minimum domain proficiency for expert-level claims",
+    )
+
 
 class PersonaInvariants(BaseModel):
     """
