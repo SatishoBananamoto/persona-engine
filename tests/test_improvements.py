@@ -255,4 +255,4 @@ class TestPackageStructure:
 
     def test_version(self):
         import persona_engine
-        assert persona_engine.__version__ == "0.1.0"
+        assert persona_engine.__version__ == "0.2.0"

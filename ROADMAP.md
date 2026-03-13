@@ -72,12 +72,12 @@ Build **Persona Engine + Turn Planner (IR) + Validator + Local SDK** with 10-15 
 - [ ] Create deterministic failure reproduction (seeded)
 
 ## Phase 7: Python SDK (Local Mode)
-- [ ] Create SDK package structure
-- [ ] Build high-level `Persona` class interface
-- [ ] Add `Conversation` class for multi-turn dialogue
-- [ ] Implement persona builder utilities
-- [ ] Create validator CLI tools
-- [ ] Add export formats (YAML, JSON)
+- [x] Create SDK package structure
+- [x] Build high-level `Persona` class interface
+- [x] Add `Conversation` class for multi-turn dialogue
+- [x] Implement persona builder utilities
+- [x] Create validator CLI tools
+- [x] Add export formats (YAML, JSON)
 
 ## Phase 8: Persona Library & Testing
 - [ ] Design 10-15 diverse personas (depth over breadth)

@@ -1,7 +1,7 @@
 # Persona Engine — Implementation Plan (Agent-Reviewed)
 
 **Created:** 2026-03-13
-**Status:** ✅ ALL 6 PHASES COMPLETE — 1862 tests passing, zero failures
+**Status:** ✅ ALL 7 PHASES COMPLETE — 1899 tests passing, zero failures
 **Goal:** Fix all critical/major issues identified in `AGENT_REVIEWS.md` and bring the project to production quality.
 
 ---
@@ -320,7 +320,7 @@ This plan was reviewed by 3 independent agents. Key revisions from their feedbac
 
 ## Completion Summary
 
-All 6 phases implemented and verified. Final test suite: **1862 tests, 0 failures**.
+All 7 phases implemented and verified. Final test suite: **1899 tests, 0 failures**.
 
 | Phase | Fixes | New Tests | Cumulative Tests |
 |-------|-------|-----------|------------------|
@@ -330,6 +330,7 @@ All 6 phases implemented and verified. Final test suite: **1862 tests, 0 failure
 | Phase 4: DX & SDK Polish | 5 | — | ~1607 |
 | Phase 5: Architecture & Maintainability | 5 | 22 | 1808 |
 | Phase 6: Behavioral Fidelity & Validation | 9 | 54 | 1862 |
+| Phase 7: Python SDK (Local Mode) | 6 | 37 | 1899 |
 
 Key outcomes:
 - **Data correctness:** Double memory writes eliminated, elasticity formula fixed, must_avoid enforced
@@ -339,6 +340,7 @@ Key outcomes:
 - **Maintainability:** `EngineConfig` centralizes constants, `generate_ir()` broken into 5 stages, domain registry externalized, all tests under `tests/`
 - **Behavioral fidelity:** Uncertainty resolver uses stress/fatigue, negation-aware negativity bias, Schwartz adjacency in value conflicts, success_criteria wired from goals
 - **Validation infrastructure:** IR validator, style drift detector, knowledge boundary enforcer, property-based testing with Hypothesis
+- **SDK:** `Conversation` class for multi-turn dialogue, CLI tool (`python -m persona_engine`), expanded public exports, conversation export (JSON/YAML/transcript)
 
 ---
 
@@ -441,7 +443,55 @@ Key outcomes:
 
 ---
 
-### Deferred to Phase 7+
+## Phase 7: Python SDK (Local Mode)
+
+**Goal:** Make the engine user-friendly with a clean public API, CLI tools, and conversation management.
+
+**Baseline:** 1862 tests, 0 failures (from Phase 6 checkpoint).
+
+### Fix 7.1 — Conversation Class (HIGH) ✅
+- **New file:** `persona_engine/conversation.py`
+- **Problem:** Multi-turn dialogue required manually calling `engine.chat()` repeatedly with no wrapper for iteration, export, or analysis.
+- **Fix:** Created `Conversation` class wrapping `PersonaEngine` with:
+  - `say()` / `say_all()` for sending messages
+  - Iteration (`__iter__`, `__getitem__`, `__len__`)
+  - `summary()` for conversation analytics (avg confidence/competence, validation results)
+  - `export_json()`, `export_yaml()`, `export_transcript()` for conversation export
+  - `last()` for quick access to most recent turn
+- **Test:** 17 tests — say, multi-turn, iteration, export JSON/YAML/transcript, summary, integration.
+
+### Fix 7.2 — CLI Tool (MEDIUM) ✅
+- **New file:** `persona_engine/__main__.py`
+- **Problem:** No command-line interface for validating personas or quick testing.
+- **Fix:** Created CLI with 5 commands:
+  - `python -m persona_engine validate <persona.yaml> [--deep]`
+  - `python -m persona_engine info <persona.yaml>`
+  - `python -m persona_engine plan <persona.yaml> "message" [--json]`
+  - `python -m persona_engine chat <persona.yaml> "message" [--backend mock|template|anthropic]`
+  - `python -m persona_engine list [directory]`
+- **Test:** 11 tests — all commands, error cases, module invocation.
+
+### Fix 7.3 — Expanded SDK Exports (LOW) ✅
+- **File:** `persona_engine/__init__.py`
+- **Problem:** Only 12 types exported. Missing enums (InteractionMode, ConversationGoal, Tone, etc.) and common schema types (BigFiveTraits, SchwartzValues, Goal, DomainKnowledge).
+- **Fix:** Expanded to 27 exports covering all commonly-used types. Bumped version to 0.2.0.
+- **Test:** 5 tests — all export groups importable, version check.
+
+### Fix 7.4 — Conversation Example (LOW) ✅
+- **New file:** `examples/conversation_demo.py`
+- **Fix:** Added example showing Conversation class usage: `say()`, iteration, summary, and export.
+
+### Checkpoint 7
+- [x] All previous 1862 tests still pass
+- [x] Conversation class works for multi-turn dialogue (Fix 7.1)
+- [x] CLI tool validates, inspects, and tests personas (Fix 7.2)
+- [x] All common types importable from `persona_engine` (Fix 7.3)
+- [x] Conversation example runs successfully (Fix 7.4)
+- [x] Full test suite: **1899 tests, 0 failures**
+
+---
+
+### Deferred to Phase 8+
 
 | Item | Reason |
 |------|--------|
