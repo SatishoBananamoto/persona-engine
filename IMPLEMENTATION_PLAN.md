@@ -336,3 +336,113 @@ Key outcomes:
 - **Input safety:** Length limits, control character sanitization, empty input rejection
 - **Developer experience:** Working README examples, `__repr__`, context managers, example scripts
 - **Maintainability:** `EngineConfig` centralizes constants, `generate_ir()` broken into 5 stages, domain registry externalized, all tests under `tests/`
+
+---
+
+## Phase 6: Behavioral Fidelity & Validation
+
+**Goal:** Fix behavioral logic gaps that reduce psychological realism, wire unused schema fields, and build the validation/QA infrastructure from ROADMAP Phase 6.
+
+**Baseline:** 1808 tests, 0 failures (from Phase 5 checkpoint).
+
+### Part A — Behavioral Logic Fixes
+
+#### Fix 6.1 — Uncertainty Resolver: Add Dynamic State Inputs (MEDIUM)
+- **File:** `persona_engine/behavioral/uncertainty_resolver.py`
+- **Problem:** `resolve_uncertainty_action()` uses only static traits (proficiency, confidence, risk_tolerance, need_for_closure, time_pressure). It ignores `stress` and `fatigue` from dynamic state, meaning a highly stressed persona handles uncertainty identically to a calm one.
+- **Fix:** Add `stress` and `fatigue` parameters. High stress (>0.7) lowers the effective confidence threshold (stressed people second-guess more). High fatigue (>0.7) biases toward HEDGE or REFUSE (tired people avoid effortful reasoning). Add citations for each state influence.
+- **Behavioral rule:**
+  - `effective_confidence = confidence - (stress * 0.15) - (fatigue * 0.10)` (clamped 0–1)
+  - Apply `effective_confidence` instead of raw `confidence` in existing thresholds
+- **Test:** Parametric tests: same persona with low vs high stress produces different actions. Same persona with high fatigue hedges more. Citations trace the state influence.
+
+#### Fix 6.2 — Negativity Bias: Add Negation Detection (MEDIUM)
+- **File:** `persona_engine/behavioral/bias_simulator.py`
+- **Problem:** Negativity bias uses bag-of-words matching (`NEGATIVE_MARKERS`). "Not bad", "no problem", "don't worry" all trigger negativity bias because they contain "bad", "problem", "worry". This produces incorrect bias activation.
+- **Fix:** Add a negation window check. Before counting a negative marker hit, scan the preceding 1–3 tokens for negation words (`not`, `no`, `don't`, `doesn't`, `isn't`, `wasn't`, `weren't`, `never`, `nothing`, `none`). If negated, skip the marker. Keep implementation simple — no NLP dependency, just token-window check.
+- **Test:** "not bad" → no negativity trigger. "this is bad" → triggers. "no problem at all" → no trigger. "serious problem" → triggers. "I don't have any concerns" → no trigger vs "I have concerns" → triggers.
+
+#### Fix 6.3 — Value Conflict Resolution: Schwartz Circumplex Adjacency (MEDIUM)
+- **File:** `persona_engine/behavioral/values_interpreter.py`
+- **Problem:** `resolve_conflict()` is essentially argmax with small context biases (+0.05 to +0.1). It doesn't model that adjacent values on the Schwartz circumplex (e.g., benevolence–universalism) reinforce each other while opposing values (e.g., self-enhancement–self-transcendence) genuinely conflict. Two adjacent values with equal weight should resolve more easily than two opposing values.
+- **Fix:** Add a `SCHWARTZ_ADJACENCY` dict mapping each value type to its neighbors and opposites. When resolving conflicts:
+  - Adjacent values: boost the winner by +0.05 (easy resolution)
+  - Opposing values: reduce confidence, add a "conflicted" citation
+  - Non-adjacent/non-opposing: current behavior (neutral)
+- **Test:** Benevolence vs universalism (adjacent) resolves cleanly. Achievement vs benevolence (opposing) produces lower confidence and conflict citation. Same priority adjacent values have smoother resolution than same priority opposing values.
+
+#### Fix 6.4 — Wire `success_criteria` from Goals (LOW)
+- **Files:** `persona_engine/planner/turn_planner.py:610`, `persona_engine/schema/persona_schema.py`
+- **Problem:** `success_criteria=None` is hardcoded. The IR field exists but is never populated. Downstream renderers that check success_criteria always see None.
+- **Fix:** Derive `success_criteria` from the persona's active goals. If the persona has goals with defined success conditions, map the top 1–3 relevant goals' criteria into the IR field.
+- **Test:** Persona with goals produces non-None success_criteria. Persona without goals gets None (backward-compatible).
+
+#### Fix 6.5 — Mark `languages[]` as Reserved/Future (LOW)
+- **File:** `persona_engine/schema/persona_schema.py:392`
+- **Problem:** `languages[]` field exists in PersonaProfile but is never read by any interpreter or planner stage. It's dead weight that misleads persona authors into thinking language is handled.
+- **Fix:** Add a deprecation/future note in the field description: `"Reserved for future multi-language support. Currently unused by the planner pipeline."` Add a validation warning if languages is populated, so authors know it won't take effect.
+- **Test:** Populating `languages` emits a validation warning. Field remains in schema for forward compatibility.
+
+### Part B — Validation & QA Infrastructure (ROADMAP Phase 6)
+
+#### Fix 6.6 — Build IR Validator (HIGH)
+- **New file:** `persona_engine/validation/ir_validator.py`
+- **Problem:** No pre-generation validation of the IR. Invalid or incoherent IR (e.g., confidence=0.9 with uncertainty_action=REFUSE, or disclosure=0.95 for a reserved persona) passes through to the LLM unchecked.
+- **Fix:** Create `validate_ir(ir: IntermediateRepresentation) -> list[ValidationIssue]` that checks:
+  1. **Internal consistency:** confidence vs uncertainty_action alignment, disclosure vs persona traits
+  2. **Range validity:** all 0–1 fields within bounds (defense in depth beyond Pydantic)
+  3. **Citation completeness:** every behavioral float has at least one citation
+  4. **Constraint compliance:** must_avoid topics not present in stance, cannot_claim not violated
+- **Severity levels:** ERROR (blocks generation), WARNING (logged, generation proceeds)
+- **Test:** Craft deliberately inconsistent IRs, assert validator catches each class of issue. Validate that a well-formed IR from TurnPlanner passes clean.
+
+#### Fix 6.7 — Implement Style Drift Detection (MEDIUM)
+- **New file:** `persona_engine/validation/style_drift.py`
+- **Problem:** No mechanism to detect when a persona's behavioral outputs drift over multiple turns. A persona that starts formal but becomes casual (without context justification) represents a coherence failure.
+- **Fix:** Track per-field variance over a sliding window of N turns. Compute drift score = standard deviation of each behavioral field (verbosity, formality, directness, disclosure, confidence) over the window. Flag if drift exceeds a threshold (configurable via EngineConfig). Distinguish justified drift (stress/engagement change) from unjustified drift.
+- **Test:** Stable persona over 10 turns → low drift score. Manually perturbed persona → high drift flagged. State-justified changes → not flagged as drift.
+
+#### Fix 6.8 — Build Knowledge Boundary Enforcer (MEDIUM)
+- **New file:** `persona_engine/validation/knowledge_boundary.py`
+- **Problem:** Expert domain claims are checked at IR time, but there's no systematic post-hoc validation that knowledge boundaries are respected across turns.
+- **Fix:** Create enforcer that tracks:
+  1. Claims made per domain per turn
+  2. Proficiency level for each claimed domain
+  3. Flags when a non-expert persona makes expert-level claims (high confidence + domain-specific + low proficiency)
+- **Integration:** Called after IR generation, before response rendering.
+- **Test:** Non-expert making expert claims → flagged. Expert in their domain → passes. Cross-domain claim from adjacent domain → appropriate handling.
+
+#### Fix 6.9 — Property-Based Testing Framework (HIGH)
+- **New file:** `tests/test_property_based.py`
+- **Problem:** Current tests use handcrafted fixtures. No systematic exploration of the persona parameter space to find edge cases.
+- **Fix:** Use Hypothesis library to generate random but valid personas and inputs, then assert invariants:
+  1. IR always passes Pydantic validation
+  2. All behavioral floats are in [0, 1]
+  3. Every non-default behavioral float has at least one citation
+  4. Determinism: same seed + same inputs = identical IR (seeded randomness)
+  5. `must_avoid` topics never appear in stance
+  6. Non-expert personas never get uncertainty_action=ANSWER with confidence > 0.8
+- **Test:** 100+ generated personas × 10+ generated prompts, all invariants hold.
+
+### Checkpoint 6
+- [ ] All previous 1808 tests still pass
+- [ ] Uncertainty resolver responds to stress/fatigue (Fix 6.1)
+- [ ] Negated negative words don't trigger negativity bias (Fix 6.2)
+- [ ] Value conflicts respect Schwartz adjacency (Fix 6.3)
+- [ ] success_criteria populated from goals (Fix 6.4)
+- [ ] languages[] has future-use warning (Fix 6.5)
+- [ ] IR validator catches inconsistencies (Fix 6.6)
+- [ ] Style drift detection works over multi-turn (Fix 6.7)
+- [ ] Knowledge boundary enforcer flags non-expert claims (Fix 6.8)
+- [ ] Property-based tests pass with 100+ generated personas (Fix 6.9)
+
+---
+
+### Deferred to Phase 7+
+
+| Item | Reason |
+|------|--------|
+| **Trait marker scorer** | Needs response text analysis (LLM-in-the-loop), better suited for Phase 8 persona library testing |
+| **Distributional guarantees** | Requires large-scale statistical testing infrastructure, post-MVP |
+| **Deterministic failure reproduction** | Partially covered by Fix 6.9 (property-based with seeds); full replay system is post-MVP |
+| **Confirmation bias proxy refinement** | topic_relevance as value_alignment proxy is acceptable for MVP; true value-alignment detection requires semantic analysis |
