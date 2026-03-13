@@ -65,7 +65,8 @@ class ResponseGenerator:
                 api_key=self._config.api_key,
                 model_id=self._config.model_id,
             )
-        raise ValueError(f"Unknown backend: {self._config.backend}")
+        from persona_engine.exceptions import ConfigurationError
+        raise ConfigurationError(f"Unknown backend: {self._config.backend}")
 
     def generate(
         self,

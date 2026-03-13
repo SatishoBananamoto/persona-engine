@@ -11,6 +11,11 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Optional
 import os
 
+from persona_engine.exceptions import (
+    ConfigurationError,
+    LLMAPIKeyError,
+)
+
 if TYPE_CHECKING:
     from persona_engine.schema.ir_schema import IntermediateRepresentation
     from persona_engine.schema.persona_schema import Persona
@@ -72,7 +77,7 @@ class AnthropicAdapter(BaseLLMAdapter):
         """
         self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
         if not self.api_key:
-            raise ValueError(
+            raise LLMAPIKeyError(
                 "Anthropic API key required. Set ANTHROPIC_API_KEY environment variable "
                 "or pass api_key parameter."
             )
@@ -87,7 +92,7 @@ class AnthropicAdapter(BaseLLMAdapter):
                 import anthropic
                 self._client = anthropic.Anthropic(api_key=self.api_key)
             except ImportError:
-                raise ImportError(
+                raise ConfigurationError(
                     "anthropic package not installed. Run: pip install anthropic"
                 )
         return self._client
@@ -141,7 +146,7 @@ class OpenAIAdapter(BaseLLMAdapter):
         """
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
-            raise ValueError(
+            raise LLMAPIKeyError(
                 "OpenAI API key required. Set OPENAI_API_KEY environment variable "
                 "or pass api_key parameter."
             )
@@ -156,7 +161,7 @@ class OpenAIAdapter(BaseLLMAdapter):
                 import openai
                 self._client = openai.OpenAI(api_key=self.api_key)
             except ImportError:
-                raise ImportError(
+                raise ConfigurationError(
                     "openai package not installed. Run: pip install openai"
                 )
         return self._client
@@ -437,6 +442,6 @@ def create_adapter(
         return TemplateAdapter()
 
     else:
-        raise ValueError(
+        raise ConfigurationError(
             f"Unknown provider: {provider}. Use 'anthropic', 'openai', 'mock', or 'template'"
         )

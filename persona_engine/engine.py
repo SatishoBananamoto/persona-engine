@@ -45,10 +45,44 @@ from persona_engine.schema.ir_schema import (
     InteractionMode,
     IntermediateRepresentation,
 )
+from persona_engine.exceptions import InputValidationError
 from persona_engine.persona_builder import PersonaBuilder
 from persona_engine.schema.persona_schema import Persona
 from persona_engine.utils.determinism import DeterminismManager
 from persona_engine.validation import PipelineValidator
+
+
+# ---------------------------------------------------------------------------
+# Input validation
+# ---------------------------------------------------------------------------
+
+MAX_INPUT_LENGTH = 100_000  # characters — generous limit to catch abuse
+
+
+def _validate_user_input(user_input: str) -> str:
+    """Validate and sanitise user input.
+
+    Returns the stripped input string on success.
+
+    Raises:
+        InputValidationError: If input is empty, wrong type, or too long.
+    """
+    if not isinstance(user_input, str):
+        raise InputValidationError(
+            f"user_input must be a string, got {type(user_input).__name__}"
+        )
+
+    stripped = user_input.strip()
+    if not stripped:
+        raise InputValidationError("user_input must not be empty or whitespace-only")
+
+    if len(stripped) > MAX_INPUT_LENGTH:
+        raise InputValidationError(
+            f"user_input exceeds maximum length of {MAX_INPUT_LENGTH:,} characters "
+            f"(got {len(stripped):,})"
+        )
+
+    return stripped
 
 
 # ---------------------------------------------------------------------------
@@ -237,6 +271,8 @@ class PersonaEngine:
         Returns:
             ChatResult with text, IR, validation, and metadata.
         """
+        user_input = _validate_user_input(user_input)
+
         self._turn_number += 1
         turn = self._turn_number
 
@@ -286,6 +322,8 @@ class PersonaEngine:
 
         Same turn-counting and memory semantics as ``chat()``.
         """
+        user_input = _validate_user_input(user_input)
+
         self._turn_number += 1
         ir = self._generate_ir(user_input, mode=mode, goal=goal, topic=topic)
 

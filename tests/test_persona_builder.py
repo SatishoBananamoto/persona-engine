@@ -15,6 +15,7 @@ Covers:
 
 import pytest
 
+from persona_engine.exceptions import PersonaValidationError
 from persona_engine.persona_builder import (
     ARCHETYPES,
     OCCUPATION_DOMAINS,
@@ -159,7 +160,7 @@ class TestFluentSetters:
         assert persona.claim_policy.lookup_behavior == "refuse"
 
     def test_lookup_behavior_invalid(self):
-        with pytest.raises(ValueError, match="lookup_behavior"):
+        with pytest.raises((ValueError, PersonaValidationError), match="lookup_behavior"):
             PersonaBuilder("Alex", "Engineer").lookup_behavior("answer")
 
     def test_time_scarcity_setter(self):
@@ -289,7 +290,7 @@ class TestArchetypes:
         assert p.psychology.big_five.extraversion == 0.75
 
     def test_unknown_archetype_raises(self):
-        with pytest.raises(ValueError, match="Unknown archetype"):
+        with pytest.raises((ValueError, PersonaValidationError), match="Unknown archetype"):
             PersonaBuilder("Alex", "Pro").archetype("wizard")
 
     def test_archetype_then_trait_stacks(self):

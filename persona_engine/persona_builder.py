@@ -37,6 +37,8 @@ import hashlib
 import re
 from typing import Any, Literal
 
+from persona_engine.exceptions import PersonaValidationError
+
 from persona_engine.schema.persona_schema import (
     Bias,
     BigFiveTraits,
@@ -662,7 +664,7 @@ class PersonaBuilder:
         name_lower = name.lower().strip()
         if name_lower not in ARCHETYPES:
             available = ", ".join(sorted(ARCHETYPES))
-            raise ValueError(
+            raise PersonaValidationError(
                 f"Unknown archetype '{name}'. Available: {available}"
             )
         self._archetype_name = name_lower
@@ -686,7 +688,7 @@ class PersonaBuilder:
     def lookup_behavior(self, value: str) -> PersonaBuilder:
         """Set claim policy lookup behavior: ask, hedge, refuse, speculate."""
         if value not in ("ask", "hedge", "refuse", "speculate"):
-            raise ValueError(f"lookup_behavior must be ask/hedge/refuse/speculate, got '{value}'")
+            raise PersonaValidationError(f"lookup_behavior must be ask/hedge/refuse/speculate, got '{value}'")
         self._lookup_behavior = value  # type: ignore[assignment]
         return self
 

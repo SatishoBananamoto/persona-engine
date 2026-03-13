@@ -349,7 +349,8 @@ class AnthropicAdapter(LLMAdapter):
         try:
             import anthropic
         except ImportError as e:
-            raise ImportError(
+            from persona_engine.exceptions import ConfigurationError
+            raise ConfigurationError(
                 "anthropic package required for AnthropicAdapter. "
                 "Install with: pip install anthropic"
             ) from e
