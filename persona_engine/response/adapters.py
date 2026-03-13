@@ -159,6 +159,42 @@ _OPENERS: dict[str, list[str]] = {
         "Mm.",
         "Right, well...",
     ],
+    "eager_anticipatory": [
+        "Oh, I can't wait to dig into this!",
+        "Yes! I've been thinking about this!",
+    ],
+    "amused_playful": [
+        "Ha, that's a fun one!",
+        "Oh, I like this question.",
+    ],
+    "curious_intrigued": [
+        "Ooh, that's interesting.",
+        "Hmm, I hadn't thought about that before.",
+    ],
+    "surprised_caught_off_guard": [
+        "Oh! I wasn't expecting that.",
+        "Whoa, that's a curveball.",
+    ],
+    "contemptuous_dismissive": [
+        "Honestly? That's not even worth debating.",
+        "Please.",
+    ],
+    "confused_uncertain": [
+        "Wait, I'm not sure I follow.",
+        "Hmm, that's... confusing.",
+    ],
+    "guarded_wary": [
+        "I'm not sure I want to go there.",
+        "Let me be careful about how I say this.",
+    ],
+    "grieving_sorrowful": [
+        "It's hard to talk about this.",
+        "I wish things were different.",
+    ],
+    "nostalgic_wistful": [
+        "That takes me back.",
+        "I sometimes think about how things used to be.",
+    ],
 }
 
 # Hedging phrases for low-confidence responses
@@ -217,6 +253,36 @@ class TemplateAdapter(LLMAdapter):
 
         parts: list[str] = []
 
+        # Short-circuit for minimal verbosity
+        if verbosity == "minimal":
+            _minimal = {"positive": "yeah", "negative": "mm", "neutral": "ok"}
+            positive_tones = {
+                "warm_enthusiastic", "excited_engaged", "thoughtful_engaged",
+                "warm_confident", "friendly_relaxed", "content_calm",
+                "satisfied_peaceful", "amused_playful", "curious_intrigued",
+                "eager_anticipatory",
+            }
+            negative_tones = {
+                "frustrated_tense", "anxious_stressed", "defensive_agitated",
+                "concerned_empathetic", "disappointed_resigned", "sad_subdued",
+                "tired_withdrawn", "contemptuous_dismissive", "confused_uncertain",
+                "grieving_sorrowful", "guarded_wary",
+            }
+            if tone in positive_tones:
+                bucket = "positive"
+            elif tone in negative_tones:
+                bucket = "negative"
+            else:
+                bucket = "neutral"
+            return GeneratedResponse(
+                text=_minimal[bucket],
+                backend=GenerationBackend.TEMPLATE,
+                model_id=None,
+                prompt_system=None,
+                prompt_user=user_input,
+                ir_turn_id=ir.turn_id,
+            )
+
         # 1. Opener based on tone
         openers = _OPENERS.get(tone, _OPENERS["neutral_calm"])
         parts.append(openers[0])
@@ -249,6 +315,29 @@ class TemplateAdapter(LLMAdapter):
         elif uncertainty == "refuse":
             parts.append(
                 "I'm not really the right person to speak to that, though."
+            )
+        elif uncertainty == "speculate_with_disclaimer":
+            parts.append(
+                "Now, I'm just guessing here, so take this with a grain of salt."
+            )
+        elif uncertainty == "defer_to_authority":
+            parts.append(
+                "I'm really not the best person to ask about this — "
+                "you'd want to talk to someone with more expertise."
+            )
+        elif uncertainty == "reframe_question":
+            parts.append(
+                "Actually, I think the more interesting question here is a bit different."
+            )
+        elif uncertainty == "offer_partial":
+            parts.append(
+                "I can speak to parts of this with some confidence, "
+                "but there are aspects I'm less sure about."
+            )
+        elif uncertainty == "acknowledge_and_redirect":
+            parts.append(
+                "I don't know a lot about that specifically, "
+                "but I can share what I know from a related angle."
             )
 
         # 5. Extra detail for detailed verbosity

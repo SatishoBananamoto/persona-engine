@@ -161,37 +161,36 @@ class TestHardConstraintAsk:
 
 
 class TestHardConstraintSpeculateFallthrough:
-    """Proficiency < 0.3 + claim_policy 'speculate' does NOT match any
-    hard-constraint branch and falls through to time pressure / cognitive style."""
+    """Proficiency < 0.3 + claim_policy 'speculate' -> SPECULATE_WITH_DISCLAIMER
+    via hard-constraint branch."""
 
-    def test_speculate_with_high_time_pressure_falls_to_answer(self):
-        """Falls through hard constraint, caught by time-pressure override."""
+    def test_speculate_with_high_time_pressure_returns_speculate(self):
+        """Hard constraint fires for 'speculate' policy, returns SPECULATE_WITH_DISCLAIMER."""
         citations: list[Citation] = _fresh_citations()
         result = resolve_uncertainty_action(
             proficiency=0.1,
-            confidence=0.5,      # > 0.4
+            confidence=0.5,
             risk_tolerance=0.5,
             need_for_closure=0.5,
-            time_pressure=0.8,   # > 0.7
+            time_pressure=0.8,
             claim_policy_lookup_behavior="speculate",
             citations=citations,
         )
-        assert result == UncertaintyAction.ANSWER
+        assert result == UncertaintyAction.SPECULATE_WITH_DISCLAIMER
 
-    def test_speculate_falls_to_cognitive_hedge(self):
-        """Falls through hard constraint and time pressure, lands on moderate
-        confidence + low risk -> HEDGE."""
+    def test_speculate_low_time_also_returns_speculate(self):
+        """Hard constraint fires regardless of time pressure for 'speculate' policy."""
         citations: list[Citation] = _fresh_citations()
         result = resolve_uncertainty_action(
             proficiency=0.1,
-            confidence=0.5,      # moderate
-            risk_tolerance=0.4,  # <= 0.6
+            confidence=0.5,
+            risk_tolerance=0.4,
             need_for_closure=0.5,
-            time_pressure=0.3,   # low
+            time_pressure=0.3,
             claim_policy_lookup_behavior="speculate",
             citations=citations,
         )
-        assert result == UncertaintyAction.HEDGE
+        assert result == UncertaintyAction.SPECULATE_WITH_DISCLAIMER
 
     def test_unknown_policy_also_falls_through(self):
         """Any unrecognized policy string falls through the hard constraint."""
@@ -291,6 +290,7 @@ class TestTimePressureOverride:
             time_pressure=0.7,
             claim_policy_lookup_behavior="hedge",
             citations=citations,
+            competence=0.0,  # avoid OFFER_PARTIAL branch
         )
         # Falls to cognitive style: moderate confidence + low risk -> HEDGE
         assert result == UncertaintyAction.HEDGE
@@ -324,6 +324,7 @@ class TestTimePressureOverride:
             time_pressure=0.3,
             claim_policy_lookup_behavior="hedge",
             citations=citations,
+            competence=0.0,  # avoid OFFER_PARTIAL branch
         )
         # moderate confidence + low risk_tolerance -> HEDGE
         assert result == UncertaintyAction.HEDGE
@@ -375,6 +376,7 @@ class TestCognitiveHighConfidence:
             time_pressure=0.1,
             claim_policy_lookup_behavior="hedge",
             citations=citations,
+            competence=0.0,  # avoid OFFER_PARTIAL branch
         )
         assert result == UncertaintyAction.HEDGE
 
@@ -410,6 +412,7 @@ class TestCognitiveModerateConfidence:
             time_pressure=0.1,
             claim_policy_lookup_behavior="hedge",
             citations=citations,
+            competence=0.8,  # > 0.7, skip SPECULATE_WITH_DISCLAIMER branch
         )
         assert result == UncertaintyAction.ANSWER
 
@@ -442,6 +445,7 @@ class TestCognitiveModerateConfidence:
             time_pressure=0.1,
             claim_policy_lookup_behavior="hedge",
             citations=citations,
+            competence=0.0,  # avoid OFFER_PARTIAL branch
         )
         assert result == UncertaintyAction.HEDGE
 
@@ -455,6 +459,7 @@ class TestCognitiveModerateConfidence:
             time_pressure=0.1,
             claim_policy_lookup_behavior="hedge",
             citations=citations,
+            competence=0.0,  # avoid OFFER_PARTIAL branch
         )
         assert result == UncertaintyAction.HEDGE
 
@@ -469,6 +474,7 @@ class TestCognitiveModerateConfidence:
             time_pressure=0.1,
             claim_policy_lookup_behavior="hedge",
             citations=citations,
+            competence=0.0,  # avoid OFFER_PARTIAL branch
         )
         assert len(citations) == 0
 
@@ -483,6 +489,7 @@ class TestCognitiveModerateConfidence:
             time_pressure=0.1,
             claim_policy_lookup_behavior="hedge",
             citations=citations,
+            competence=0.8,  # > 0.7, skip SPECULATE_WITH_DISCLAIMER branch
         )
         assert result == UncertaintyAction.ANSWER
 
@@ -788,6 +795,7 @@ class TestCitationFormat:
             time_pressure=0.1,
             claim_policy_lookup_behavior="hedge",
             citations=citations,
+            competence=0.8,  # > 0.7, skip SPECULATE_WITH_DISCLAIMER branch
         )
         c = citations[0]
         assert c.source_type == "trait"
@@ -980,6 +988,7 @@ class TestInferKnowledgeClaimSpeculative:
         result = infer_knowledge_claim_type(
             proficiency=0.5,
             uncertainty_action=UncertaintyAction.HEDGE,
+            cognitive_complexity=0.3,  # < 0.5, avoid inferential branch
         )
         assert result == "speculative"
 
@@ -996,6 +1005,7 @@ class TestInferKnowledgeClaimSpeculative:
             proficiency=0.5,
             uncertainty_action=UncertaintyAction.HEDGE,
             is_domain_specific=True,
+            cognitive_complexity=0.3,  # < 0.5, avoid inferential branch
         )
         assert result == "speculative"
 
@@ -1031,9 +1041,9 @@ class TestInferKnowledgeClaimDefault:
         assert result == "general_common_knowledge"
 
     def test_answer_domain_specific_but_low_proficiency(self):
-        """Domain-specific + ANSWER + low proficiency -> general_common_knowledge."""
+        """Domain-specific + ANSWER + moderate proficiency -> general_common_knowledge."""
         result = infer_knowledge_claim_type(
-            proficiency=0.3,
+            proficiency=0.5,  # >= 0.4 to avoid received_wisdom, <= 0.7 to avoid domain_expert
             uncertainty_action=UncertaintyAction.ANSWER,
             is_domain_specific=True,
         )
@@ -1083,6 +1093,7 @@ class TestInferPriority:
             proficiency=0.5,
             uncertainty_action=UncertaintyAction.HEDGE,
             is_domain_specific=False,
+            cognitive_complexity=0.3,  # < 0.5, avoid inferential branch
         )
         assert result == "speculative"
 
@@ -1142,10 +1153,12 @@ class TestEndToEnd:
             time_pressure=0.1,
             claim_policy_lookup_behavior="hedge",
             citations=citations,
+            competence=0.0,  # avoid OFFER_PARTIAL branch
         )
         claim = infer_knowledge_claim_type(
             proficiency=0.5,
             uncertainty_action=action,
+            cognitive_complexity=0.3,  # < 0.5, avoid inferential branch
         )
         assert action == UncertaintyAction.HEDGE
         assert claim == "speculative"

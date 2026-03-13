@@ -19,6 +19,9 @@ def resolve_uncertainty_action(
     citations: list[Citation],
     stress: float = 0.0,
     fatigue: float = 0.0,
+    cognitive_complexity: float = 0.5,
+    competence: float = 0.5,
+    has_adjacent_knowledge: bool = False,
 ) -> UncertaintyAction:
     """
     Single authoritative decision for uncertainty handling.
@@ -91,6 +94,16 @@ def resolve_uncertainty_action(
             ))
             return UncertaintyAction.ASK_CLARIFYING
 
+        # Speculate if policy allows
+        elif claim_policy_lookup_behavior == "speculate":
+            citations.append(Citation(
+                source_type="rule",
+                source_id="claim_policy",
+                effect=f"Low proficiency ({proficiency:.2f}) → speculate per claim policy",
+                weight=0.9
+            ))
+            return UncertaintyAction.SPECULATE_WITH_DISCLAIMER
+
     # 2. Time pressure override (only if effective confidence is moderate)
     if time_pressure > 0.7 and effective_confidence > 0.4:
         citations.append(Citation(
@@ -100,6 +113,16 @@ def resolve_uncertainty_action(
             weight=0.8
         ))
         return UncertaintyAction.ANSWER
+
+    # Reframe: very low confidence + high cognitive complexity
+    if effective_confidence < 0.3 and cognitive_complexity > 0.7 and risk_tolerance > 0.4:
+        citations.append(Citation(
+            source_type="trait",
+            source_id="cognitive_complexity",
+            effect=f"High cognitive complexity ({cognitive_complexity:.2f}) + low confidence → reframe",
+            weight=0.8
+        ))
+        return UncertaintyAction.REFRAME_QUESTION
 
     # 3. Cognitive style default behavior (uses effective_confidence)
 
@@ -120,6 +143,14 @@ def resolve_uncertainty_action(
     # Moderate confidence
     elif effective_confidence > 0.4:
         if risk_tolerance > 0.6:
+            if competence < 0.7 and competence > 0.4:
+                citations.append(Citation(
+                    source_type="trait",
+                    source_id="risk_tolerance",
+                    effect=f"High risk tolerance ({risk_tolerance:.2f}) + moderate competence → speculate with disclaimer",
+                    weight=0.7
+                ))
+                return UncertaintyAction.SPECULATE_WITH_DISCLAIMER
             citations.append(Citation(
                 source_type="trait",
                 source_id="risk_tolerance",
@@ -127,6 +158,14 @@ def resolve_uncertainty_action(
                 weight=0.7
             ))
             return UncertaintyAction.ANSWER
+        elif competence > 0.4 and abs(competence - effective_confidence) < 0.25:
+            citations.append(Citation(
+                source_type="rule",
+                source_id="partial_knowledge",
+                effect=f"Moderate competence ({competence:.2f}) ≈ confidence ({effective_confidence:.2f}) → offer partial",
+                weight=0.7
+            ))
+            return UncertaintyAction.OFFER_PARTIAL
         else:
             return UncertaintyAction.HEDGE
 
@@ -152,6 +191,15 @@ def resolve_uncertainty_action(
             ))
             return UncertaintyAction.REFUSE
 
+        elif has_adjacent_knowledge and cognitive_complexity > 0.4:
+            citations.append(Citation(
+                source_type="rule",
+                source_id="adjacent_knowledge",
+                effect="Low confidence but adjacent knowledge → acknowledge and redirect",
+                weight=0.7
+            ))
+            return UncertaintyAction.ACKNOWLEDGE_AND_REDIRECT
+
         # Default: hedge
         else:
             return UncertaintyAction.HEDGE
@@ -161,7 +209,11 @@ def infer_knowledge_claim_type(
     proficiency: float,
     uncertainty_action: UncertaintyAction,
     is_personal_experience: bool = False,
-    is_domain_specific: bool = False
+    is_domain_specific: bool = False,
+    cognitive_complexity: float = 0.5,
+    is_second_hand: bool = False,
+    is_hypothetical_context: bool = False,
+    has_research_basis: bool = False,
 ) -> str:
     """
     Infer knowledge claim type from context.
@@ -171,22 +223,33 @@ def infer_knowledge_claim_type(
         uncertainty_action: How uncertainty is being handled
         is_personal_experience: Whether claim is from personal experience
         is_domain_specific: Whether claim requires domain expertise
+        cognitive_complexity: Cognitive complexity level (0-1)
+        is_second_hand: Whether knowledge is second-hand
+        is_hypothetical_context: Whether context is hypothetical
+        has_research_basis: Whether claim has research backing
 
     Returns:
         Knowledge claim type
     """
-
     if uncertainty_action == UncertaintyAction.REFUSE:
         return "none"
-
+    if uncertainty_action == UncertaintyAction.DEFER_TO_AUTHORITY:
+        return "none"
     if is_personal_experience:
         return "personal_experience"
-
     if is_domain_specific and proficiency > 0.7:
+        if has_research_basis and cognitive_complexity >= 0.5:
+            return "academic_cited"
         return "domain_expert"
-
-    if uncertainty_action in [UncertaintyAction.HEDGE, UncertaintyAction.ASK_CLARIFYING]:
+    if is_hypothetical_context and cognitive_complexity >= 0.4:
+        return "hypothetical"
+    if is_second_hand:
+        return "anecdotal"
+    if proficiency > 0.4 and cognitive_complexity >= 0.5 and uncertainty_action == UncertaintyAction.HEDGE:
+        return "inferential"
+    if proficiency < 0.4 and uncertainty_action in (UncertaintyAction.ANSWER, UncertaintyAction.SPECULATE_WITH_DISCLAIMER):
+        return "received_wisdom"
+    if uncertainty_action in (UncertaintyAction.HEDGE, UncertaintyAction.ASK_CLARIFYING,
+                              UncertaintyAction.OFFER_PARTIAL, UncertaintyAction.REFRAME_QUESTION):
         return "speculative"
-
-    # Default: common knowledge
     return "general_common_knowledge"

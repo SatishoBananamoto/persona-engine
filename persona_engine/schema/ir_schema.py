@@ -32,6 +32,13 @@ class InteractionMode(StrEnum):
     DEBATE = "debate"
     SMALL_TALK = "small_talk"
     BRAINSTORM = "brainstorm"
+    THERAPY_COUNSELING = "therapy_counseling"
+    NEGOTIATION = "negotiation"
+    STORYTELLING = "storytelling"
+    VENTING = "venting"
+    TEACHING = "teaching"
+    MEDIATION = "mediation"
+    CONFESSION = "confession"
 
 
 class ConversationGoal(StrEnum):
@@ -43,10 +50,17 @@ class ConversationGoal(StrEnum):
     EDUCATE = "educate"
     ENTERTAIN = "entertain"
     EXPLORE_IDEAS = "explore_ideas"
+    EMOTIONAL_RELEASE = "emotional_release"
+    SEEK_VALIDATION = "seek_validation"
+    DISPLAY_STATUS = "display_status"
+    RECONCILE = "reconcile"
+    AVOID_ENGAGE = "avoid_engage"
+    COMMISERATE = "commiserate"
 
 
 class Verbosity(StrEnum):
     """Response length target"""
+    MINIMAL = "minimal"      # Single-word/phrase acknowledgment
     BRIEF = "brief"          # 1-2 sentences
     MEDIUM = "medium"        # 3-5 sentences
     DETAILED = "detailed"    # 6+ sentences
@@ -54,10 +68,15 @@ class Verbosity(StrEnum):
 
 class UncertaintyAction(StrEnum):
     """How to handle uncertainty"""
-    ANSWER = "answer"                    # Provide confident answer
-    HEDGE = "hedge"                      # Answer with hedging language
-    ASK_CLARIFYING = "ask_clarifying"   # Ask for more info
-    REFUSE = "refuse"                    # Politely decline to answer
+    ANSWER = "answer"                                        # Provide confident answer
+    HEDGE = "hedge"                                          # Answer with hedging language
+    ASK_CLARIFYING = "ask_clarifying"                       # Ask for more info
+    REFUSE = "refuse"                                        # Politely decline to answer
+    SPECULATE_WITH_DISCLAIMER = "speculate_with_disclaimer"  # Guess openly with disclaimer
+    DEFER_TO_AUTHORITY = "defer_to_authority"                # Redirect to expert
+    REFRAME_QUESTION = "reframe_question"                    # Challenge the premise
+    OFFER_PARTIAL = "offer_partial"                          # Share reliable subset
+    ACKNOWLEDGE_AND_REDIRECT = "acknowledge_and_redirect"    # Pivot to adjacent knowledge
 
 
 class KnowledgeClaimType(StrEnum):
@@ -67,6 +86,11 @@ class KnowledgeClaimType(StrEnum):
     DOMAIN_EXPERT = "domain_expert"
     SPECULATIVE = "speculative"
     NONE = "none"  # No knowledge claim (e.g., just asking questions)
+    ANECDOTAL = "anecdotal"                      # Second-hand experience
+    ACADEMIC_CITED = "academic_cited"            # Reference to research/publications
+    INFERENTIAL = "inferential"                  # Logical deduction from known facts
+    HYPOTHETICAL = "hypothetical"                # Counterfactual if...then reasoning
+    RECEIVED_WISDOM = "received_wisdom"          # Folk wisdom, cultural truisms
 
 
 class Tone(StrEnum):
@@ -74,11 +98,14 @@ class Tone(StrEnum):
     # Positive valence, high arousal
     WARM_ENTHUSIASTIC = "warm_enthusiastic"
     EXCITED_ENGAGED = "excited_engaged"
+    EAGER_ANTICIPATORY = "eager_anticipatory"
 
     # Positive valence, moderate arousal
     THOUGHTFUL_ENGAGED = "thoughtful_engaged"
     WARM_CONFIDENT = "warm_confident"
     FRIENDLY_RELAXED = "friendly_relaxed"
+    AMUSED_PLAYFUL = "amused_playful"
+    CURIOUS_INTRIGUED = "curious_intrigued"
 
     # Positive valence, low arousal
     CONTENT_CALM = "content_calm"
@@ -89,6 +116,9 @@ class Tone(StrEnum):
     PROFESSIONAL_COMPOSED = "professional_composed"
     MATTER_OF_FACT = "matter_of_fact"
 
+    # Neutral valence, high arousal
+    SURPRISED_CAUGHT_OFF_GUARD = "surprised_caught_off_guard"
+
     # Negative valence, high arousal
     FRUSTRATED_TENSE = "frustrated_tense"
     ANXIOUS_STRESSED = "anxious_stressed"
@@ -97,10 +127,17 @@ class Tone(StrEnum):
     # Negative valence, moderate arousal
     CONCERNED_EMPATHETIC = "concerned_empathetic"
     DISAPPOINTED_RESIGNED = "disappointed_resigned"
+    CONTEMPTUOUS_DISMISSIVE = "contemptuous_dismissive"
+    CONFUSED_UNCERTAIN = "confused_uncertain"
+    GUARDED_WARY = "guarded_wary"
 
     # Negative valence, low arousal
     SAD_SUBDUED = "sad_subdued"
     TIRED_WITHDRAWN = "tired_withdrawn"
+    GRIEVING_SORROWFUL = "grieving_sorrowful"
+
+    # Mixed/bittersweet valence, low arousal
+    NOSTALGIC_WISTFUL = "nostalgic_wistful"
 
 
 # ============================================================================

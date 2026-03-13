@@ -74,7 +74,9 @@ class TraitInterpreter:
         adjusted = base_verbosity + (self.traits.conscientiousness - 0.5) * 0.2
         adjusted = max(0.0, min(1.0, adjusted))
 
-        if adjusted < 0.35:
+        if adjusted < 0.15:
+            return Verbosity.MINIMAL
+        elif adjusted < 0.35:
             return Verbosity.BRIEF
         elif adjusted < 0.65:
             return Verbosity.MEDIUM
@@ -226,24 +228,50 @@ class TraitInterpreter:
         # Map to tone based on valence + arousal
         if mood_valence > 0.3:  # Positive
             if mood_arousal > 0.7:
+                # High openness + high extraversion = eager anticipation
+                if self.traits.openness > 0.65 and self.traits.extraversion > 0.6:
+                    return Tone.EAGER_ANTICIPATORY
                 return Tone.EXCITED_ENGAGED if e_bonus > 0 else Tone.WARM_ENTHUSIASTIC
             elif mood_arousal > 0.4:
+                # High extraversion + low neuroticism = amused/playful
+                if self.traits.extraversion > 0.65 and self.traits.neuroticism < 0.35:
+                    return Tone.AMUSED_PLAYFUL
+                # High openness + moderate extraversion = curious/intrigued
+                if self.traits.openness > 0.7 and self.traits.extraversion > 0.4:
+                    return Tone.CURIOUS_INTRIGUED
                 return Tone.THOUGHTFUL_ENGAGED if self.traits.openness > 0.6 else Tone.WARM_CONFIDENT
             else:
+                # Nostalgia on positive+low arousal when neurotic+open
+                if self.traits.neuroticism > 0.5 and self.traits.openness > 0.6:
+                    return Tone.NOSTALGIC_WISTFUL
                 return Tone.CONTENT_CALM
 
         elif mood_valence > -0.3:  # Neutral
-            if mood_arousal > 0.5:
+            if mood_arousal > 0.7:
+                return Tone.SURPRISED_CAUGHT_OFF_GUARD
+            elif mood_arousal > 0.5:
                 return Tone.PROFESSIONAL_COMPOSED
             else:
                 return Tone.NEUTRAL_CALM
 
         else:  # Negative
             if mood_arousal > 0.6:
+                # Low agreeableness = contempt instead of frustration
+                if self.traits.agreeableness < 0.3:
+                    return Tone.CONTEMPTUOUS_DISMISSIVE
                 return Tone.FRUSTRATED_TENSE
             elif mood_arousal > 0.3:
+                # High neuroticism + low conscientiousness = confused
+                if self.traits.neuroticism > 0.55 and self.traits.conscientiousness < 0.4:
+                    return Tone.CONFUSED_UNCERTAIN
+                # Low extraversion + moderate neuroticism = guarded
+                if self.traits.extraversion < 0.35 and self.traits.neuroticism > 0.45:
+                    return Tone.GUARDED_WARY
                 return Tone.DISAPPOINTED_RESIGNED
             else:
+                # Very high neuroticism = deep grief
+                if self.traits.neuroticism > 0.7:
+                    return Tone.GRIEVING_SORROWFUL
                 return Tone.SAD_SUBDUED
 
     def get_confidence_modifier(self, domain_proficiency: float) -> float:

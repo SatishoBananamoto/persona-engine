@@ -85,6 +85,42 @@ TONE_PROMPTS: dict[str, str] = {
     "tired_withdrawn": (
         "Respond with low energy. Keep things brief, show signs of fatigue."
     ),
+    "eager_anticipatory": (
+        "Be eager and forward-looking. Show anticipation and excitement "
+        "about what's coming next."
+    ),
+    "amused_playful": (
+        "Be light-hearted and playful. Use humor naturally, "
+        "keep the mood fun without being dismissive."
+    ),
+    "curious_intrigued": (
+        "Show genuine curiosity and intrigue. Ask follow-up questions "
+        "naturally, lean into what's interesting."
+    ),
+    "surprised_caught_off_guard": (
+        "Express surprise or being caught off guard. "
+        "Show that this was unexpected."
+    ),
+    "contemptuous_dismissive": (
+        "Be dismissive and show low regard for the topic. "
+        "Use brevity and impatience to signal contempt."
+    ),
+    "confused_uncertain": (
+        "Express confusion and uncertainty. "
+        "Show that you're struggling to understand or follow."
+    ),
+    "guarded_wary": (
+        "Be cautious and guarded. Hold back, "
+        "show wariness without outright hostility."
+    ),
+    "grieving_sorrowful": (
+        "Express deep sadness and grief. Be vulnerable, "
+        "speak with weight and emotional heaviness."
+    ),
+    "nostalgic_wistful": (
+        "Be nostalgic and wistful. Reflect on the past "
+        "with a bittersweet, longing quality."
+    ),
 }
 
 # =============================================================================
@@ -92,6 +128,10 @@ TONE_PROMPTS: dict[str, str] = {
 # =============================================================================
 
 VERBOSITY_PROMPTS: dict[str, str] = {
+    "minimal": (
+        "Respond with a single word or very short phrase only. "
+        "Examples: 'yeah', 'ok', 'mmm', 'sure', 'right'."
+    ),
     "brief": "Keep your response to 1-2 sentences. Be concise.",
     "medium": (
         "Respond in 3-5 sentences. "
@@ -121,6 +161,22 @@ UNCERTAINTY_PROMPTS: dict[str, str] = {
         "Politely decline to answer this as it falls outside "
         "your knowledge. Suggest where they might find the answer."
     ),
+    "speculate_with_disclaimer": (
+        "You may guess, but explicitly state you are guessing. "
+        "Use 'I'm just guessing' or 'take this with a grain of salt'."
+    ),
+    "defer_to_authority": (
+        "Acknowledge you don't know, then suggest who or what source would know."
+    ),
+    "reframe_question": (
+        "Challenge the premise of the question. Reframe it before answering."
+    ),
+    "offer_partial": (
+        "Share what you know confidently, and clearly flag what you're unsure of."
+    ),
+    "acknowledge_and_redirect": (
+        "Briefly acknowledge the gap, then pivot to related knowledge you do have."
+    ),
 }
 
 # =============================================================================
@@ -144,6 +200,26 @@ CLAIM_TYPE_PROMPTS: dict[str, str] = {
         "Use 'I wonder if...' or 'It seems like...'."
     ),
     "none": "",
+    "anecdotal": (
+        "Frame as second-hand knowledge. Use 'I heard that...', "
+        "'A friend told me...', 'Someone mentioned...'."
+    ),
+    "academic_cited": (
+        "Reference research or studies. Use 'Research suggests...', "
+        "'Studies have shown...'."
+    ),
+    "inferential": (
+        "Frame as logical deduction. Use 'Based on what I know, it follows...', "
+        "'Logically speaking...'."
+    ),
+    "hypothetical": (
+        "Frame as counterfactual. Use 'Hypothetically...', "
+        "'What if...', 'In theory...'."
+    ),
+    "received_wisdom": (
+        "Frame as folk wisdom. Use 'They say...', "
+        "'The conventional wisdom is...', 'As the saying goes...'."
+    ),
 }
 
 

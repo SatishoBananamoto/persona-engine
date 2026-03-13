@@ -230,9 +230,10 @@ class TestInfluencesVerbosity:
     def test_clamped_to_zero(self):
         # Very low base, very low C
         # base=0.0, C=0.0: adjusted = 0.0 + (0-0.5)*0.2 = -0.1 -> clamped to 0
+        # With MINIMAL threshold at 0.15, adjusted=0.0 -> MINIMAL
         interp = make_interpreter(conscientiousness=0.0)
         result = interp.influences_verbosity(0.0)
-        assert result == Verbosity.BRIEF
+        assert result == Verbosity.MINIMAL
 
     def test_clamped_to_one(self):
         # Very high base, very high C
@@ -592,8 +593,8 @@ class TestGetToneFromMood:
         result = interp.get_tone_from_mood(
             mood_valence=0.0, mood_arousal=0.8, stress=0.6
         )
-        # valence=0 is neutral, arousal>0.5 -> PROFESSIONAL_COMPOSED
-        assert result == Tone.PROFESSIONAL_COMPOSED
+        # valence=0 is neutral, arousal>0.7 -> SURPRISED_CAUGHT_OFF_GUARD
+        assert result == Tone.SURPRISED_CAUGHT_OFF_GUARD
 
     def test_neuroticism_boundary_not_triggered(self):
         """N=0.6 (NOT >0.6) should NOT enter the stress branch."""
@@ -601,7 +602,8 @@ class TestGetToneFromMood:
         result = interp.get_tone_from_mood(
             mood_valence=0.0, mood_arousal=0.8, stress=0.8
         )
-        assert result == Tone.PROFESSIONAL_COMPOSED
+        # valence=0 is neutral, arousal>0.7 -> SURPRISED_CAUGHT_OFF_GUARD
+        assert result == Tone.SURPRISED_CAUGHT_OFF_GUARD
 
     def test_stressed_arousal_boundary(self):
         """stress>0.6, N>0.6, arousal=0.6 (NOT >0.6) -> CONCERNED_EMPATHETIC"""
@@ -638,8 +640,10 @@ class TestGetToneFromMood:
         assert result == Tone.WARM_ENTHUSIASTIC
 
     def test_thoughtful_engaged(self):
-        """valence>0.3, 0.4<arousal<=0.7, O>0.6 -> THOUGHTFUL_ENGAGED"""
-        interp = make_interpreter(openness=0.8, neuroticism=0.2)
+        """valence>0.3, 0.4<arousal<=0.7, O>0.6 -> THOUGHTFUL_ENGAGED
+        But with O>0.7 and E>0.4 (default E=0.5), CURIOUS_INTRIGUED takes precedence.
+        Use O=0.65 and low E to get THOUGHTFUL_ENGAGED."""
+        interp = make_interpreter(openness=0.65, extraversion=0.3, neuroticism=0.2)
         result = interp.get_tone_from_mood(
             mood_valence=0.5, mood_arousal=0.6, stress=0.2
         )
@@ -678,12 +682,13 @@ class TestGetToneFromMood:
         assert result == Tone.CONTENT_CALM
 
     def test_positive_arousal_boundary_at_07(self):
-        """arousal=0.7 (NOT >0.7) falls to 'arousal > 0.4' branch"""
+        """arousal=0.7 (NOT >0.7) falls to 'arousal > 0.4' branch.
+        With O>0.7 and E>0.4 (default E=0.5), CURIOUS_INTRIGUED takes precedence."""
         interp = make_interpreter(openness=0.8, neuroticism=0.2)
         result = interp.get_tone_from_mood(
             mood_valence=0.5, mood_arousal=0.7, stress=0.2
         )
-        assert result == Tone.THOUGHTFUL_ENGAGED
+        assert result == Tone.CURIOUS_INTRIGUED
 
     def test_positive_valence_boundary(self):
         """valence=0.3 (NOT >0.3) falls to neutral branch"""

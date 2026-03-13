@@ -34,6 +34,7 @@ class StyleModulator:
     
     # Verbosity targets (sentence counts)
     VERBOSITY_TARGETS = {
+        Verbosity.MINIMAL: (0, 0),
         Verbosity.BRIEF: (1, 2),
         Verbosity.MEDIUM: (3, 5),
         Verbosity.DETAILED: (6, 15),
@@ -57,6 +58,12 @@ class StyleModulator:
             Adjusted text (or original if within range)
         """
         sentences = self._split_sentences(text)
+        # MINIMAL: keep only first few words, not sentence-based
+        if target == Verbosity.MINIMAL:
+            words = text.strip().split()
+            if strict and len(words) > 3:
+                return " ".join(words[:3])
+            return text
         min_sentences, max_sentences = self.VERBOSITY_TARGETS[target]
         
         if len(sentences) < min_sentences:
@@ -216,7 +223,52 @@ class StyleModulator:
                     actual="Contains strong assertions without hedging",
                     severity="warning"
                 ))
-        
+
+        # ANECDOTAL should use second-hand markers
+        if claim_type == KnowledgeClaimType.ANECDOTAL:
+            anecdotal_markers = [
+                "i heard", "someone told me", "a friend", "they say",
+                "apparently", "supposedly", "i was told",
+            ]
+            has_marker = any(phrase in text_lower for phrase in anecdotal_markers)
+            if not has_marker and has_strong:
+                violations.append(ConstraintViolation(
+                    constraint="knowledge_claim",
+                    expected="Anecdotal claim should use second-hand language",
+                    actual="Contains strong assertions without anecdotal markers",
+                    severity="warning"
+                ))
+
+        # HYPOTHETICAL should use conditional language
+        if claim_type == KnowledgeClaimType.HYPOTHETICAL:
+            conditional_markers = [
+                "if ", "hypothetically", "in theory", "what if",
+                "suppose", "assuming", "would ", "could ",
+            ]
+            has_conditional = any(phrase in text_lower for phrase in conditional_markers)
+            if not has_conditional:
+                violations.append(ConstraintViolation(
+                    constraint="knowledge_claim",
+                    expected="Hypothetical claim should use conditional language",
+                    actual="Missing conditional/hypothetical framing",
+                    severity="warning"
+                ))
+
+        # ACADEMIC_CITED should have research markers
+        if claim_type == KnowledgeClaimType.ACADEMIC_CITED:
+            research_markers = [
+                "research", "study", "studies", "published",
+                "according to", "evidence suggests", "findings",
+            ]
+            has_research = any(phrase in text_lower for phrase in research_markers)
+            if not has_research:
+                violations.append(ConstraintViolation(
+                    constraint="knowledge_claim",
+                    expected="Academic cited claim should reference research",
+                    actual="No research-related language found",
+                    severity="warning"
+                ))
+
         return violations
     
     def get_sentence_count(self, text: str) -> int:

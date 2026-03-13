@@ -53,6 +53,34 @@ def analyze_intent(
             InteractionMode.DEBATE: ["debate", "disagree", "argue", "counter", "wrong"],
             InteractionMode.COACHING: ["coach", "guidance", "advice", "mentor", "grow"],
             InteractionMode.BRAINSTORM: ["brainstorm", "ideas", "creative", "explore"],
+            InteractionMode.THERAPY_COUNSELING: [
+                "therapy", "therapist", "counseling", "counselor",
+                "mental health", "coping", "trauma",
+            ],
+            InteractionMode.NEGOTIATION: [
+                "negotiate", "negotiation", "deal", "compromise",
+                "terms", "bargain", "trade-off",
+            ],
+            InteractionMode.STORYTELLING: [
+                "story", "tell me about", "once upon", "narrative",
+                "what happened", "recount",
+            ],
+            InteractionMode.VENTING: [
+                "vent", "venting", "fed up", "so frustrated",
+                "can't stand", "sick of", "hate this",
+            ],
+            InteractionMode.TEACHING: [
+                "teach me", "lesson", "tutorial", "step by step",
+                "walk me through", "show me how",
+            ],
+            InteractionMode.MEDIATION: [
+                "mediate", "mediation", "mediator",
+                "both sides", "conflict resolution", "middle ground",
+            ],
+            InteractionMode.CONFESSION: [
+                "confess", "confession", "admit", "guilty",
+                "i did something", "i need to tell you",
+            ],
         }
 
         # Check in deterministic order (enum definition order)
@@ -111,6 +139,48 @@ def analyze_intent(
         # Exploration
         elif any(word in user_lower for word in ["explore", "consider", "discuss", "talk about"]):
             goal = ConversationGoal.EXPLORE_IDEAS
+
+        # Emotional release / venting
+        elif any(word in user_lower for word in [
+            "so frustrated", "can't take", "need to vent",
+            "get this off my chest",
+        ]):
+            goal = ConversationGoal.EMOTIONAL_RELEASE
+
+        # Seek validation
+        elif any(word in user_lower for word in [
+            "am i right", "do you agree", "validate",
+            "don't you think", "back me up",
+        ]):
+            goal = ConversationGoal.SEEK_VALIDATION
+
+        # Display status
+        elif any(word in user_lower for word in [
+            "i achieved", "my accomplishment", "i was promoted",
+            "credential", "published",
+        ]):
+            goal = ConversationGoal.DISPLAY_STATUS
+
+        # Reconcile
+        elif any(word in user_lower for word in [
+            "make up", "reconcile", "patch things up",
+            "apologize", "forgive", "mend",
+        ]):
+            goal = ConversationGoal.RECONCILE
+
+        # Avoid engagement
+        elif any(word in user_lower for word in [
+            "don't want to talk", "drop it", "change the subject",
+            "rather not", "let's not", "not going there",
+        ]):
+            goal = ConversationGoal.AVOID_ENGAGE
+
+        # Commiserate
+        elif any(word in user_lower for word in [
+            "same here", "i know right", "we've all been there",
+            "join the club", "you too huh",
+        ]):
+            goal = ConversationGoal.COMMISERATE
 
         else:
             goal = ConversationGoal.BUILD_RAPPORT  # Default

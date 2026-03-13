@@ -187,7 +187,7 @@ Generate your response now:
             Tone.SATISFIED_PEACEFUL: "satisfied and peaceful",
             Tone.NEUTRAL_CALM: "neutral and calm",
             Tone.PROFESSIONAL_COMPOSED: "professional and composed",
-            Tone.MATTER_OF_FACT: "matter of fact",
+            Tone.MATTER_OF_FACT: "matter-of-fact and straightforward",
             Tone.FRUSTRATED_TENSE: "frustrated and tense",
             Tone.ANXIOUS_STRESSED: "anxious and stressed",
             Tone.DEFENSIVE_AGITATED: "defensive and agitated",
@@ -195,12 +195,23 @@ Generate your response now:
             Tone.DISAPPOINTED_RESIGNED: "disappointed and resigned",
             Tone.SAD_SUBDUED: "sad and subdued",
             Tone.TIRED_WITHDRAWN: "tired and withdrawn",
+            Tone.EAGER_ANTICIPATORY: "eager and anticipatory",
+            Tone.AMUSED_PLAYFUL: "amused and playful",
+            Tone.CURIOUS_INTRIGUED: "curious and intrigued",
+            Tone.SURPRISED_CAUGHT_OFF_GUARD: "surprised and caught off guard",
+            Tone.CONTEMPTUOUS_DISMISSIVE: "contemptuous and dismissive",
+            Tone.CONFUSED_UNCERTAIN: "confused and uncertain",
+            Tone.GUARDED_WARY: "guarded and wary",
+            Tone.GRIEVING_SORROWFUL: "grieving and deeply sorrowful",
+            Tone.NOSTALGIC_WISTFUL: "nostalgic and wistful",
         }
         return descriptions.get(tone, tone.value.replace("_", " "))
     
     def _format_verbosity(self, verbosity: Verbosity) -> str:
         """Format verbosity to sentence count guidance."""
-        if verbosity == Verbosity.BRIEF:
+        if verbosity == Verbosity.MINIMAL:
+            return "MINIMAL (single word or very short phrase only — e.g., 'yeah', 'ok', 'mmm')"
+        elif verbosity == Verbosity.BRIEF:
             return "BRIEF (1-2 sentences, concise)"
         elif verbosity == Verbosity.MEDIUM:
             return "MEDIUM (3-5 sentences, balanced)"
@@ -291,6 +302,21 @@ Generate your response now:
             KnowledgeClaimType.COMMON_KNOWLEDGE: "General awareness only - speak from common knowledge",
             KnowledgeClaimType.SPECULATIVE: "Limited knowledge - use 'I think', 'I'm not sure', hedge claims",
             KnowledgeClaimType.NONE: "No knowledge - defer to others or admit uncertainty",
+            KnowledgeClaimType.ANECDOTAL: (
+                "Second-hand knowledge - use 'I heard that', 'a friend told me', 'someone mentioned'"
+            ),
+            KnowledgeClaimType.ACADEMIC_CITED: (
+                "Can reference research or studies - use 'research suggests', 'studies have shown'"
+            ),
+            KnowledgeClaimType.INFERENTIAL: (
+                "Logical deduction - use 'based on what I know, it follows that', 'logically speaking'"
+            ),
+            KnowledgeClaimType.HYPOTHETICAL: (
+                "Counterfactual reasoning - use 'hypothetically', 'what if', 'in theory'. Not factual"
+            ),
+            KnowledgeClaimType.RECEIVED_WISDOM: (
+                "Folk wisdom or truisms - use 'they say', 'the conventional wisdom is', 'as the saying goes'"
+            ),
         }
         return descriptions.get(claim_type, claim_type.value)
     
@@ -302,6 +328,26 @@ Generate your response now:
             UncertaintyAction.HEDGE: "Use hedging language ('I think', 'perhaps')",
             UncertaintyAction.ASK_CLARIFYING: "Ask clarifying questions before answering",
             UncertaintyAction.REFUSE: "Politely decline to answer",
+            UncertaintyAction.SPECULATE_WITH_DISCLAIMER: (
+                "Speculate openly but EXPLICITLY state you are guessing. "
+                "Use 'I'm just guessing here' or 'Take this with a grain of salt'"
+            ),
+            UncertaintyAction.DEFER_TO_AUTHORITY: (
+                "Acknowledge you don't know, then suggest who or what source WOULD know. "
+                "Example: 'I'm not the best person to ask, but a specialist could help'"
+            ),
+            UncertaintyAction.REFRAME_QUESTION: (
+                "Challenge or reframe the question's premise before answering. "
+                "Example: 'I think the real question here is...' or 'That assumes X, but actually...'"
+            ),
+            UncertaintyAction.OFFER_PARTIAL: (
+                "Share the parts you ARE confident about, then clearly flag what you're unsure of. "
+                "Example: 'I can tell you X with confidence, but I'm less sure about Y'"
+            ),
+            UncertaintyAction.ACKNOWLEDGE_AND_REDIRECT: (
+                "Briefly acknowledge you can't fully answer, then pivot to related knowledge. "
+                "Example: 'I don't know much about X specifically, but in my experience with Y...'"
+            ),
         }
         return descriptions.get(action, action.value)
 

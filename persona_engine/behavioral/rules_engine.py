@@ -54,6 +54,13 @@ class BehavioralRulesEngine:
             InteractionMode.SURVEY: "default",
             InteractionMode.COACHING: "default",
             InteractionMode.DEBATE: "debate",
+            InteractionMode.THERAPY_COUNSELING: "default",
+            InteractionMode.NEGOTIATION: "at_work",
+            InteractionMode.STORYTELLING: "friend",
+            InteractionMode.VENTING: "friend",
+            InteractionMode.TEACHING: "at_work",
+            InteractionMode.MEDIATION: "default",
+            InteractionMode.CONFESSION: "friend",
         }
 
         role = mode_to_role.get(interaction_mode, "default")
