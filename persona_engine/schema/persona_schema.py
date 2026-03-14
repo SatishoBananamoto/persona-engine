@@ -326,6 +326,13 @@ class DisclosurePolicy(BaseModel):
     )
     bounds: tuple[float, float] = Field(default=(0.1, 0.9))
 
+    @field_validator("bounds")
+    @classmethod
+    def validate_bounds_order(cls, v: tuple[float, float]) -> tuple[float, float]:
+        if v[0] >= v[1]:
+            raise ValueError(f"bounds[0] ({v[0]}) must be less than bounds[1] ({v[1]})")
+        return v
+
 
 class DecisionPolicy(BaseModel):
     """Conditional decision rule"""

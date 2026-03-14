@@ -838,3 +838,90 @@ class TestStrictMode:
 
         # They should be different (different IR → different template output)
         assert resp_low.text != resp_high.text
+
+
+# =============================================================================
+# 8. LLM Adapter Error Handling (Phase B.1)
+# =============================================================================
+
+
+class TestLLMAdapterErrorHandling:
+    """Verify that LLM adapters produce typed exceptions, not raw crashes."""
+
+    def test_generation_adapter_empty_content_raises(self):
+        """AnthropicAdapter from generation module: empty content → LLMResponseError."""
+        from unittest.mock import MagicMock, patch
+        from persona_engine.generation.llm_adapter import AnthropicAdapter
+        from persona_engine.exceptions import LLMResponseError
+
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key"}):
+            adapter = AnthropicAdapter(api_key="test-key")
+
+        mock_client = MagicMock()
+        mock_message = MagicMock()
+        mock_message.content = []  # Empty content
+        mock_client.messages.create.return_value = mock_message
+        adapter._client = mock_client
+
+        with pytest.raises(LLMResponseError, match="empty response"):
+            adapter.generate("system", "user")
+
+    def test_generation_adapter_connection_error(self):
+        """AnthropicAdapter from generation module: connection error → LLMConnectionError."""
+        from unittest.mock import MagicMock
+        from persona_engine.generation.llm_adapter import AnthropicAdapter
+        from persona_engine.exceptions import LLMConnectionError
+
+        adapter = AnthropicAdapter(api_key="test-key")
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = ConnectionError("network down")
+        adapter._client = mock_client
+
+        with pytest.raises(LLMConnectionError, match="connection failed"):
+            adapter.generate("system", "user")
+
+    def test_generation_adapter_generic_error(self):
+        """AnthropicAdapter: unknown error → LLMResponseError."""
+        from unittest.mock import MagicMock
+        from persona_engine.generation.llm_adapter import AnthropicAdapter
+        from persona_engine.exceptions import LLMResponseError
+
+        adapter = AnthropicAdapter(api_key="test-key")
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = ValueError("bad value")
+        adapter._client = mock_client
+
+        with pytest.raises(LLMResponseError, match="ValueError"):
+            adapter.generate("system", "user")
+
+    def test_response_adapter_empty_content_raises(self):
+        """AnthropicAdapter from response module: empty content → LLMResponseError."""
+        from unittest.mock import MagicMock
+        from persona_engine.exceptions import LLMResponseError
+
+        adapter = AnthropicAdapter.__new__(AnthropicAdapter)
+        mock_client = MagicMock()
+        mock_message = MagicMock()
+        mock_message.content = []
+        mock_client.messages.create.return_value = mock_message
+        adapter._client = mock_client
+        adapter._model_id = "test"
+
+        with pytest.raises(LLMResponseError, match="empty response"):
+            adapter.generate("system", "user")
+
+    def test_openai_adapter_empty_choices_raises(self):
+        """OpenAIAdapter: empty choices → LLMResponseError."""
+        from unittest.mock import MagicMock
+        from persona_engine.generation.llm_adapter import OpenAIAdapter
+        from persona_engine.exceptions import LLMResponseError
+
+        adapter = OpenAIAdapter(api_key="test-key")
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.choices = []
+        mock_client.chat.completions.create.return_value = mock_response
+        adapter._client = mock_client
+
+        with pytest.raises(LLMResponseError, match="empty response"):
+            adapter.generate("system", "user")

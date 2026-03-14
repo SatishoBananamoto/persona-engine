@@ -59,11 +59,16 @@ def tokenize_with_ngrams(
         (tokens, ngrams) where tokens is the unigram list and ngrams
         is a set of bigram/trigram phrases joined by single spaces.
 
-    Deterministic: lowercase, strip punctuation, split on whitespace.
+    Deterministic: lowercase, strip control chars + punctuation, split on whitespace.
     """
+    # Strip control characters (null bytes, escape sequences) for safety
+    text = "".join(ch for ch in text if ord(ch) >= 32 or ch in ("\n", "\t"))
     text = text.lower()
+    # Strip non-word, non-space characters (punctuation, emoji, etc.)
     text = re.sub(r"[^\w\s]", " ", text)
-    tokens = [t.strip() for t in text.split() if t.strip()]
+    # Normalize unicode whitespace and collapse
+    text = re.sub(r"\s+", " ", text).strip()
+    tokens = [t for t in text.split() if t]
 
     ngrams: set[str] = set()
     for n in range(2, max_n + 1):

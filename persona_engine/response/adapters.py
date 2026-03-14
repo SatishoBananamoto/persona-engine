@@ -366,13 +366,26 @@ class AnthropicAdapter(LLMAdapter):
         max_tokens: int = 300,
         temperature: float = 0.7,
     ) -> GeneratedResponse:
-        message = self._client.messages.create(
-            model=self._model_id,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
+        from persona_engine.exceptions import LLMConnectionError, LLMResponseError
+
+        try:
+            message = self._client.messages.create(
+                model=self._model_id,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+        except Exception as e:
+            error_type = type(e).__name__
+            if any(kw in error_type.lower() for kw in ("connection", "timeout", "network")):
+                raise LLMConnectionError(f"Anthropic API connection failed: {e}") from e
+            if "rate" in error_type.lower() or "rate" in str(e).lower():
+                raise LLMConnectionError(f"Anthropic API rate limited: {e}") from e
+            raise LLMResponseError(f"Anthropic API error ({error_type}): {e}") from e
+
+        if not message.content:
+            raise LLMResponseError("Anthropic returned empty response (no content blocks)")
 
         text_block = message.content[0]
         text = text_block.text if hasattr(text_block, "text") else str(text_block)

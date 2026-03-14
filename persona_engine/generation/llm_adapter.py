@@ -14,6 +14,8 @@ import os
 from persona_engine.exceptions import (
     ConfigurationError,
     LLMAPIKeyError,
+    LLMConnectionError,
+    LLMResponseError,
 )
 
 if TYPE_CHECKING:
@@ -110,13 +112,26 @@ class AnthropicAdapter(BaseLLMAdapter):
         if conversation_history:
             messages.extend(conversation_history)
         messages.append({"role": "user", "content": user_prompt})
-        message = self.client.messages.create(
-            model=self.model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=system_prompt,
-            messages=messages,
-        )
+        try:
+            message = self.client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system=system_prompt,
+                messages=messages,
+            )
+        except Exception as e:
+            error_type = type(e).__name__
+            # Network, timeout, and rate limit errors
+            if any(keyword in error_type.lower() for keyword in ("connection", "timeout", "network")):
+                raise LLMConnectionError(f"Anthropic API connection failed: {e}") from e
+            if "rate" in error_type.lower() or "rate" in str(e).lower():
+                raise LLMConnectionError(f"Anthropic API rate limited: {e}") from e
+            raise LLMResponseError(f"Anthropic API error ({error_type}): {e}") from e
+
+        if not message.content:
+            raise LLMResponseError("Anthropic returned empty response (no content blocks)")
+
         text_block = message.content[0]
         return text_block.text if hasattr(text_block, "text") else str(text_block)
 
@@ -181,12 +196,24 @@ class OpenAIAdapter(BaseLLMAdapter):
         if conversation_history:
             messages.extend(conversation_history)
         messages.append({"role": "user", "content": user_prompt})
-        response = self.client.chat.completions.create(
-            model=self.model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            messages=messages,
-        )
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                messages=messages,
+            )
+        except Exception as e:
+            error_type = type(e).__name__
+            if any(keyword in error_type.lower() for keyword in ("connection", "timeout", "network")):
+                raise LLMConnectionError(f"OpenAI API connection failed: {e}") from e
+            if "rate" in error_type.lower() or "rate" in str(e).lower():
+                raise LLMConnectionError(f"OpenAI API rate limited: {e}") from e
+            raise LLMResponseError(f"OpenAI API error ({error_type}): {e}") from e
+
+        if not response.choices:
+            raise LLMResponseError("OpenAI returned empty response (no choices)")
+
         content = response.choices[0].message.content
         return content if content is not None else ""
 
