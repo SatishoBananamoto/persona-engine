@@ -233,8 +233,8 @@ class Citation(BaseModel):
     (tone, verbosity) field changes.
     """
 
-    source_type: Literal["base", "trait", "value", "goal", "rule", "state", "memory", "constraint", "cross_turn"] = Field(
-        description="What influenced this decision (added 'base' for initialization, 'constraint' for clamps, 'cross_turn' for inertia smoothing)"
+    source_type: Literal["base", "trait", "value", "goal", "rule", "state", "memory", "constraint", "cross_turn", "trait_interaction"] = Field(
+        description="What influenced this decision (added 'base' for initialization, 'constraint' for clamps, 'cross_turn' for inertia smoothing, 'trait_interaction' for emergent patterns)"
     )
 
     source_id: str = Field(

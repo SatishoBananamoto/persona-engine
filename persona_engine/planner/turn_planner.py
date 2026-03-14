@@ -31,6 +31,7 @@ from persona_engine.behavioral import (
     resolve_uncertainty_action,
     validate_stance_against_invariants,
 )
+from persona_engine.behavioral.trait_interactions import TraitInteractionEngine
 from persona_engine.memory import MemoryManager, StanceCache
 from persona_engine.planner.domain_detection import (
     compute_domain_adjacency,
@@ -178,6 +179,7 @@ class TurnPlanner:
 
         # Initialize all interpreters
         self.traits = TraitInterpreter(persona.psychology.big_five)
+        self.trait_interactions = TraitInteractionEngine(persona.psychology.big_five)
         self.values = ValuesInterpreter(persona.psychology.values)
         self.cognitive = CognitiveStyleInterpreter(persona.psychology.cognitive_style)
         self.state = StateManager(
@@ -476,13 +478,76 @@ class TurnPlanner:
         trait_guidance = self._compute_trait_guidance(ctx, context.user_input)
         cognitive_guidance = self._compute_cognitive_guidance(ctx)
 
+        # Phase R3: Trait interaction patterns (emergent effects)
+        interaction_effects = self.trait_interactions.detect_active_patterns(threshold=0.1)
+        interaction_modifiers = self.trait_interactions.get_aggregate_modifiers(threshold=0.1)
+
+        # Apply interaction modifiers to already-computed values
+        interaction_names = ", ".join(e.pattern_name for e in interaction_effects) if interaction_effects else ""
+        if interaction_modifiers:
+            for field_name in ("confidence", "elasticity"):
+                if field_name in interaction_modifiers:
+                    before_val = confidence if field_name == "confidence" else elasticity
+                    lo, hi = (0.1, 0.95) if field_name == "confidence" else (0.1, 0.9)
+                    new_val = max(lo, min(hi, before_val + interaction_modifiers[field_name]))
+                    if field_name == "confidence":
+                        confidence = new_val
+                    else:
+                        elasticity = new_val
+                    if abs(new_val - before_val) > 0.001:
+                        ctx.num(
+                            source_type="trait_interaction",
+                            source_id=f"{field_name}_modifier",
+                            target_field=f"response_structure.{field_name}",
+                            operation="add",
+                            before=before_val,
+                            after=new_val,
+                            effect=f"Trait interaction: {field_name} {interaction_modifiers[field_name]:+.3f}",
+                            weight=0.8,
+                            reason=interaction_names,
+                        )
+
+            # Apply to trait_guidance fields
+            if "hedging_level" in interaction_modifiers:
+                trait_guidance.hedging_level = min(1.0, trait_guidance.hedging_level + interaction_modifiers["hedging_level"])
+            if "enthusiasm_boost" in interaction_modifiers:
+                trait_guidance.enthusiasm_boost = max(0.0, trait_guidance.enthusiasm_boost + interaction_modifiers["enthusiasm_boost"])
+            if "negative_tone_bias" in interaction_modifiers:
+                trait_guidance.negative_tone_weight = min(1.0, trait_guidance.negative_tone_weight + interaction_modifiers["negative_tone_bias"])
+
+            # Add interaction prompt directives for strongly active patterns
+            for effect in interaction_effects:
+                if effect.activation_strength > 0.3:
+                    trait_guidance.prompt_directives.append(
+                        f"[{effect.pattern_name.replace('_', ' ').title()}] {effect.prompt_guidance}"
+                    )
+
         tone = self._select_tone(ctx, trait_guidance=trait_guidance)
-        verbosity = self._compute_verbosity(ctx)
+        verbosity = self._compute_verbosity(
+            ctx, verbosity_boost=interaction_modifiers.get("verbosity_boost", 0.0)
+        )
 
         # Communication style (+ cross-turn smoothing)
         formality, directness = self._compute_communication_style(
             context.interaction_mode, ctx, trait_guidance=trait_guidance
         )
+
+        # Phase R3: Apply interaction directness modifier after communication style
+        if "directness" in interaction_modifiers:
+            before_id = directness
+            directness = max(0.0, min(1.0, directness + interaction_modifiers["directness"]))
+            if abs(directness - before_id) > 0.001:
+                ctx.num(
+                    source_type="trait_interaction",
+                    source_id="directness_modifier",
+                    target_field="communication_style.directness",
+                    operation="add",
+                    before=before_id,
+                    after=directness,
+                    effect=f"Trait interaction: directness {interaction_modifiers['directness']:+.3f}",
+                    weight=0.8,
+                    reason=interaction_names,
+                )
         if self._prior_snapshot:
             before_f = formality
             formality = _smooth(self._prior_snapshot.formality, formality, PERSONALITY_FIELD_INERTIA)
@@ -1275,14 +1340,17 @@ class TurnPlanner:
 
     def _compute_verbosity(
         self,
-        ctx: "TraceContext"
+        ctx: "TraceContext",
+        verbosity_boost: float = 0.0,
     ) -> Verbosity:
         """
         Compute verbosity level.
 
         Base from traits, override by state (fatigue/engagement).
+        Phase R3: verbosity_boost from trait interactions shifts base.
         """
-        base_verbosity = self.persona.psychology.communication.verbosity
+        base_verbosity = self.persona.psychology.communication.verbosity + verbosity_boost
+        base_verbosity = max(0.0, min(1.0, base_verbosity))
         verbosity_enum = self.traits.influences_verbosity(base_verbosity)
 
         current = ctx.base_enum(
