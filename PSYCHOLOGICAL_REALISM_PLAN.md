@@ -1,7 +1,7 @@
 # Psychological Realism Plan: From 4/10 to 9/10
 
 **Created:** 2026-03-14
-**Updated:** 2026-03-14 (incorporated findings from personality science literature review)
+**Updated:** 2026-03-14 (incorporated findings from personality science, cognitive psychology, validation methods, and SOTA systems research)
 **Target:** Transform persona engine from "models personality mechanics" to "produces genuinely human-like, personality-differentiated conversational behavior"
 **Baseline:** Current rating 4/10 on psychological realism (per independent review)
 **Target Rating:** 9/10
@@ -28,6 +28,51 @@ This plan is grounded in specific findings from personality psychology research:
 4. **Situational strength** compresses trait expression: formal settings reduce personality differences; informal/ambiguous settings amplify them
 5. Function words (pronouns, articles, prepositions) are more diagnostic than content words because they are used unconsciously
 6. Neuroticism has NO significant relationship with any Schwartz value — it operates on emotional reactivity, not motivational priority
+
+**Psychometric Validation Benchmarks (from validation methods research):**
+1. Internal consistency: NEO-PI-R domain-level alpha .86-.92; BFI-2 alpha .80-.88. Our simulated personas should target alpha >= .70 when "interviewed" with personality questionnaire items
+2. Test-retest reliability: NEO-PI-R domain r = .66-.92; BFI-44 r = .69-.96. Same persona across sessions should correlate r >= .80 at domain level
+3. Convergent validity: BFI-2 self-peer agreement averages r = .56. Configured trait vs measured trait should target r >= .55
+4. Discriminant validity: BFI-2 cross-trait correlations average only r = .11. Cross-trait contamination should stay below r = .20
+5. PersonaLLM (NAACL 2024): LLM personas produced consistent BFI scores with large effect sizes (d >= 0.8); human judges perceived personality with ~80% accuracy
+6. Situational strength (meta-analysis k=301, N=25,670): strong situations reduce behavioral variance by ~23% compared to weak situations
+7. LIWC linguistic markers: observer-reported personality correlates at rho = .18-.39 (up to 38.5% variance explained) — since we explicitly configure personality, we should target these stronger effect sizes
+8. Between-persona differentiation should produce Cohen's d >= 0.3 per configured trait difference
+
+**State-of-the-Art Systems Findings:**
+1. **PERSONAGE** (Mairesse & Walker): 40+ controllable linguistic parameters mapped from Big Five. Two methods: hand-crafted rules vs trained selection models. Recognized 4/5 traits by human judges
+2. **Inworld AI**: Multi-model orchestration (separate emotion, dialogue, relation graphs). 19 discrete emotion labels. Emotional Fluidity slider. Dedicated Relation Graph for relationship tracking
+3. **Versu** (Evans & Short): Utility-based action selection. Social practice framework. Three content layers (genre, story, character). Emergent unscripted behavior from personality + utility interactions
+4. **PersonaLLM**: Linguistic personality patterns emerge naturally per trait without explicit rules. CV typically 5-20% across administrations
+5. **Character-LLM**: Training-based > prompt-only for consistency, but suffers hallucinated experiences
+6. **Persona Vectors** (2025): Personality traits encoded as linear directions in transformer activation space (layers 20-31)
+7. **Nature Machine Intelligence** (2025): 104 trait adjectives mapped to all 30 IPIP-NEO facets with 9 ordinal levels. Most granular personality control demonstrated
+
+**Key Gaps Identified by SOTA Analysis:**
+- G1: No cognitive appraisal for emotion generation (keywords → emotions, not goal/value evaluation → emotions)
+- G2: No facet-level Big Five sub-traits (30 IPIP-NEO facets)
+- G3: No dominance dimension in affect model (PAD uses 3D, we use 2D)
+- G4: No relationship model (every conversation starts fresh)
+- G5: Limited emotional vocabulary (16 tone entries vs Inworld's 19 discrete emotions)
+- G6: No autonomous goal pursuit (goals exist but persona never steers toward them)
+- G7: Value-stance alignment is a stub (`get_value_influence_on_stance()` returns 0.5 for all)
+- G8: No social practice/situational norms
+- G9: No psychometric-level consistency evaluation
+- G10: No emotional contagion from user state
+
+**Validation Test Framework Thresholds (from psychometric research):**
+
+| Test | Metric | Pass Threshold | Source |
+|------|--------|---------------|--------|
+| Internal consistency | Cronbach's alpha | >= .70 | NEO-PI-R/BFI standards |
+| Test-retest reliability | Pearson r | >= .80 (domain) | HEXACO-100, BFI |
+| Convergent validity | Pearson r | >= .55 | BFI-2 self-peer agreement |
+| Discriminant validity | Pearson r | < .20 | BFI-2 discriminant norms |
+| Between-persona differentiation | Cohen's d | >= 0.3 per trait | LIWC meta-analysis (observer) |
+| Questionnaire fidelity | Cohen's d | >= 0.8 | PersonaLLM findings |
+| Situational compression | Variance reduction | ~20-25% | Meta-analysis (k=301) |
+| Cross-topic consistency | Pearson r | >= .60 | ESM norms |
+| Style drift (unjustified) | sigma per field | < 0.15 | Existing threshold |
 
 ---
 
