@@ -510,6 +510,13 @@ class IntermediateRepresentation(BaseModel):
         "derived from trait and cognitive style guidance"
     )
 
+    # Personality-specific language directives (Phase R5)
+    personality_language: list[str] = Field(
+        default_factory=list,
+        description="LIWC-grounded linguistic marker directives for personality-"
+        "differentiated language generation"
+    )
+
     # Metadata
     turn_id: str | None = Field(
         default=None,

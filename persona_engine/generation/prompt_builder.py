@@ -173,6 +173,16 @@ TOPICS TO AVOID: {', '.join(safety.blocked_topics)}
                 prompt += f"{i}. {directive}\n"
             prompt += "\n"
 
+        # Personality-specific language directives (Phase R5)
+        personality_language = ir.personality_language
+        if personality_language:
+            prompt += """=== LANGUAGE STYLE (personality-grounded) ===
+
+"""
+            for directive in personality_language:
+                prompt += f"- {directive}\n"
+            prompt += "\n"
+
         prompt += """
 === GENERATION INSTRUCTIONS ===
 
@@ -183,6 +193,7 @@ TOPICS TO AVOID: {', '.join(safety.blocked_topics)}
 5. Stay consistent with YOUR STANCE if one is provided
 6. Never exceed the knowledge claim type (don't claim expertise if speculative)
 7. Follow the PERSONALITY-DRIVEN BEHAVIOR directives above (if any)
+8. Match the LANGUAGE STYLE directives for word choice and phrasing (if any)
 
 Generate your response now:
 """

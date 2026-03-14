@@ -35,6 +35,9 @@ from persona_engine.behavioral.emotional_appraisal import (
     appraise_event,
     detect_user_emotion,
 )
+from persona_engine.behavioral.linguistic_markers import (
+    build_personality_language_directives,
+)
 from persona_engine.behavioral.trait_interactions import TraitInteractionEngine
 from persona_engine.memory import MemoryManager, StanceCache
 from persona_engine.planner.domain_detection import (
@@ -822,6 +825,29 @@ class TurnPlanner:
         if cognitive_guidance:
             behavioral_directives.extend(cognitive_guidance.prompt_directives)
 
+        # Phase R5: Personality-specific language directives (LIWC-grounded)
+        current_mood = self.state.get_mood()
+        linguistic_profile = build_personality_language_directives(
+            traits=self.persona.psychology.big_five,
+            determinism=self.determinism,
+            mood_valence=current_mood[0],
+            mood_arousal=current_mood[1],
+            interaction_formality=formality,
+        )
+        personality_language: list[str] = []
+        personality_language.extend(linguistic_profile.personality_directives)
+        personality_language.extend(linguistic_profile.marker_directives)
+        if linguistic_profile.emotional_coloring:
+            personality_language.append(linguistic_profile.emotional_coloring)
+
+        if personality_language:
+            ctx.add_basic_citation(
+                source_type="trait",
+                source_id="linguistic_markers",
+                effect=f"Phase R5: {len(personality_language)} personality language directives",
+                weight=0.6,
+            )
+
         # Assemble IR
         ir = IntermediateRepresentation(
             conversation_frame=ConversationFrame(
@@ -858,6 +884,7 @@ class TurnPlanner:
             safety_plan=ctx.safety_plan,
             memory_ops=memory_ops,
             behavioral_directives=behavioral_directives,
+            personality_language=personality_language,
             turn_id=f"{context.conversation_id}_turn_{context.turn_number}",
             seed=turn_seed,
         )

@@ -6,6 +6,10 @@ Generates persona stance on topics with built-in safety:
 - Experts can make informed assertions
 - All stance generation is value-driven
 
+Phase R5: Composable stance generation — same value, different personality
+expression. Two personas who both value benevolence but differ on O/N/cognitive
+style will produce fundamentally different stance expressions.
+
 This is a P1 critical component that prevents non-experts from
 making authoritative claims about topics outside their proficiency.
 """
@@ -13,7 +17,7 @@ making authoritative claims about topics outside their proficiency.
 from persona_engine.behavioral.cognitive_interpreter import CognitiveStyleInterpreter
 from persona_engine.behavioral.values_interpreter import ValuesInterpreter
 from persona_engine.planner.trace_context import TraceContext
-from persona_engine.schema.persona_schema import Persona
+from persona_engine.schema.persona_schema import BigFiveTraits, Persona
 
 
 def generate_stance_safe(
@@ -87,13 +91,16 @@ def generate_stance_safe(
     # GUARDRAIL: Expert vs Opinion Mode
     # ========================================================================
 
+    traits = persona.psychology.big_five
+
     if expert_allowed:
         # Expert can make informed assertions
         stance = _generate_expert_stance(
             primary_value=primary_value,
             proficiency=proficiency,
             nuance_capacity=nuance_capacity,
-            user_input=user_input
+            user_input=user_input,
+            traits=traits,
         )
 
         rationale = f"Informed view based on {proficiency:.2f} proficiency + {primary_value} value priority"
@@ -118,7 +125,8 @@ def generate_stance_safe(
             primary_strength=primary_strength,
             nuance_capacity=nuance_capacity,
             proficiency=proficiency,
-            user_input=user_input
+            user_input=user_input,
+            traits=traits,
         )
 
         rationale = f"Personal perspective based on {primary_value} value (strength {primary_strength:.2f})"
@@ -169,13 +177,20 @@ def _generate_opinion_stance(
     primary_strength: float,
     nuance_capacity: float,
     proficiency: float,
-    user_input: str
+    user_input: str,
+    traits: BigFiveTraits | None = None,
 ) -> str:
     """
     Generate value-driven OPINION (not factual claim).
 
-    Templates are explicitly subjective to prevent non-experts
-    from sounding authoritative.
+    Phase R5: Composable stance — same value produces different expression
+    based on personality traits:
+    - High-O: exploratory, analogical framing
+    - Low-O: concrete, practical framing
+    - High-N: cautious, hedged framing
+    - Low-N: confident, steady framing
+    - High-A: accommodating, empathetic framing
+    - Low-A: assertive, direct framing
     """
 
     # Value-based opinion templates (subjective phrasing)
@@ -196,6 +211,10 @@ def _generate_opinion_stance(
         primary_value,
         "I have mixed feelings about this"
     )
+
+    # Phase R5: Personality-composable stance modulation
+    if traits is not None:
+        base_stance = _modulate_stance_by_personality(base_stance, traits)
 
     # Adjust based on nuance capacity
     if nuance_capacity > 0.7:
@@ -243,13 +262,15 @@ def _generate_expert_stance(
     primary_value: str,
     proficiency: float,
     nuance_capacity: float,
-    user_input: str
+    user_input: str,
+    traits: BigFiveTraits | None = None,
 ) -> str:
     """
     Generate expert stance (can include informed assertions).
 
     Still values-informed but can make factual claims based on expertise.
     Uses user_input to make stance topic-specific rather than generic.
+    Phase R5: Personality modulation of expert expression style.
     """
     topic_hint = _extract_topic_hint(user_input)
 
@@ -273,8 +294,49 @@ def _generate_expert_stance(
     else:
         stance = f"I'd approach {topic_hint or 'this'} with {primary_value} in mind, though context matters significantly"
 
+    # Phase R5: Personality-composable expert stance modulation
+    if traits is not None:
+        stance = _modulate_stance_by_personality(stance, traits)
+
     # Add nuance for high cognitive complexity
     if nuance_capacity > 0.7:
         stance += ". That said, there are important tradeoffs to consider"
+
+    return stance
+
+
+def _modulate_stance_by_personality(stance: str, traits: BigFiveTraits) -> str:
+    """Modulate a base stance expression based on personality traits.
+
+    Same value → different voice depending on who's speaking.
+    Uses the most dominant trait deviation from midpoint.
+    """
+    # Find strongest trait deviations (only modulate for clearly non-neutral traits)
+    modulations: list[str] = []
+
+    # High-N: cautious, hedged expression
+    if traits.neuroticism > 0.65:
+        modulations.append(
+            "I worry that we might not be considering all the risks, but "
+        )
+    # Low-N + high assertiveness: confident framing
+    elif traits.neuroticism < 0.25 and traits.agreeableness < 0.4:
+        modulations.append("Let me be clear: ")
+
+    # High-O: exploratory framing (only if N didn't already prefix)
+    if traits.openness > 0.7 and not modulations:
+        modulations.append(
+            "Looking at this from a broader perspective, "
+        )
+
+    # Apply prefix modulation (at most one)
+    if modulations:
+        prefix = modulations[0]
+        # Lowercase the start of the base stance since we're adding a prefix
+        stance = prefix + stance[0].lower() + stance[1:]
+
+    # High-A: add empathetic acknowledgment suffix
+    if traits.agreeableness > 0.75:
+        stance += " — and I understand others may see this differently"
 
     return stance
