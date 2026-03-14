@@ -31,6 +31,10 @@ from persona_engine.behavioral import (
     resolve_uncertainty_action,
     validate_stance_against_invariants,
 )
+from persona_engine.behavioral.emotional_appraisal import (
+    appraise_event,
+    detect_user_emotion,
+)
 from persona_engine.behavioral.trait_interactions import TraitInteractionEngine
 from persona_engine.memory import MemoryManager, StanceCache
 from persona_engine.planner.domain_detection import (
@@ -472,6 +476,26 @@ class TurnPlanner:
                     effect=f"Cross-turn inertia: {before_comp:.3f} → {competence:.3f} (prev={self._prior_snapshot.competence:.3f})",
                     weight=0.7,
                     reason=f"inertia={CROSS_TURN_INERTIA}",
+                )
+
+        # Phase R4: Emotional appraisal — personality-dependent mood update
+        user_emotion = detect_user_emotion(context.user_input)
+        # Only trigger appraisal when emotional signal is clear (>0.25 total)
+        if sum(user_emotion.values()) > 0.25:
+            appraisal = appraise_event(
+                user_emotion, self.persona.psychology.big_five, self.state.get_stress()
+            )
+            if abs(appraisal.valence_delta) > 0.01 or abs(appraisal.arousal_delta) > 0.01:
+                self.state.update_mood_from_event(appraisal.valence_delta, appraisal.arousal_delta)
+                ctx.add_basic_citation(
+                    source_type="state",
+                    source_id="emotional_appraisal",
+                    effect=(
+                        f"Appraisal ({appraisal.dominant_emotion}): "
+                        f"valence {appraisal.valence_delta:+.3f}, "
+                        f"arousal {appraisal.arousal_delta:+.3f}"
+                    ),
+                    weight=0.7,
                 )
 
         # Trait & cognitive guidance (Phase R1: activate dead psychology)
