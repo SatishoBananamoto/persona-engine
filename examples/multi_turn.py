@@ -1,34 +1,46 @@
+#!/usr/bin/env python3
+"""Multi-Turn Conversation — Showing memory and state across turns.
+
+Demonstrates the Conversation wrapper and how the engine tracks
+facts, preferences, and relationship signals over multiple turns.
 """
-Multi-Turn Conversation — 10 turns showing personality consistency.
 
-Demonstrates that the persona maintains consistent behavior across
-multiple turns, with memory and cross-turn validation active.
-"""
+from persona_engine import PersonaEngine, Conversation
 
-from persona_engine import PersonaEngine
+engine = PersonaEngine.from_yaml("personas/ux_researcher.yaml", llm_provider="mock")
+convo = Conversation(engine, metadata={"experiment": "multi_turn_demo"})
 
-engine = PersonaEngine.from_yaml("personas/physicist.yaml", llm_provider="mock")
-
+# Send a sequence of messages — each turn builds on prior context
 messages = [
-    "What's your area of research?",
-    "That sounds fascinating. Can you explain it simply?",
-    "What got you interested in physics?",
-    "Do you think AI will change physics research?",
-    "What's the biggest unsolved problem in your field?",
-    "Have you published any papers recently?",
-    "What do you do outside of work?",
-    "Do you think physics is getting harder to do?",
-    "What advice would you give a physics student?",
-    "Thanks for chatting! Any final thoughts?",
+    "Hi! I'm working on a mobile banking app redesign.",
+    "We're seeing a 40% drop-off at the onboarding screen.",
+    "What research methods would you recommend?",
+    "Good ideas. We have a tight budget though.",
+    "Thanks, that's really helpful!",
 ]
 
 for msg in messages:
-    result = engine.chat(msg)
-    print(f"Turn {result.turn_number}: {msg}")
-    print(f"  → {result.text[:100]}...")
-    print(f"  Confidence: {result.confidence:.2f} | Competence: {result.competence:.2f}")
+    result = convo.say(msg)
+    print(f"[Turn {result.turn_number}] User: {msg}")
+    print(f"  Response: {result.text[:120]}...")
+    print(f"  Confidence={result.confidence:.2f}  Competence={result.competence:.2f}")
     print()
 
-# Show memory stats after conversation
+# Conversation summary with aggregate stats
+print("=== Conversation Summary ===")
+summary = convo.summary()
+for key, val in summary.items():
+    if key != "metadata":
+        print(f"  {key}: {val}")
+
+# Memory stats show what the engine remembered across turns
+print("\n=== Memory Stats ===")
 stats = engine.memory_stats()
-print("Memory stats:", stats)
+for key, val in stats.items():
+    print(f"  {key}: {val}")
+
+# Iterate back over turns to see confidence trajectory
+print("\n=== Confidence Trajectory ===")
+for turn in convo:
+    tone = turn.ir.communication_style.tone.value
+    print(f"  Turn {turn.turn_number}: conf={turn.confidence:.2f} tone={tone}")
