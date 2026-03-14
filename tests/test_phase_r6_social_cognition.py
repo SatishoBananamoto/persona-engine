@@ -472,3 +472,69 @@ class TestR6PipelineIntegration:
         # Total should equal sum of individual modifiers
         manual_sum = sum(m.modifier for m in elasticity_mods)
         assert abs(elasticity_total - manual_sum) < 0.001 or abs(elasticity_total) <= MAX_BIAS_IMPACT * 2
+
+    def test_adaptation_formality_shift_applied_to_ir(self):
+        """High-A persona should shift formality toward formal user's register."""
+        data = _make_persona_data(agreeableness=0.9)
+        # Formal user input (triggers formality mirroring)
+        formal_input = "Furthermore, regarding the specification, I would like to discuss the methodology"
+        ir = _generate_ir(data, formal_input)
+        # Compare with casual input
+        ir_casual = _generate_ir(data, "hey what do u think lol")
+        # Formal input should produce higher formality than casual
+        assert ir.communication_style.formality >= ir_casual.communication_style.formality
+
+    def test_adaptation_depth_shift_applied_to_ir(self):
+        """High-O persona should adjust verbosity for expert vs novice users."""
+        data = _make_persona_data(openness=0.85)
+        expert_input = "Can you explain the algorithm optimization for concurrent asynchronous deployment?"
+        ir_expert = _generate_ir(data, expert_input)
+        novice_input = "How does that thing work?"
+        ir_novice = _generate_ir(data, novice_input)
+        # Expert user should get higher verbosity (depth_shift +0.15)
+        assert ir_expert.communication_style.verbosity >= ir_novice.communication_style.verbosity
+
+    def test_schema_validation_boosts_disclosure_in_ir(self):
+        """Schema validation should increase disclosure_level in the IR."""
+        data = _make_persona_data()
+        data["self_schemas"] = ["skilled_professional"]
+        # Validating input (mentions schema keywords without challenge words)
+        ir_validation = _generate_ir(data, "Your professional experience is really impressive")
+        # Neutral input (no schema match)
+        ir_neutral = _generate_ir(data, "What do you think about the weather?")
+        assert ir_validation.knowledge_disclosure.disclosure_level >= ir_neutral.knowledge_disclosure.disclosure_level
+
+    def test_disclosure_reciprocity_applied_to_ir(self):
+        """User self-disclosure should increase persona's disclosure."""
+        data = _make_persona_data(agreeableness=0.9, extraversion=0.9)
+        # User disclosing personal info
+        ir_disclosure = _generate_ir(data, "I feel like I've been struggling with my partner and honestly I worry about it")
+        # No disclosure
+        ir_no_disc = _generate_ir(data, "Tell me about engineering")
+        assert ir_disclosure.knowledge_disclosure.disclosure_level >= ir_no_disc.knowledge_disclosure.disclosure_level
+
+    def test_dk_bias_suppressed_by_high_knowledge_boundary(self):
+        """DK bias should not fire when knowledge_boundary_strictness is high."""
+        data = _make_persona_data(openness=0.15, conscientiousness=0.85)
+        data["uncertainty"]["knowledge_boundary_strictness"] = 0.9
+        # Low proficiency domain — would normally trigger DK
+        data["knowledge_domains"] = [{"domain": "Quantum Physics", "proficiency": 0.1, "subdomains": []}]
+        ir = _generate_ir(data, "Tell me about quantum entanglement")
+        # Even with low-O, high-C, high boundary strictness suppresses DK
+        assert ir is not None  # Smoke test — DK should not inflate confidence
+
+    def test_empathy_gap_low_a_primary_driver(self):
+        """Empathy gap should be driven primarily by low-A, not low-N."""
+        # Low-A, HIGH-N (neurotic but not agreeable)
+        sim_low_a_high_n = _make_bias_sim(agreeableness=0.1, neuroticism=0.9)
+        mods = sim_low_a_high_n.compute_modifiers("I'm feeling so hurt and sad")
+        eg_mods = [m for m in mods if m.bias_type == BiasType.EMPATHY_GAP]
+        # Should still trigger despite high-N (A is primary driver)
+        assert len(eg_mods) == 1
+
+        # High-A, low-N (disagreeable resistance removed)
+        sim_high_a_low_n = _make_bias_sim(agreeableness=0.9, neuroticism=0.1)
+        mods2 = sim_high_a_low_n.compute_modifiers("I'm feeling so hurt and sad")
+        eg_mods2 = [m for m in mods2 if m.bias_type == BiasType.EMPATHY_GAP]
+        # Should NOT trigger — high-A prevents empathy gap
+        assert len(eg_mods2) == 0

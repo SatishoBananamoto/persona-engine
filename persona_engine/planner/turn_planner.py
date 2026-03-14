@@ -220,6 +220,7 @@ class TurnPlanner:
             },
             value_priorities=self.values.get_value_priorities(),
             persona_biases=persona_biases,
+            knowledge_boundary_strictness=persona.uncertainty.knowledge_boundary_strictness,
         )
 
         # Track bias modifiers for current turn (reset per turn)
@@ -652,6 +653,53 @@ class TurnPlanner:
                     reason=f"inertia={PERSONALITY_FIELD_INERTIA}",
                 )
 
+        # Phase R6: Apply adaptation modifiers to formality and verbosity
+        if adaptation:
+            if abs(adaptation.formality_shift) > 0.01:
+                before_af = formality
+                formality = max(0.0, min(1.0, formality + adaptation.formality_shift))
+                if abs(formality - before_af) > 0.001:
+                    ctx.num(
+                        source_type="rule",
+                        source_id="social_adaptation_formality",
+                        target_field="communication_style.formality",
+                        operation="add",
+                        before=before_af,
+                        after=formality,
+                        effect=f"Social adaptation: formality {adaptation.formality_shift:+.3f}",
+                        weight=0.6,
+                    )
+            if abs(adaptation.depth_shift) > 0.01:
+                from persona_engine.schema.ir_schema import Verbosity as _Verb
+                _verb_order = [_Verb.BRIEF, _Verb.MEDIUM, _Verb.DETAILED]
+                _cur_idx = _verb_order.index(verbosity) if verbosity in _verb_order else 1
+                if adaptation.depth_shift > 0 and _cur_idx < 2:
+                    before_av = verbosity
+                    verbosity = _verb_order[_cur_idx + 1]
+                    ctx.enum(
+                        source_type="rule",
+                        source_id="social_adaptation_depth",
+                        target_field="communication_style.verbosity",
+                        operation="override",
+                        before=before_av.value,
+                        after=verbosity.value,
+                        effect=f"Social adaptation: depth up for expert user",
+                        weight=0.6,
+                    )
+                elif adaptation.depth_shift < 0 and _cur_idx > 0:
+                    before_av = verbosity
+                    verbosity = _verb_order[_cur_idx - 1]
+                    ctx.enum(
+                        source_type="rule",
+                        source_id="social_adaptation_depth",
+                        target_field="communication_style.verbosity",
+                        operation="override",
+                        before=before_av.value,
+                        after=verbosity.value,
+                        effect=f"Social adaptation: depth down for novice user",
+                        weight=0.6,
+                    )
+
         logger.debug(
             "Behavioral metrics computed",
             extra={"confidence": confidence, "elasticity": elasticity, "tone": str(tone)},
@@ -722,6 +770,38 @@ class TurnPlanner:
                 effect=f"Empathy gap bias: disclosure {disclosure_bias:+.3f}",
                 weight=min(abs(disclosure_bias) / MAX_BIAS_IMPACT, 1.0),
                 reason=f"empathy_gap={disclosure_bias:+.3f}"
+            )
+
+        # Phase R6: Apply schema validation disclosure boost
+        schema_effect: SchemaEffect | None = metrics.get("schema_effect")
+        if schema_effect and abs(schema_effect.disclosure_modifier) > 0.001:
+            before_sd = disclosure_level
+            disclosure_level = max(0.0, min(1.0, disclosure_level + schema_effect.disclosure_modifier))
+            ctx.num(
+                source_type="rule",
+                source_id="self_schema_disclosure",
+                target_field="knowledge_disclosure.disclosure_level",
+                operation="add",
+                before=before_sd,
+                after=disclosure_level,
+                effect=f"Schema validation: disclosure {schema_effect.disclosure_modifier:+.3f}",
+                weight=0.6,
+            )
+
+        # Phase R6: Apply disclosure reciprocity
+        adaptation: AdaptationDirectives | None = metrics.get("adaptation")
+        if adaptation and adaptation.disclosure_reciprocity > 0.01:
+            before_dr = disclosure_level
+            disclosure_level = max(0.0, min(1.0, disclosure_level + adaptation.disclosure_reciprocity))
+            ctx.num(
+                source_type="rule",
+                source_id="disclosure_reciprocity",
+                target_field="knowledge_disclosure.disclosure_level",
+                operation="add",
+                before=before_dr,
+                after=disclosure_level,
+                effect=f"Disclosure reciprocity: {adaptation.disclosure_reciprocity:+.3f}",
+                weight=0.6,
             )
 
         # Uncertainty action
@@ -1095,7 +1175,8 @@ class TurnPlanner:
             ctx=ctx
         )
 
-        # Phase R6: Record stance as anchor for anchoring bias
+        # Phase R6: Record stance as anchor for anchoring bias.
+        # First turn has no prior anchor (intentional — bias builds over turns).
         self.bias_simulator.set_anchor(stance)
 
         return stance, rationale

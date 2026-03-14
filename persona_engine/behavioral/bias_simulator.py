@@ -51,9 +51,11 @@ NEGATIVE_MARKERS = frozenset([
 
 # Negation words that reverse the sentiment of a following negative marker
 NEGATION_WORDS = frozenset([
-    "not", "no", "don't", "doesn't", "isn't", "wasn't", "weren't",
-    "never", "nothing", "none", "won't", "can't", "couldn't",
-    "shouldn't", "wouldn't", "hardly", "barely", "neither",
+    "not", "no", "never", "nothing", "none",
+    "hardly", "barely", "neither",
+    # Contraction forms
+    "don't", "doesn't", "isn't", "wasn't", "weren't",
+    "won't", "can't", "couldn't", "shouldn't", "wouldn't",
 ])
 
 # Change proposal markers (for status quo bias)
@@ -113,7 +115,9 @@ def _count_unnegated_markers(text: str) -> int:
         "no problem at all" → 0 (negated)
         "serious problem" → 1 (not negated)
     """
-    tokens = text.split()
+    import re as _re
+    # Normalize: lowercase, extract word tokens (preserves contractions like "don't")
+    tokens = _re.findall(r"\b\w+(?:'\w+)?\b", text.lower())
     count = 0
 
     for i, token in enumerate(tokens):
@@ -140,7 +144,7 @@ def _count_unnegated_markers(text: str) -> int:
         negated = False
         window_start = max(0, i - 3)
         for j in range(window_start, i):
-            if tokens[j].rstrip("'") in NEGATION_WORDS or tokens[j] in NEGATION_WORDS:
+            if tokens[j] in NEGATION_WORDS:
                 negated = True
                 break
 
@@ -172,6 +176,7 @@ class BiasSimulator:
         traits: dict[str, float],
         value_priorities: dict[str, float],
         persona_biases: list[dict] | None = None,
+        knowledge_boundary_strictness: float = 0.5,
     ):
         """
         Args:
@@ -179,9 +184,12 @@ class BiasSimulator:
             value_priorities: Schwartz values normalized priorities
             persona_biases: Optional list of persona-declared biases
                 [{"type": "anchoring_bias", "strength": 0.4}, ...]
+            knowledge_boundary_strictness: From UncertaintyPolicy — higher values
+                suppress Dunning-Kruger (persona is self-aware about boundaries)
         """
         self.traits = traits
         self.values = value_priorities
+        self._knowledge_boundary_strictness = knowledge_boundary_strictness
 
         # Precompute trait accessors
         self.neuroticism = traits.get("neuroticism", 0.5)
@@ -565,15 +573,18 @@ class BiasSimulator:
         """Empathy Gap: Underestimates others' emotional reactions.
 
         Trigger: Emotional content in user input.
-        Personality: Low-A + Low-N (less emotionally attuned).
+        Personality: Low-A (primary — less emotionally attuned to others).
+        High-N actually increases emotional sensitivity, so it counteracts
+        empathy gap rather than amplifying it.
         Effect: Reduces disclosure (doesn't engage emotionally).
         """
         matched = [m for m in EMOTIONAL_CONTENT_MARKERS if m in input_lower]
         if not matched:
             return None
 
-        # Low-A + Low-N = more empathy gap
-        empathy_deficit = ((1 - self.agreeableness) + (1 - self.neuroticism)) / 2.0
+        # Low-A = primary driver of empathy gap (less attuned to others)
+        # High-N counteracts: neurotic individuals are MORE sensitive to emotions
+        empathy_deficit = (1 - self.agreeableness) * 0.8 + (1 - self.neuroticism) * 0.2
         if empathy_deficit < 0.6:
             return None
 
@@ -616,6 +627,11 @@ class BiasSimulator:
         """
         if proficiency > 0.35:
             return None  # Only triggers for genuinely low proficiency
+
+        # High knowledge_boundary_strictness = persona is self-aware about limits
+        # This suppresses DK effect (you can't be overconfident if you know you don't know)
+        if self._knowledge_boundary_strictness > 0.7:
+            return None
 
         # Low-O + High-C = more susceptible to DK effect
         susceptibility = ((1 - self.openness) + self.conscientiousness) / 2.0
