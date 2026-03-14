@@ -18,7 +18,7 @@ Quick start::
     print(convo.summary())
 """
 
-__version__ = "0.2.0"
+__version__ = "0.4.0"
 
 from persona_engine.conversation import Conversation
 from persona_engine.engine import ChatResult, PersonaEngine

@@ -260,6 +260,78 @@ class Conversation:
             Path(path).write_text(transcript)
         return transcript
 
+    def export_markdown(self, path: str | Path | None = None) -> str:
+        """Export as a detailed markdown report with IR analysis.
+
+        Includes persona profile, per-turn analysis with IR metrics,
+        and a conversation summary. More detailed than export_transcript.
+
+        Args:
+            path: Optional output file path. If None, returns string only.
+
+        Returns:
+            The markdown report as a string.
+        """
+        lines = [
+            f"# Conversation Report: {self.persona_name}",
+            "",
+            f"**Persona ID:** {self._engine.persona.persona_id}  ",
+            f"**Conversation ID:** {self._engine.conversation_id}  ",
+            f"**Turns:** {self.turn_count}",
+            "",
+        ]
+
+        if self._metadata:
+            lines.append("## Metadata")
+            for key, value in self._metadata.items():
+                lines.append(f"- **{key}:** {value}")
+            lines.append("")
+
+        lines.append("## Conversation")
+        lines.append("")
+
+        for t in self.turns:
+            ir = t.ir
+            status = "PASS" if t.passed else "FAIL"
+            lines.extend([
+                f"### Turn {t.turn_number}",
+                "",
+                f"> **User:** {t._user_input}",
+                "",
+                f"**{self.persona_name}:** {t.text}",
+                "",
+                "| Metric | Value |",
+                "|--------|-------|",
+                f"| Confidence | {t.confidence:.3f} |",
+                f"| Competence | {t.competence:.3f} |",
+                f"| Tone | {ir.communication_style.tone.value} |",
+                f"| Verbosity | {ir.communication_style.verbosity.value} |",
+                f"| Formality | {ir.communication_style.formality:.3f} |",
+                f"| Directness | {ir.communication_style.directness:.3f} |",
+                f"| Disclosure | {ir.knowledge_disclosure.disclosure_level:.3f} |",
+                f"| Elasticity | {ir.response_structure.elasticity:.3f} |",
+                f"| Validation | {status} |",
+                f"| Citations | {len(ir.citations)} |",
+                "",
+            ])
+
+        # Summary
+        if self.turns:
+            summary = self.summary()
+            lines.extend([
+                "## Summary",
+                "",
+                f"- **Average Confidence:** {summary['avg_confidence']:.3f}",
+                f"- **Average Competence:** {summary['avg_competence']:.3f}",
+                f"- **All Validation Passed:** {summary['all_passed_validation']}",
+                "",
+            ])
+
+        result = "\n".join(lines)
+        if path:
+            Path(path).write_text(result)
+        return result
+
     # ------------------------------------------------------------------
     # Special methods
     # ------------------------------------------------------------------

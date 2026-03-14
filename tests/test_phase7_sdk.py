@@ -183,6 +183,29 @@ class TestConversationExport:
         transcript = conversation.export_transcript(path)
         assert path.read_text() == transcript
 
+    def test_export_markdown(self, conversation):
+        conversation.say("Hello there")
+        conversation.say("Tell me more")
+        md = conversation.export_markdown()
+        assert "# Conversation Report" in md
+        assert "Turn 1" in md
+        assert "Turn 2" in md
+        assert "Confidence" in md
+        assert "Competence" in md
+        assert "## Summary" in md
+
+    def test_export_markdown_to_file(self, conversation, tmp_path):
+        conversation.say("Hello")
+        path = tmp_path / "report.md"
+        md = conversation.export_markdown(path)
+        assert path.read_text() == md
+        assert "| Metric | Value |" in md
+
+    def test_export_markdown_empty_conversation(self, conversation):
+        md = conversation.export_markdown()
+        assert "# Conversation Report" in md
+        assert "**Turns:** 0" in md
+
 
 # =============================================================================
 # CLI Tool
@@ -294,7 +317,7 @@ class TestSDKExports:
 
     def test_version(self):
         import persona_engine
-        assert persona_engine.__version__ == "0.2.0"
+        assert persona_engine.__version__ == "0.4.0"
 
 
 # =============================================================================
