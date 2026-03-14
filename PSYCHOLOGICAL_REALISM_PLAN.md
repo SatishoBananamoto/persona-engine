@@ -1,9 +1,33 @@
 # Psychological Realism Plan: From 4/10 to 9/10
 
 **Created:** 2026-03-14
+**Updated:** 2026-03-14 (incorporated findings from personality science literature review)
 **Target:** Transform persona engine from "models personality mechanics" to "produces genuinely human-like, personality-differentiated conversational behavior"
 **Baseline:** Current rating 4/10 on psychological realism (per independent review)
 **Target Rating:** 9/10
+
+---
+
+## RESEARCH FOUNDATION
+
+This plan is grounded in specific findings from personality psychology research:
+
+**Key Sources:**
+- Koutsoumpis et al. meta-analysis: Big Five and LIWC linguistic markers
+- Yarkoni (2010): Personality in 100,000 Words (blogger study, N=69,792)
+- Tausczik & Pennebaker (2010): The Psychological Meaning of Words
+- Mairesse & Walker: PERSONAGE personality language generation
+- Fleeson & Jayawickreme: Whole Trait Theory
+- DeYoung (2015): Openness/Intellect as cognitive exploration
+- Schwartz refined 19-value model personality correlations
+
+**Critical Calibration Findings:**
+1. Individual traits explain 5-15% of behavioral variance; LIWC correlations are |r| = .08-.14 (self-report), |r| = .18-.39 (observer-report)
+2. Traits are *density distributions of states* — a person at 80th percentile neuroticism shows anxious patterns ~30-40% of the time, not 100% (Whole Trait Theory)
+3. **Private vs. public traits:** Neuroticism leaks more in intimate contexts; extraversion shows most in social/public contexts
+4. **Situational strength** compresses trait expression: formal settings reduce personality differences; informal/ambiguous settings amplify them
+5. Function words (pronouns, articles, prepositions) are more diagnostic than content words because they are used unconsciously
+6. Neuroticism has NO significant relationship with any Schwartz value — it operates on emotional reactivity, not motivational priority
 
 ---
 
@@ -341,6 +365,7 @@ Personality psychology identifies reliable interaction patterns. These are not j
 | **Cautious Conservative** | Low-O + High-C | Prefers proven approaches. Detailed but conventional. Risk-averse. |
 | **Impulsive Explorer** | High-O + Low-C | Excited by novelty but disorganized. Jumps between ideas. |
 | **Stoic Professional** | Low-N + Low-E | Calm, reserved, unflappable. Facts-only communication. |
+| **Vulnerable Ruminant** | High-N + Low-E + Low-C | Withdrawn, self-critical, disorganized. Most vulnerable profile (3-way interaction removes C's protective effect). |
 
 ### R3.1 — Implement Trait Interaction Engine
 
@@ -842,15 +867,59 @@ Assert: B's stance is cautious, hedged, protective
 Assert: Both reference benevolence values but in fundamentally different ways
 ```
 
-### R5.3 — Linguistic Marker Injection
+### R5.3 — Research-Grounded Linguistic Marker Injection
 
-Based on LIWC (Linguistic Inquiry and Word Count) research, inject personality-specific linguistic markers into prompt guidance:
+Based on LIWC research (Pennebaker & King 1999; Yarkoni 2010; Koutsoumpis et al. meta-analysis), inject personality-specific linguistic markers into prompt guidance. These are the empirically validated correlations:
 
-**High-N linguistic markers:** "I think", "maybe", "I'm not sure", "what if it fails", negative emotion words, more first-person singular
-**High-E linguistic markers:** "we", "us", social process words, positive emotion words, more present tense
-**High-O linguistic markers:** longer words, more prepositions (connecting ideas), tentative words, insight words
-**High-C linguistic markers:** achievement words, time-related words, ordinal markers ("first", "then")
-**High-A linguistic markers:** affiliation words, assent ("yes", "right"), positive social words
+**High-N linguistic markers (r=.08-.14):** First-person singular ("I", "me", "my" — self-focused attention), negative emotion words, anxiety words ("worried", "concerned"), catastrophizing ("this will be a disaster"), reassurance-seeking, over-apologizing ("sorry, I just wanted to check"), cognitive distortion patterns (fortune-telling, labeling, dichotomous reasoning). NOTE: Neuroticism is a "private trait" — markers emerge more strongly in intimate contexts than public ones.
+
+**High-E linguistic markers (r=.10-.18):** Positive emotion words ("happy", "love", "great"), social process words ("we", "talk", "share", "together"), higher word count (in conversation specifically — this effect disappears in private writing), more abstract/less concrete language, more topic initiations, informal lexicon. NOTE: Extraversion is a "public trait" — markers are strongest in face-to-face/social contexts.
+
+**High-O linguistic markers (r=.08-.12):** Longer words (6+ letters), more articles and prepositions (scaffolding complex thoughts), tentative language ("perhaps", "maybe", "it could be"), metaphorical/abstract language, exploratory questions ("What if we thought about it from this angle?"), willingness to tangent.
+
+**High-C linguistic markers (r=.10-.19):** Certainty words ("always", "definitely", "clearly"), discrepancy words ("should", "ought to"), fewer negations, structured discourse with transitions ("first", "additionally", "in summary"), commitment language ("I will", "I'll make sure"), fewer filled pauses.
+
+**High-A linguistic markers (r=.12-.20):** Positive emotion words, fewer negative emotion/swear words, first-person plural ("we"), validation language ("I see what you mean", "that makes sense"), softer criticism framing, accommodation language. NOTE: Agreeableness accounts for ~20% of variance in conflict avoidance style (meta-analysis).
+
+### R5.4 — Stochastic Trait Expression (Whole Trait Theory)
+
+**Critical insight from research:** Traits are *density distributions of states*, not deterministic switches. A person at the 80th percentile on neuroticism shows anxious patterns ~30-40% of the time, not 100%. Each utterance *could* come from anyone — it's the distribution that shifts.
+
+**Implementation:** Add controlled stochasticity to trait expression:
+
+```python
+def should_express_trait(
+    trait_value: float,
+    determinism: DeterminismManager,
+    base_probability: float = 0.3,
+    trait_weight: float = 0.5,
+) -> bool:
+    """Probabilistically determine if trait is expressed THIS turn.
+
+    At trait=0.5: ~55% chance of expression
+    At trait=0.9: ~75% chance of expression
+    At trait=0.1: ~35% chance of expression
+
+    This prevents caricaturing while maintaining statistical consistency.
+    """
+    probability = base_probability + trait_value * trait_weight
+    return determinism.random() < probability
+```
+
+Apply to secondary trait effects (hedging, enthusiasm, validation), NOT to primary effects (directness, confidence). Primary effects should always apply; secondary linguistic markers should be probabilistic.
+
+**Test — "The Distribution Test":**
+```
+Run same persona through 20 different prompts.
+Count how often each linguistic marker appears.
+
+High-N persona (N=0.85): hedging appears in 60-80% of responses (not 100%)
+Mid-N persona (N=0.5): hedging appears in 35-55% of responses
+Low-N persona (N=0.15): hedging appears in 10-25% of responses
+
+Assert: frequency increases monotonically with trait value
+Assert: no persona shows a marker 100% or 0% of the time
+```
 
 ### Checkpoint R5
 - [ ] Prompt builder generates personality-specific language directives (not just "tone: warm")
