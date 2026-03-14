@@ -155,7 +155,7 @@ def _apply_conscientiousness_markers(
             "Structure your response clearly with transitions like 'first', 'additionally', "
             "'in summary'. Be precise with qualifiers. Complete your thoughts fully."
         )
-        if should_express_trait(c, determinism, 0.2, 0.5):
+        if should_express_trait(c, determinism, 0.2, 0.5) and sit_mult > 0.6:
             profile.marker_directives.append(
                 "Use certainty words: 'definitely', 'clearly', 'always'. "
                 "Use commitment language: 'I will', 'I'll make sure'. "
@@ -167,7 +167,7 @@ def _apply_conscientiousness_markers(
             "It's fine to jump between related points. "
             "Prioritize being natural over being organized."
         )
-        if should_express_trait(1 - c, determinism, 0.2, 0.5):
+        if should_express_trait(1 - c, determinism, 0.2, 0.5) and sit_mult > 0.6:
             profile.marker_directives.append(
                 "Use filler phrases naturally: 'kind of', 'sort of', 'you know'. "
                 "Don't bother with numbered lists or formal transitions."
@@ -222,11 +222,10 @@ def _apply_agreeableness_markers(
 
     if a > 0.7:
         profile.personality_directives.append(
-            "Acknowledge the other person's perspective before sharing yours. "
-            "Use softeners: 'I see your point', 'that's a fair consideration'. "
-            "Frame disagreements as 'I see it a bit differently' rather than 'you're wrong'."
+            "Use softeners when framing criticism: 'I see it a bit differently' "
+            "rather than 'you're wrong'. Favor cooperative framing."
         )
-        if should_express_trait(a, determinism, 0.25, 0.45):
+        if should_express_trait(a, determinism, 0.25, 0.45) and sit_mult > 0.6:
             profile.marker_directives.append(
                 "Use validation language: 'I see what you mean', 'that makes sense'. "
                 "Use positive emotion words and first-person plural. "
@@ -238,7 +237,7 @@ def _apply_agreeableness_markers(
             "Don't pad your response with unnecessary validation. "
             "Prioritize honesty over politeness."
         )
-        if should_express_trait(1 - a, determinism, 0.25, 0.45):
+        if should_express_trait(1 - a, determinism, 0.25, 0.45) and sit_mult > 0.6:
             profile.marker_directives.append(
                 "Use blunt framing when needed. Don't soften criticism. "
                 "Skip social niceties and get to the substance."

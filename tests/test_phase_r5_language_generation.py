@@ -227,7 +227,7 @@ class TestPersonalityLanguageDirectives:
         det = DeterminismManager(seed=42)
         profile = build_personality_language_directives(traits, det)
         combined = " ".join(profile.personality_directives)
-        assert "acknowledge" in combined.lower() or "perspective" in combined.lower()
+        assert "softener" in combined.lower() or "cooperative" in combined.lower()
 
     def test_high_n_gets_hedging_directive(self):
         traits = _make_traits(neuroticism=0.8)
