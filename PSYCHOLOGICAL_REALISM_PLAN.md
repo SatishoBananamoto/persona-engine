@@ -300,7 +300,36 @@ Current `CROSS_TURN_INERTIA = 0.15` means each turn blends 15% of the previous t
 
 **Change:** Reduce to 0.08 for personality-driven fields (elasticity, directness, formality) while keeping 0.15 for topic-dependent fields (confidence, competence). Personality should be stable across turns, but its expression shouldn't be dampened by smoothing.
 
-### R2.3 — Add Non-Linear Trait Effects
+### R2.3 — Dunning-Kruger Confidence Curve
+
+Currently confidence maps linearly from proficiency. Research shows a non-linear curve:
+- **Novice (proficiency < 0.3):** Overconfident — lacks metacognition to know what they don't know
+- **Intermediate (0.3-0.6):** "Valley of despair" — most uncertain, most hedging
+- **Expert (> 0.7):** Calibrated confidence — sure on core domain, appropriately uncertain on edges
+
+```python
+def dunning_kruger_confidence(proficiency: float, neuroticism: float) -> float:
+    """Non-linear proficiency → confidence mapping."""
+    if proficiency < 0.3:
+        # DK inflation: overconfident novice (neuroticism partially counteracts)
+        return proficiency + (1 - neuroticism) * 0.25
+    elif proficiency < 0.6:
+        # Valley of despair: knows enough to doubt
+        return proficiency - 0.08
+    else:
+        # Expert calibration: confident but humble
+        return proficiency - 0.03
+```
+
+**Test — "The Dunning-Kruger Test":**
+```
+Three personas: identical personality, proficiency 0.2, 0.5, 0.8
+Assert: confidence(0.2) > confidence(0.5)  # DK paradox
+Assert: confidence(0.8) > confidence(0.5)  # Expert recovery
+Assert: high-N persona at 0.2 has LOWER inflation than low-N persona
+```
+
+### R2.4 — Add Non-Linear Trait Effects
 
 Currently all traits are linear (output = trait * constant). Real personality expression is non-linear — extreme trait values produce disproportionately extreme behavior.
 
@@ -665,7 +694,79 @@ class EmotionalMemory:
         return "stable"
 ```
 
-### R4.5 — Fix State Evolution Timing
+### R4.5 — Cognitive Load Degradation (Dual Process Theory)
+
+Under cognitive load (fatigue, complex multi-part questions, long conversations), System 2 processing degrades, causing even analytical personas to fall back on heuristics.
+
+**File:** `behavioral/state_manager.py`, `planner/turn_planner.py`
+
+```python
+def compute_cognitive_load(
+    message_complexity: float,  # 0-1, based on question count, clause count
+    fatigue: float,
+    active_topic_count: int,
+    analytical_intuitive: float,  # Higher analytical = higher threshold before degradation
+) -> float:
+    """Compute cognitive load level."""
+    raw_load = message_complexity * 0.4 + fatigue * 0.3 + min(active_topic_count / 5, 1.0) * 0.3
+    # Analytical thinkers resist load degradation (but not immune)
+    resistance = analytical_intuitive * 0.2
+    return max(0.0, min(1.0, raw_load - resistance))
+```
+
+When `cognitive_load > 0.6`:
+- `rationale_depth` reduced by 1 (simpler reasoning)
+- `cognitive_complexity` effectively reduced by 0.2 (less nuance)
+- All bias strengths amplified by 1.3x (more susceptible under load)
+- `systematic_heuristic` shifted 0.15 toward heuristic
+
+**Test — "The Fatigue Degrades Thinking Test":**
+```
+Same complex question at turn 2 (low fatigue) vs turn 15 (high fatigue)
+Assert: rationale_depth is lower at turn 15
+Assert: bias modifiers are stronger at turn 15
+Assert: highly analytical persona degrades LESS than intuitive persona
+```
+
+### R4.6 — Emotional Granularity
+
+Different personas experience emotions at different resolutions (Barrett, 2006). High-granularity personas distinguish "frustrated" from "disappointed" from "irritated." Low-granularity personas lump these as "bad."
+
+```python
+def compute_emotional_granularity(traits: BigFiveTraits, cognitive_complexity: float) -> float:
+    """Higher = finer emotional distinctions."""
+    return traits.openness * 0.4 + (1 - traits.neuroticism) * 0.3 + cognitive_complexity * 0.3
+```
+
+**Implementation:** For tone selection:
+- High granularity (> 0.7): Full 17-tone vocabulary, mid-conversation tone shifts allowed
+- Medium granularity (0.3-0.7): Reduced to ~8 representative tones
+- Low granularity (< 0.3): Collapsed to ~3 tones (positive/neutral/negative)
+
+This means a low-O, high-N persona cycles between the same 2-3 emotional states, while a high-O, low-N persona shows rich emotional variety — matching research on emotional granularity and psychological well-being.
+
+**Test — "The Emotional Range Test":**
+```
+Run 10-turn conversation with same prompts.
+High granularity persona: Assert 4+ distinct tone values used
+Low granularity persona: Assert 2 or fewer distinct tone values used
+```
+
+### R4.7 — Affect-as-Information (Schwarz & Clore)
+
+Current mood colors all judgments, not just disclosure. People in positive moods evaluate proposals more favorably; negative moods increase critical evaluation.
+
+When `mood_valence > 0.3`: +0.05 to confidence, +0.05 to elasticity (more open-minded)
+When `mood_valence < -0.3`: -0.05 to confidence, shift toward systematic processing
+
+**Test:**
+```
+Same input with mood=+0.5 vs mood=-0.5
+Assert: confidence is higher in positive condition
+Assert: negative condition produces more hedging
+```
+
+### R4.8 — Fix State Evolution Timing
 
 **File:** `planner/turn_planner.py`
 
@@ -1014,7 +1115,37 @@ Assert: High-A formality shifts toward user's detected level
 Assert: Low-A formality stays near baseline
 ```
 
-### R6.4 — Self-Disclosure Reciprocity
+### R6.4 — Self-Schema Protection (Markus, 1977)
+
+People have cognitive frameworks about who they are ("competent professional", "caring person"). When challenged on a schema-relevant dimension, elasticity drops and confidence rises (schema protection).
+
+**Schema:** Add optional `self_schemas` to persona YAML:
+```yaml
+self_schemas:
+  - "competent_researcher"
+  - "empathetic_listener"
+  - "independent_thinker"
+```
+
+When user input challenges a self-schema (detected via keyword matching):
+- `elasticity` -= 0.10 (resist identity-threatening change)
+- `confidence` += 0.05 (assert competence on schema-relevant topic)
+- Stance includes self-affirming language
+
+When input validates a self-schema:
+- `disclosure_level` += 0.05 (willingness to elaborate on who they are)
+
+**Test — "The Identity Challenge Test":**
+```
+Persona: self_schema = "competent_researcher"
+User: "I don't think your research approach is valid"
+
+Assert: elasticity is lower than when challenged on non-schema topic
+Assert: confidence is higher (not lower) despite criticism
+Assert: stance includes self-affirming reference to research competence
+```
+
+### R6.5 — Self-Disclosure Reciprocity
 
 In real conversation, self-disclosure is reciprocal — people disclose more when the other person does. Model this:
 
