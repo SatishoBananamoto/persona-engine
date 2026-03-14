@@ -87,6 +87,7 @@ Do NOT break character or acknowledge that you are an AI.
         user_input: str,
         persona: Optional[Persona] = None,
         memory_context: Optional[dict] = None,
+        behavioral_directives: Optional[list[str]] = None,
     ) -> str:
         """
         Build the generation prompt with IR constraints.
@@ -96,6 +97,8 @@ Do NOT break character or acknowledge that you are an AI.
             user_input: The user's message to respond to
             persona: Optional persona for additional context
             memory_context: Optional memory context from MemoryManager
+            behavioral_directives: Optional personality-driven behavioral directives
+                from TraitGuidance and CognitiveGuidance
 
         Returns:
             User prompt with generation constraints
@@ -160,6 +163,16 @@ TOPICS TO AVOID: {', '.join(safety.blocked_topics)}
             prompt += f"""CLAMPED BEHAVIORAL LIMITS: {len(safety.clamped_fields)} fields clamped
 """
         
+        # Personality-driven behavioral directives (Phase R1)
+        if behavioral_directives:
+            prompt += """
+=== PERSONALITY-DRIVEN BEHAVIOR ===
+
+"""
+            for i, directive in enumerate(behavioral_directives, 1):
+                prompt += f"{i}. {directive}\n"
+            prompt += "\n"
+
         prompt += """
 === GENERATION INSTRUCTIONS ===
 
@@ -169,6 +182,7 @@ TOPICS TO AVOID: {', '.join(safety.blocked_topics)}
 4. If uncertain, use the UNCERTAINTY HANDLING approach
 5. Stay consistent with YOUR STANCE if one is provided
 6. Never exceed the knowledge claim type (don't claim expertise if speculative)
+7. Follow the PERSONALITY-DRIVEN BEHAVIOR directives above (if any)
 
 Generate your response now:
 """

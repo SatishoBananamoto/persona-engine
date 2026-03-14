@@ -27,9 +27,12 @@ def generate_stance_safe(
     ctx: TraceContext,
 ) -> tuple[str, str]:
     """
-    Generate stance with expertise guardrails.
+    Generate stance with expertise guardrails and value conflict resolution.
 
     CRITICAL RULE: Non-experts produce opinions/preferences, NOT factual claims.
+
+    Phase R1 addition: When conflicting values are both activated, the tension
+    is expressed in the stance rather than silently resolved via argmax.
 
     Args:
         persona: Full persona object
@@ -53,6 +56,32 @@ def generate_stance_safe(
 
     # Get cognitive nuance capacity
     nuance_capacity = cognitive.style.cognitive_complexity
+
+    # Phase R1: Detect and resolve value conflicts
+    value_conflicts = values.detect_value_conflicts(threshold=0.6)
+    conflict_expression = None
+    if value_conflicts:
+        # Pick the highest-tension conflict
+        top_conflict = value_conflicts[0]
+        resolution = values.resolve_conflict_detailed(
+            top_conflict["value_1"], top_conflict["value_2"], context="general"
+        )
+        # Express tension when resolution confidence is low (genuine internal conflict)
+        if resolution.confidence < 0.6:
+            v1_desc = _value_short_description(top_conflict["value_1"])
+            v2_desc = _value_short_description(top_conflict["value_2"])
+            conflict_expression = (
+                f", though I feel conflicted because I value both "
+                f"{v1_desc} and {v2_desc}"
+            )
+        # Add citations for the conflict
+        for cite in resolution.citations:
+            ctx.add_basic_citation(
+                source_type=cite.get("source_type", "value"),
+                source_id=cite.get("source_id", "conflict"),
+                effect=cite.get("effect", "Value conflict detected"),
+                weight=cite.get("weight", 0.5),
+            )
 
     # ========================================================================
     # GUARDRAIL: Expert vs Opinion Mode
@@ -111,7 +140,28 @@ def generate_stance_safe(
             reason="Non-expert: opinion-first approach"
         )
 
+    # Phase R1: Append value conflict expression if present
+    if conflict_expression and stance:
+        stance = stance + conflict_expression
+
     return stance, rationale
+
+
+def _value_short_description(value: str) -> str:
+    """Short human-readable description of a Schwartz value."""
+    descriptions = {
+        "self_direction": "autonomy and freedom",
+        "stimulation": "excitement and novelty",
+        "hedonism": "enjoyment and pleasure",
+        "achievement": "success and competence",
+        "power": "influence and authority",
+        "security": "safety and stability",
+        "conformity": "following rules and norms",
+        "tradition": "respecting established customs",
+        "benevolence": "caring for others",
+        "universalism": "justice and equality",
+    }
+    return descriptions.get(value, value.replace("_", " "))
 
 
 def _generate_opinion_stance(

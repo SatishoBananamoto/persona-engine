@@ -503,6 +503,13 @@ class IntermediateRepresentation(BaseModel):
         description="Memory read/write intents for this turn"
     )
 
+    # Personality-driven behavioral directives (Phase R1)
+    behavioral_directives: list[str] = Field(
+        default_factory=list,
+        description="Personality-driven behavioral instructions for the LLM, "
+        "derived from trait and cognitive style guidance"
+    )
+
     # Metadata
     turn_id: str | None = Field(
         default=None,

@@ -158,6 +158,7 @@ class ResponseGenerator:
             user_input=user_input,
             persona=self.persona,
             memory_context=memory_context,
+            behavioral_directives=ir.behavioral_directives or None,
         )
 
         # Determine temperature from IR confidence
@@ -216,7 +217,8 @@ class ResponseGenerator:
         generation_prompt = self.prompt_builder.build_generation_prompt(
             ir=ir,
             user_input=user_input,
-            persona=self.persona
+            persona=self.persona,
+            behavioral_directives=ir.behavioral_directives or None,
         )
         
         return f"""=== SYSTEM PROMPT ===

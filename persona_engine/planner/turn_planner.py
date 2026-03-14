@@ -13,8 +13,8 @@ This ensures:
 """
 
 import logging
-from dataclasses import dataclass
-from typing import Any, Optional
+from dataclasses import dataclass, field
+from typing import Any, Literal, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +92,54 @@ TIME_PRESSURE_MAX_BUILDUP = DEFAULT_CONFIG.time_pressure_max_buildup
 def _smooth(prev: float, new: float, alpha: float) -> float:
     """Cross-turn inertia smoothing: blend previous and current values."""
     return prev * alpha + new * (1 - alpha)
+
+
+# =============================================================================
+# Behavioral Guidance Dataclasses (Phase R1: Activate Dead Psychology)
+# =============================================================================
+
+@dataclass
+class TraitGuidance:
+    """Behavioral guidance derived from formerly-orphaned trait methods.
+
+    These modifiers flow into the IR and prompt builder as personality-driven
+    behavioral directives that were previously computed but never used.
+    """
+    # Agreeableness-driven
+    should_validate_first: bool = False       # A > 0.7: acknowledge before disagreeing
+    hedging_level: float = 0.0                # A * 0.6: hedging language tendency
+    conflict_avoidance_boost: float = 0.0     # A * 0.15: extra directness reduction in contention
+
+    # Extraversion-driven
+    enthusiasm_boost: float = 0.0             # E * 0.2: arousal boost for tone
+    proactive_followup: bool = False          # E > 0.7: suggest follow-up question
+
+    # Openness-driven
+    prefer_abstract_language: bool = False    # O > 0.7: metaphors and abstract thinking
+    prefer_novelty: bool = False              # O > 0.7: exploratory stance over conventional
+
+    # Neuroticism-driven
+    negative_tone_weight: float = 0.0         # N * 0.7: bias toward negative/anxious tones
+
+    # Prompt guidance strings accumulated from trait effects
+    prompt_directives: list[str] = field(default_factory=list)
+
+
+@dataclass
+class CognitiveGuidance:
+    """Behavioral guidance derived from formerly-orphaned cognitive style methods.
+
+    These influence reasoning presentation, stance complexity, and how
+    the persona structures its arguments.
+    """
+    reasoning_style: Literal["analytical", "intuitive", "mixed"] = "mixed"
+    rationale_depth: int = 2          # 1-5 reasoning steps
+    acknowledge_tradeoffs: bool = False
+    stance_dimensions: int = 1        # 1-3 qualifications in stance
+    nuance_level: Literal["low", "moderate", "high"] = "moderate"
+
+    # Prompt guidance strings
+    prompt_directives: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -309,6 +357,21 @@ class TurnPlanner:
             weight=1.0,
         )
 
+        # Phase R1: Check decision policies
+        matched_policy = self.rules.check_decision_policy(context.user_input)
+        policy_modifications: dict[str, Any] = {}
+        if matched_policy:
+            policy_modifications = self.rules.apply_decision_policy(matched_policy)
+            ctx.add_basic_citation(
+                source_type="rule",
+                source_id="decision_policy",
+                effect=(
+                    f"Decision policy matched: '{matched_policy.condition}' "
+                    f"→ approach='{matched_policy.approach}'"
+                ),
+                weight=0.9,
+            )
+
         return {
             "topic_relevance": topic_relevance,
             "persona_domains": persona_domains,
@@ -317,6 +380,7 @@ class TurnPlanner:
             "expert_allowed": expert_allowed,
             "user_intent": user_intent,
             "needs_clarification": needs_clarification,
+            "policy_modifications": policy_modifications,
         }
 
     def _stage_behavioral_metrics(
@@ -407,11 +471,17 @@ class TurnPlanner:
                     reason=f"inertia={CROSS_TURN_INERTIA}",
                 )
 
-        tone = self._select_tone(ctx)
+        # Trait & cognitive guidance (Phase R1: activate dead psychology)
+        trait_guidance = self._compute_trait_guidance(ctx, context.user_input)
+        cognitive_guidance = self._compute_cognitive_guidance(ctx)
+
+        tone = self._select_tone(ctx, trait_guidance=trait_guidance)
         verbosity = self._compute_verbosity(ctx)
 
         # Communication style (+ cross-turn smoothing)
-        formality, directness = self._compute_communication_style(context.interaction_mode, ctx)
+        formality, directness = self._compute_communication_style(
+            context.interaction_mode, ctx, trait_guidance=trait_guidance
+        )
         if self._prior_snapshot:
             before_f = formality
             formality = _smooth(self._prior_snapshot.formality, formality, CROSS_TURN_INERTIA)
@@ -457,6 +527,8 @@ class TurnPlanner:
             "verbosity": verbosity,
             "formality": formality,
             "directness": directness,
+            "trait_guidance": trait_guidance,
+            "cognitive_guidance": cognitive_guidance,
         }
 
     def _stage_knowledge_safety(
@@ -651,6 +723,15 @@ class TurnPlanner:
         ctx.safety_plan.cannot_claim = list(self.persona.invariants.cannot_claim)
         ctx.safety_plan.must_avoid = list(self.persona.invariants.must_avoid)
 
+        # Collect behavioral directives from trait + cognitive guidance (Phase R1)
+        trait_guidance: TraitGuidance | None = metrics.get("trait_guidance")
+        cognitive_guidance: CognitiveGuidance | None = metrics.get("cognitive_guidance")
+        behavioral_directives: list[str] = []
+        if trait_guidance:
+            behavioral_directives.extend(trait_guidance.prompt_directives)
+        if cognitive_guidance:
+            behavioral_directives.extend(cognitive_guidance.prompt_directives)
+
         # Assemble IR
         ir = IntermediateRepresentation(
             conversation_frame=ConversationFrame(
@@ -686,6 +767,7 @@ class TurnPlanner:
             citations=ctx.citations,
             safety_plan=ctx.safety_plan,
             memory_ops=memory_ops,
+            behavioral_directives=behavioral_directives,
             turn_id=f"{context.conversation_id}_turn_{context.turn_number}",
             seed=turn_seed,
         )
@@ -1130,14 +1212,33 @@ class TurnPlanner:
 
         return competence
 
-    def _select_tone(self, ctx: "TraceContext") -> Tone:
+    def _select_tone(
+        self, ctx: "TraceContext", trait_guidance: TraitGuidance | None = None
+    ) -> Tone:
         """
-        Select tone from mood + stress + traits + negativity bias.
+        Select tone from mood + stress + traits + negativity bias + enthusiasm boost.
 
-        Sequence: base (mood/stress/traits) → negativity bias adjustment
+        Sequence: base (mood/stress/traits) → enthusiasm boost → negativity bias
         """
         valence, arousal = self.state.get_mood()
         stress = self.state.get_stress()
+
+        # Phase R1: Apply enthusiasm boost from extraversion (only for notably extraverted E>0.5)
+        if trait_guidance and trait_guidance.enthusiasm_boost > 0.1:
+            arousal_before = arousal
+            arousal = min(1.0, arousal + trait_guidance.enthusiasm_boost)
+            if abs(arousal - arousal_before) > 0.001:
+                ctx.num(
+                    source_type="trait",
+                    source_id="extraversion_enthusiasm",
+                    target_field="communication_style.arousal",
+                    operation="add",
+                    before=arousal_before,
+                    after=arousal,
+                    effect=f"Extraversion enthusiasm boost: +{trait_guidance.enthusiasm_boost:.3f}",
+                    weight=0.6,
+                    reason=f"E={self.persona.psychology.big_five.extraversion:.2f}"
+                )
 
         # Check for negativity bias (Phase 2)
         # Negativity bias increases arousal, which may shift tone selection
@@ -1224,12 +1325,13 @@ class TurnPlanner:
     def _compute_communication_style(
         self,
         interaction_mode: InteractionMode,
-        ctx: "TraceContext"  # Changed from citations
+        ctx: "TraceContext",
+        trait_guidance: TraitGuidance | None = None,
     ) -> tuple[float, float]:
         """
         Compute formality and directness using canonical sequence.
 
-        Sequence: base → role → trait → state → constraints
+        Sequence: base → role → trait → conflict_avoidance → state → constraints
 
         Returns: (formality, directness)
         """
@@ -1324,6 +1426,25 @@ class TurnPlanner:
         )
 
         # ==================================================================
+        # 3.5. CONFLICT AVOIDANCE (Phase R1: high-A reduces directness on contention)
+        # ==================================================================
+        if trait_guidance and trait_guidance.conflict_avoidance_boost > 0.01:
+            before_ca = directness
+            directness = max(0.0, directness - trait_guidance.conflict_avoidance_boost)
+            if abs(directness - before_ca) > 0.001:
+                ctx.num(
+                    source_type="trait",
+                    source_id="conflict_avoidance",
+                    target_field="communication_style.directness",
+                    operation="add",
+                    before=before_ca,
+                    after=directness,
+                    effect=f"Conflict avoidance: -{trait_guidance.conflict_avoidance_boost:.3f} (contentious input)",
+                    weight=0.7,
+                    reason=f"A={self.persona.psychology.big_five.agreeableness:.2f}, contentious input detected"
+                )
+
+        # ==================================================================
         # 4. STATE MODIFIER (patience affects directness)
         # ==================================================================
         patience = self.state.get_patience_level()
@@ -1361,6 +1482,159 @@ class TurnPlanner:
         )
 
         return formality, directness
+
+    def _compute_trait_guidance(
+        self,
+        ctx: "TraceContext",
+        user_input: str,
+    ) -> TraitGuidance:
+        """
+        Compute behavioral guidance from formerly-orphaned trait methods.
+
+        Wires: get_validation_tendency, get_conflict_avoidance,
+        influences_hedging_frequency, get_enthusiasm_baseline,
+        get_negative_tone_bias, influences_proactivity,
+        get_novelty_seeking, influences_abstract_reasoning.
+        """
+        traits = self.persona.psychology.big_five
+        guidance = TraitGuidance()
+
+        # Agreeableness: validation, hedging, conflict avoidance
+        validation_tendency = self.traits.get_validation_tendency()
+        guidance.should_validate_first = validation_tendency > 0.7
+        guidance.hedging_level = self.traits.influences_hedging_frequency()
+
+        # Conflict avoidance only activates for contentious input
+        contentious_markers = [
+            "wrong", "disagree", "terrible", "stupid", "hate",
+            "ridiculous", "nonsense", "bad idea", "completely",
+            "absolutely not", "no way",
+        ]
+        is_contentious = any(m in user_input.lower() for m in contentious_markers)
+        if is_contentious:
+            guidance.conflict_avoidance_boost = self.traits.get_conflict_avoidance() * 0.15
+        else:
+            guidance.conflict_avoidance_boost = 0.0
+
+        if guidance.should_validate_first:
+            guidance.prompt_directives.append(
+                "Acknowledge the other person's point before expressing your own view. "
+                "Use phrases like 'I see what you mean' or 'That's a fair point'."
+            )
+        if guidance.hedging_level > 0.4:
+            guidance.prompt_directives.append(
+                "Use hedging language: 'I think', 'it seems to me', 'perhaps', "
+                "'in my experience'. Soften strong claims."
+            )
+
+        # Extraversion: enthusiasm, proactivity
+        enthusiasm = self.traits.get_enthusiasm_baseline()
+        guidance.enthusiasm_boost = enthusiasm * 0.2
+        guidance.proactive_followup = self.traits.influences_proactivity() > 0.7
+
+        if guidance.proactive_followup:
+            guidance.prompt_directives.append(
+                "End with a follow-up question or enthusiastic invitation to continue. "
+                "Show active interest in the conversation."
+            )
+
+        # Openness: abstract language, novelty
+        guidance.prefer_abstract_language = self.traits.influences_abstract_reasoning()
+        guidance.prefer_novelty = self.traits.get_novelty_seeking() > 0.7
+
+        if guidance.prefer_abstract_language:
+            guidance.prompt_directives.append(
+                "Use metaphors, analogies, and abstract reasoning. "
+                "Connect ideas across different domains."
+            )
+        if guidance.prefer_novelty:
+            guidance.prompt_directives.append(
+                "Favor creative, unconventional, and exploratory perspectives "
+                "over tried-and-true conventional ones."
+            )
+
+        # Neuroticism: negative tone weight
+        guidance.negative_tone_weight = self.traits.get_negative_tone_bias()
+
+        ctx.add_basic_citation(
+            source_type="trait",
+            source_id="trait_guidance",
+            effect=(
+                f"TraitGuidance: validate={guidance.should_validate_first}, "
+                f"hedging={guidance.hedging_level:.2f}, "
+                f"enthusiasm_boost={guidance.enthusiasm_boost:.2f}, "
+                f"proactive={guidance.proactive_followup}, "
+                f"abstract={guidance.prefer_abstract_language}, "
+                f"novelty={guidance.prefer_novelty}, "
+                f"neg_tone={guidance.negative_tone_weight:.2f}"
+            ),
+            weight=0.8,
+        )
+
+        return guidance
+
+    def _compute_cognitive_guidance(
+        self,
+        ctx: "TraceContext",
+    ) -> CognitiveGuidance:
+        """
+        Compute behavioral guidance from formerly-orphaned cognitive style methods.
+
+        Wires: get_reasoning_approach, get_rationale_depth,
+        should_acknowledge_tradeoffs, get_stance_complexity_level,
+        get_nuance_capacity.
+        """
+        guidance = CognitiveGuidance()
+
+        guidance.reasoning_style = self.cognitive.get_reasoning_approach()
+        guidance.rationale_depth = self.cognitive.get_rationale_depth()
+        guidance.acknowledge_tradeoffs = self.cognitive.should_acknowledge_tradeoffs()
+        guidance.stance_dimensions = self.cognitive.get_stance_complexity_level()
+        guidance.nuance_level = self.cognitive.get_nuance_capacity()
+
+        # Build prompt directives from cognitive style
+        if guidance.reasoning_style == "analytical":
+            guidance.prompt_directives.append(
+                "Present your reasoning step by step. Use logical structure, "
+                "evidence, and clear cause-and-effect chains."
+            )
+        elif guidance.reasoning_style == "intuitive":
+            guidance.prompt_directives.append(
+                "Share your gut feeling first, then briefly explain why. "
+                "Trust your instincts and use pattern-based reasoning."
+            )
+
+        if guidance.acknowledge_tradeoffs:
+            guidance.prompt_directives.append(
+                "Acknowledge tradeoffs and counterarguments. Show that you can "
+                "see multiple sides even while holding your position."
+            )
+
+        if guidance.nuance_level == "low":
+            guidance.prompt_directives.append(
+                "Take a clear, decisive position. Avoid excessive qualification. "
+                "Black-and-white thinking is natural for you."
+            )
+        elif guidance.nuance_level == "high":
+            guidance.prompt_directives.append(
+                "Express nuanced, multifaceted views. Qualify your statements "
+                "and consider edge cases and exceptions."
+            )
+
+        ctx.add_basic_citation(
+            source_type="trait",
+            source_id="cognitive_guidance",
+            effect=(
+                f"CognitiveGuidance: reasoning={guidance.reasoning_style}, "
+                f"depth={guidance.rationale_depth}, "
+                f"tradeoffs={guidance.acknowledge_tradeoffs}, "
+                f"dimensions={guidance.stance_dimensions}, "
+                f"nuance={guidance.nuance_level}"
+            ),
+            weight=0.7,
+        )
+
+        return guidance
 
     def _compute_disclosure(
         self,
