@@ -40,23 +40,22 @@ _ENTHUSIASM_MARKERS = {
 }
 _FRUSTRATION_MARKERS = {
     "frustrated", "annoying", "terrible", "awful", "hate", "stupid",
-    "ridiculous", "useless", "worst", "broken", "wrong", "fail",
+    "ridiculous", "useless", "worst", "broken", "fail",
 }
 _WORRY_MARKERS = {
     "worried", "anxious", "nervous", "scared", "afraid", "concerned",
-    "dangerous", "risk", "uncertain", "doubt",
+    "dangerous", "risk", "uncertain",
 }
 _CURIOSITY_MARKERS = {
     "curious", "wonder", "interesting", "fascinated", "how", "why",
-    "what if", "explore", "think about",
+    "explore",
 }
 _CHALLENGE_MARKERS = {
     "wrong", "disagree", "incorrect", "mistake", "actually", "but",
-    "however", "no way", "impossible", "doubt",
+    "however", "impossible", "doubt",
 }
 _PRAISE_MARKERS = {
-    "thank", "helpful", "appreciate", "good job", "well done",
-    "impressive", "smart", "insightful",
+    "thank", "helpful", "appreciate", "impressive", "smart", "insightful",
 }
 
 
@@ -78,10 +77,10 @@ def detect_user_emotion(user_input: str) -> dict[str, float]:
     challenge_hits = len(words & _CHALLENGE_MARKERS)
     praise_hits = len(words & _PRAISE_MARKERS)
 
-    # Also check multi-word patterns
-    for phrase in ["what if", "good job", "well done", "no way"]:
+    # Also check multi-word patterns (not caught by single-word intersection)
+    for phrase in ["what if", "think about", "good job", "well done", "no way"]:
         if phrase in lower:
-            if phrase in ("what if",):
+            if phrase in ("what if", "think about"):
                 curiosity_hits += 1
             elif phrase in ("good job", "well done"):
                 praise_hits += 1
@@ -207,6 +206,15 @@ def appraise_event(
         notes.append(f"Interest boost: +{interest_boost:.3f} (O={traits.openness:.2f})")
         if dominant_emotion == "neutral":
             dominant_emotion = "interest"
+
+    # ---- Goal-relevance / conscientiousness ----
+    # High-C personas feel more distress when things go wrong (goal failure)
+    if user_anger > 0.1 or user_challenge > 0.1:
+        failure_signal = max(user_anger, user_challenge)
+        if traits.conscientiousness > 0.6:
+            goal_concern = failure_signal * (traits.conscientiousness - 0.5) * 0.15
+            valence_delta -= goal_concern
+            notes.append(f"Goal-relevance concern (C={traits.conscientiousness:.2f}): -{goal_concern:.3f}")
 
     # ---- Trust / praise ----
     user_trust = user_emotion.get("trust", 0.0)
