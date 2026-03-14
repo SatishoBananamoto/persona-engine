@@ -30,6 +30,11 @@ from persona_engine.validation.style_drift import (
     StyleDriftDetector,
     TurnMetrics,
 )
+from persona_engine.validation.trait_scorer import (
+    TraitMarkerScorer,
+    TraitScorerResult,
+    TraitScore,
+)
 
 __all__ = [
     "PipelineValidator",
@@ -50,4 +55,8 @@ __all__ = [
     "KnowledgeBoundaryEnforcer",
     "BoundaryReport",
     "BoundaryViolation",
+    # Trait Scoring
+    "TraitMarkerScorer",
+    "TraitScorerResult",
+    "TraitScore",
 ]

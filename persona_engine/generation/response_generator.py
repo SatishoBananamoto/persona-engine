@@ -5,9 +5,12 @@ Main orchestrator that combines IR processing, LLM generation,
 and post-processing into a complete response generation pipeline.
 """
 
+import logging
 from typing import Optional
 from dataclasses import dataclass, field
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 from persona_engine.schema.ir_schema import IntermediateRepresentation
 from persona_engine.schema.persona_schema import Persona
@@ -123,6 +126,10 @@ class ResponseGenerator:
         Returns:
             GeneratedResponse with text and metadata
         """
+        logger.debug(
+            "Starting response generation",
+            extra={"adapter": type(self.adapter).__name__, "strict_mode": self.strict_mode},
+        )
         # Template backend: bypass prompt building, generate from IR directly
         if isinstance(self.adapter, TemplateAdapter):
             raw_text = self.adapter.generate_from_ir(
@@ -131,11 +138,16 @@ class ResponseGenerator:
                 persona=self.persona,
             )
             violations = self.style_modulator.validate_constraints(raw_text, ir)
+            model_name = self.adapter.get_model_name()
+            logger.info(
+                "Response generated",
+                extra={"text_length": len(raw_text), "model": model_name},
+            )
             return GeneratedResponse(
                 text=raw_text,
                 ir=ir,
                 raw_text=raw_text,
-                model=self.adapter.get_model_name(),
+                model=model_name,
                 violations=violations,
                 estimated_tokens=len(raw_text) // 4,
             )
@@ -177,11 +189,16 @@ class ResponseGenerator:
         # Estimate tokens (rough: 1 token ≈ 4 chars)
         estimated_tokens = len(self._system_prompt + generation_prompt + processed_text) // 4
 
+        model_name = self.adapter.get_model_name()
+        logger.info(
+            "Response generated",
+            extra={"text_length": len(processed_text), "model": model_name},
+        )
         return GeneratedResponse(
             text=processed_text,
             ir=ir,
             raw_text=raw_text,
-            model=self.adapter.get_model_name(),
+            model=model_name,
             violations=violations,
             estimated_tokens=estimated_tokens,
         )

@@ -27,7 +27,10 @@ Usage::
 from __future__ import annotations
 
 import json
+import logging
 import uuid
+
+logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -310,6 +313,10 @@ class PersonaEngine:
             ChatResult with text, IR, validation, and metadata.
         """
         user_input = _validate_user_input(user_input)
+        logger.info(
+            "Chat started",
+            extra={"user_input": user_input[:50], "turn_number": self._turn_number + 1},
+        )
 
         self._turn_number += 1
         turn = self._turn_number
@@ -343,6 +350,10 @@ class PersonaEngine:
             _user_input=user_input,
         )
         self._history.append(result)
+        logger.info(
+            "Chat complete",
+            extra={"response_length": len(response.text), "turn_number": turn},
+        )
         return result
 
     def plan(

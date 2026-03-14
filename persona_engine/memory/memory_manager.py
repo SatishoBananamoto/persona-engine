@@ -14,6 +14,9 @@ Key responsibilities:
 from __future__ import annotations
 
 import hashlib
+import logging
+
+logger = logging.getLogger(__name__)
 from datetime import datetime
 from typing import Any, Sequence
 
@@ -107,6 +110,10 @@ class MemoryManager:
         Returns:
             List of created memory records
         """
+        logger.debug(
+            "Processing write intents",
+            extra={"intent_count": len(intents), "turn": turn},
+        )
         created: list[MemoryRecord] = []
         for intent in intents:
             record = self._create_record(intent, turn, conversation_id)
@@ -280,6 +287,15 @@ class MemoryManager:
             for f in self.facts.all_facts()
             if f.decayed_confidence(current_turn) >= 0.5 and f.privacy_level < 0.8
         ]
+
+        logger.debug(
+            "Context assembled for turn",
+            extra={
+                "fact_count": len(context["known_facts"]),
+                "preference_count": len(context["active_preferences"]),
+                "previously_discussed": context.get("previously_discussed", False),
+            },
+        )
 
         return context
 

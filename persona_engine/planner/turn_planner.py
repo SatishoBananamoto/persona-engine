@@ -12,8 +12,11 @@ This ensures:
 - Constraint enforcement
 """
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 from persona_engine.behavioral import (
     BehavioralRulesEngine,
@@ -164,6 +167,10 @@ class TurnPlanner:
         4. Knowledge & safety — disclosure, uncertainty, claim type, patterns, constraints
         5. Finalization — memory writes, IR assembly, stance cache, snapshot
         """
+        logger.debug(
+            "Generating IR",
+            extra={"user_input": context.user_input[:50], "turn_number": context.turn_number},
+        )
         ctx, turn_seed, memory_ops, memory_context = self._stage_foundation(context)
         foundation = self._stage_interpretation(context, ctx)
         foundation["memory_context"] = memory_context
@@ -196,6 +203,11 @@ class TurnPlanner:
             memory_context = self.memory.get_context_for_turn(
                 topic=context.topic_signature,
                 current_turn=context.turn_number,
+            )
+            fact_count = len(memory_context.get("known_facts", []))
+            logger.debug(
+                "Memory context loaded",
+                extra={"fact_count": fact_count, "topic": context.topic_signature},
             )
             if memory_context.get("known_facts"):
                 ctx.add_basic_citation(
@@ -431,6 +443,10 @@ class TurnPlanner:
                     reason=f"inertia={CROSS_TURN_INERTIA}",
                 )
 
+        logger.debug(
+            "Behavioral metrics computed",
+            extra={"confidence": confidence, "elasticity": elasticity, "tone": str(tone)},
+        )
         return {
             "elasticity": elasticity,
             "stance": stance,
@@ -672,6 +688,16 @@ class TurnPlanner:
             memory_ops=memory_ops,
             turn_id=f"{context.conversation_id}_turn_{context.turn_number}",
             seed=turn_seed,
+        )
+
+        logger.info(
+            "IR complete",
+            extra={
+                "turn_id": ir.turn_id,
+                "confidence": confidence,
+                "tone": str(tone),
+                "verbosity": str(verbosity),
+            },
         )
 
         # Cache stance
