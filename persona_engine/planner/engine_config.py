@@ -44,6 +44,7 @@ class EngineConfig:
 
     # Cross-Turn Dynamics
     cross_turn_inertia: float = 0.15
+    personality_field_inertia: float = 0.08  # Phase R2: lower inertia for personality-driven fields
     familiarity_boost_per_episode: float = 0.05
     familiarity_boost_cap: float = 0.15
 

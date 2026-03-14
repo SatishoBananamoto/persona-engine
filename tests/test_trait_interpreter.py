@@ -65,8 +65,9 @@ class TestInit:
 
 class TestGetElasticity:
     """
-    Actual formula (from trait_interpreter.py):
-        openness_factor = openness * 0.7
+    Actual formula (from trait_interpreter.py — Phase R2: sigmoid activation):
+        openness_activated = trait_effect(openness)
+        openness_factor = openness_activated * 0.7
         confidence_penalty = base_confidence * 0.3
         elasticity = openness_factor - confidence_penalty + 0.2
         return max(0.1, min(0.9, elasticity))
@@ -74,40 +75,40 @@ class TestGetElasticity:
 
     def test_mid_values(self):
         interp = make_interpreter(openness=0.5)
-        # 0.5*0.7 - 0.5*0.3 + 0.2 = 0.35 - 0.15 + 0.2 = 0.4
+        # sigmoid(0.5)=0.5, 0.5*0.7 - 0.5*0.3 + 0.2 = 0.4
         result = interp.get_elasticity(0.5)
         assert result == pytest.approx(0.4)
 
     def test_high_openness_low_confidence(self):
         interp = make_interpreter(openness=1.0)
-        # 1.0*0.7 - 0*0.3 + 0.2 = 0.9 → clamped to 0.9
+        # sigmoid(1.0)≈0.9997, 0.9997*0.7 - 0 + 0.2 ≈ 0.887
         result = interp.get_elasticity(0.0)
-        assert result == pytest.approx(0.9)
+        assert result == pytest.approx(0.887, abs=0.01)
 
     def test_low_openness_high_confidence(self):
         interp = make_interpreter(openness=0.0)
-        # 0 - 1.0*0.3 + 0.2 = -0.1 → clamped to 0.1
+        # sigmoid(0.0)≈0.0003, 0.0003*0.7 - 0.3 + 0.2 ≈ -0.1 → clamped to 0.1
         result = interp.get_elasticity(1.0)
         assert result == pytest.approx(0.1)
 
     def test_zero_openness_zero_confidence(self):
         interp = make_interpreter(openness=0.0)
-        # 0 - 0 + 0.2 = 0.2
+        # sigmoid(0.0)≈0.0003, 0.0003*0.7 + 0.2 ≈ 0.213
         result = interp.get_elasticity(0.0)
-        assert result == pytest.approx(0.2)
+        assert result == pytest.approx(0.213, abs=0.01)
 
     def test_max_openness_max_confidence(self):
         interp = make_interpreter(openness=1.0)
-        # 0.7 - 0.3 + 0.2 = 0.6
+        # sigmoid(1.0)*0.7 - 0.3 + 0.2 ≈ 0.587
         result = interp.get_elasticity(1.0)
-        assert result == pytest.approx(0.6)
+        assert result == pytest.approx(0.587, abs=0.01)
 
     def test_upper_clamp_fires(self):
-        """High openness and low confidence should clamp to 0.9."""
+        """High openness and low confidence produces high elasticity."""
         interp = make_interpreter(openness=0.9)
-        # 0.63 - 0 + 0.2 = 0.83
+        # sigmoid(0.9)*0.7 + 0.2 ≈ 0.873
         result = interp.get_elasticity(0.0)
-        assert result == pytest.approx(0.83)
+        assert result == pytest.approx(0.873, abs=0.01)
 
     def test_lower_clamp_fires_with_extreme_confidence(self):
         """
@@ -307,35 +308,35 @@ class TestInfluencesProactivity:
 # ============================================================================
 
 class TestGetSelfDisclosureModifier:
-    """Formula: (extraversion - 0.5) * 0.4,  range [-0.2, +0.2]"""
+    """Phase R2: (trait_effect(extraversion) - 0.5) * 0.45, sigmoid-amplified"""
 
     def test_high_extraversion(self):
-        # (1.0 - 0.5) * 0.4 = 0.2
-        assert make_interpreter(extraversion=1.0).get_self_disclosure_modifier() == pytest.approx(0.2)
+        # trait_effect(1.0)≈0.982, (0.982-0.5)*0.45 ≈ 0.217
+        assert make_interpreter(extraversion=1.0).get_self_disclosure_modifier() == pytest.approx(0.217, abs=0.01)
 
     def test_low_extraversion(self):
-        # (0.0 - 0.5) * 0.4 = -0.2
-        assert make_interpreter(extraversion=0.0).get_self_disclosure_modifier() == pytest.approx(-0.2)
+        # trait_effect(0.0)≈0.018, (0.018-0.5)*0.45 ≈ -0.217
+        assert make_interpreter(extraversion=0.0).get_self_disclosure_modifier() == pytest.approx(-0.217, abs=0.01)
 
     def test_midpoint_extraversion(self):
-        # (0.5 - 0.5) * 0.4 = 0.0
+        # trait_effect(0.5)=0.5, (0.5-0.5)*0.45 = 0.0
         assert make_interpreter(extraversion=0.5).get_self_disclosure_modifier() == pytest.approx(0.0)
 
     def test_slightly_above_mid(self):
-        # (0.75 - 0.5) * 0.4 = 0.1
-        assert make_interpreter(extraversion=0.75).get_self_disclosure_modifier() == pytest.approx(0.1)
+        # trait_effect(0.75)≈0.881, (0.881-0.5)*0.45 ≈ 0.171
+        assert make_interpreter(extraversion=0.75).get_self_disclosure_modifier() == pytest.approx(0.171, abs=0.01)
 
     def test_slightly_below_mid(self):
-        # (0.25 - 0.5) * 0.4 = -0.1
-        assert make_interpreter(extraversion=0.25).get_self_disclosure_modifier() == pytest.approx(-0.1)
+        # trait_effect(0.25)≈0.119, (0.119-0.5)*0.45 ≈ -0.171
+        assert make_interpreter(extraversion=0.25).get_self_disclosure_modifier() == pytest.approx(-0.171, abs=0.01)
 
     def test_range_lower_bound(self):
         result = make_interpreter(extraversion=0.0).get_self_disclosure_modifier()
-        assert result >= -0.2
+        assert result >= -0.225
 
     def test_range_upper_bound(self):
         result = make_interpreter(extraversion=1.0).get_self_disclosure_modifier()
-        assert result <= 0.2
+        assert result <= 0.225
 
 
 # ============================================================================
@@ -368,50 +369,45 @@ class TestGetEnthusiasmBaseline:
 
 class TestInfluencesDirectness:
     """
-    modifier = (0.5 - agreeableness) * 0.3
+    Phase R2: Sigmoid-amplified agreeableness effect on directness.
+    modifier = (0.5 - trait_effect(agreeableness)) * 0.5
     adjusted = base_directness + modifier, clamped [0, 1]
     """
 
     def test_high_agreeableness_reduces_directness(self):
-        # A=0.9: modifier = (0.5-0.9)*0.3 = -0.12
-        # base=0.6: adjusted = 0.6 - 0.12 = 0.48
+        # A=0.9: trait_effect≈0.961, modifier≈-0.230
         interp = make_interpreter(agreeableness=0.9)
-        assert interp.influences_directness(0.6) == pytest.approx(0.48)
+        assert interp.influences_directness(0.6) == pytest.approx(0.370, abs=0.01)
 
     def test_low_agreeableness_increases_directness(self):
-        # A=0.1: modifier = (0.5-0.1)*0.3 = 0.12
-        # base=0.6: adjusted = 0.6 + 0.12 = 0.72
+        # A=0.1: trait_effect≈0.039, modifier≈+0.230
         interp = make_interpreter(agreeableness=0.1)
-        assert interp.influences_directness(0.6) == pytest.approx(0.72)
+        assert interp.influences_directness(0.6) == pytest.approx(0.830, abs=0.01)
 
     def test_mid_agreeableness_no_change(self):
-        # A=0.5: modifier = 0
+        # A=0.5: trait_effect=0.5, modifier=0
         interp = make_interpreter(agreeableness=0.5)
         assert interp.influences_directness(0.6) == pytest.approx(0.6)
 
     def test_clamped_to_zero(self):
-        # A=1.0: modifier = (0.5-1.0)*0.3 = -0.15
-        # base=0.1: adjusted = 0.1 - 0.15 = -0.05 -> clamped to 0
+        # A=1.0: trait_effect≈0.982, modifier≈-0.241
         interp = make_interpreter(agreeableness=1.0)
         assert interp.influences_directness(0.1) == pytest.approx(0.0)
 
     def test_clamped_to_one(self):
-        # A=0.0: modifier = (0.5-0)*0.3 = 0.15
-        # base=0.9: adjusted = 0.9 + 0.15 = 1.05 -> clamped to 1.0
+        # A=0.0: trait_effect≈0.018, modifier≈+0.241
         interp = make_interpreter(agreeableness=0.0)
         assert interp.influences_directness(0.9) == pytest.approx(1.0)
 
     def test_zero_base_low_agreeableness(self):
-        # A=0.0: modifier = 0.15
-        # base=0: adjusted = 0.15
+        # A=0.0: modifier≈+0.241
         interp = make_interpreter(agreeableness=0.0)
-        assert interp.influences_directness(0.0) == pytest.approx(0.15)
+        assert interp.influences_directness(0.0) == pytest.approx(0.241, abs=0.01)
 
     def test_one_base_high_agreeableness(self):
-        # A=1.0: modifier = -0.15
-        # base=1: adjusted = 0.85
+        # A=1.0: trait_effect≈0.982, modifier≈-0.241, base=1.0 → 0.759
         interp = make_interpreter(agreeableness=1.0)
-        assert interp.influences_directness(1.0) == pytest.approx(0.85)
+        assert interp.influences_directness(1.0) == pytest.approx(0.759, abs=0.01)
 
 
 # ============================================================================
@@ -793,68 +789,61 @@ class TestGetToneFromMood:
 
 class TestGetConfidenceModifier:
     """
-    c_boost = (conscientiousness - 0.5) * 0.1
-    n_penalty = neuroticism * 0.15
-    adjusted = domain_proficiency + c_boost - n_penalty
-    clamped [0.1, 0.95]
+    Phase R2: DK curve + sigmoid-amplified C/N effects.
+    dk = dunning_kruger_confidence(prof, n)
+    c_boost = (c - 0.5) * 0.3
+    n_penalty = trait_effect(n) * 0.25
+    adjusted = dk + c_boost - n_penalty, clamped [0.1, 0.95]
     """
 
     def test_mid_traits_mid_proficiency(self):
-        # C=0.5 -> c_boost=0, N=0.5 -> n_penalty=0.075
-        # adjusted = 0.5 + 0 - 0.075 = 0.425
+        # DK(0.5, 0.5)=0.42, c_boost=0, n_penalty=0.125 → 0.295
         interp = make_interpreter(conscientiousness=0.5, neuroticism=0.5)
-        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.425)
+        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.295, abs=0.01)
 
     def test_high_c_boost(self):
-        # C=1.0 -> c_boost=0.05, N=0 -> n_penalty=0
-        # adjusted = 0.5 + 0.05 = 0.55
+        # DK(0.5, 0.0)=0.42, c_boost=0.15, n_penalty≈0.005 → 0.566
         interp = make_interpreter(conscientiousness=1.0, neuroticism=0.0)
-        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.55)
+        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.566, abs=0.01)
 
     def test_low_c_penalty(self):
-        # C=0.0 -> c_boost=(0-0.5)*0.1=-0.05, N=0 -> n_penalty=0
-        # adjusted = 0.5 - 0.05 = 0.45
+        # DK(0.5, 0.0)=0.42, c_boost=-0.15, n_penalty≈0.005 → 0.266
         interp = make_interpreter(conscientiousness=0.0, neuroticism=0.0)
-        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.45)
+        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.266, abs=0.01)
 
     def test_high_n_penalty(self):
-        # C=0.5 -> c_boost=0, N=1.0 -> n_penalty=0.15
-        # adjusted = 0.5 - 0.15 = 0.35
+        # DK(0.5, 1.0)=0.42, c_boost=0, n_penalty≈0.246 → 0.175
         interp = make_interpreter(conscientiousness=0.5, neuroticism=1.0)
-        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.35)
+        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.175, abs=0.01)
 
     def test_combined_boost_and_penalty(self):
-        # C=0.8 -> c_boost=0.03, N=0.4 -> n_penalty=0.06
-        # adjusted = 0.7 + 0.03 - 0.06 = 0.67
+        # DK(0.7, 0.4)=0.67, c_boost=0.09, n_penalty≈0.078 → 0.683
         interp = make_interpreter(conscientiousness=0.8, neuroticism=0.4)
-        assert interp.get_confidence_modifier(0.7) == pytest.approx(0.67)
+        assert interp.get_confidence_modifier(0.7) == pytest.approx(0.683, abs=0.01)
 
     # --- Clamping ---
 
     def test_clamped_to_min(self):
-        # C=0.0 -> c_boost=-0.05, N=1.0 -> n_penalty=0.15
-        # adjusted = 0.0 - 0.05 - 0.15 = -0.2 -> clamped to 0.1
         interp = make_interpreter(conscientiousness=0.0, neuroticism=1.0)
         assert interp.get_confidence_modifier(0.0) == pytest.approx(0.1)
 
     def test_clamped_to_max(self):
-        # C=1.0 -> c_boost=0.05, N=0.0 -> n_penalty=0
-        # adjusted = 1.0 + 0.05 = 1.05 -> clamped to 0.95
         interp = make_interpreter(conscientiousness=1.0, neuroticism=0.0)
         assert interp.get_confidence_modifier(1.0) == pytest.approx(0.95)
 
-    def test_just_at_min(self):
-        # Construct inputs such that adjusted == 0.1 exactly
-        # We need prof + c_boost - n_penalty = 0.1
-        # C=0.5 -> c_boost=0, N=0 -> n_penalty=0, prof=0.1
-        interp = make_interpreter(conscientiousness=0.5, neuroticism=0.0)
-        assert interp.get_confidence_modifier(0.1) == pytest.approx(0.1)
+    def test_dk_novice_overconfident(self):
+        """Novice (prof=0.1, N=0.3) should be overconfident due to DK effect."""
+        interp = make_interpreter(conscientiousness=0.5, neuroticism=0.3)
+        conf = interp.get_confidence_modifier(0.1)
+        # DK: 0.1 + 0.7*0.25 = 0.275, minus n_penalty
+        assert conf > 0.1  # Should exceed raw proficiency
 
-    def test_just_at_max(self):
-        # prof + c_boost - n_penalty = 0.95
-        # C=0.5 -> c_boost=0, N=0, prof=0.95
-        interp = make_interpreter(conscientiousness=0.5, neuroticism=0.0)
-        assert interp.get_confidence_modifier(0.95) == pytest.approx(0.95)
+    def test_dk_valley_of_despair(self):
+        """Intermediate (prof=0.45) should be underconfident (valley)."""
+        interp = make_interpreter(conscientiousness=0.5, neuroticism=0.3)
+        conf = interp.get_confidence_modifier(0.45)
+        # DK: 0.45 - 0.08 = 0.37 (underconfident)
+        assert conf < 0.45
 
     def test_result_always_in_bounds(self):
         """Sweep across inputs to verify [0.1, 0.95] invariant."""
@@ -981,8 +970,8 @@ class TestGetTraitMarkersForValidation:
         assert e["level"] == "high"
         assert e["expect_proactive_engagement"] is True
         assert e["response_length_modifier"] == "longer"
-        # disclosure_modifier = (0.9 - 0.5) * 0.4 = 0.16
-        assert e["disclosure_modifier"] == pytest.approx(0.16)
+        # Phase R2 sigmoid: (trait_effect(0.9) - 0.5) * 0.45 ≈ 0.207
+        assert e["disclosure_modifier"] == pytest.approx(0.207, abs=0.01)
 
     def test_extraversion_moderate(self):
         result = make_interpreter(extraversion=0.5).get_trait_markers_for_validation()
@@ -1253,7 +1242,7 @@ class TestEdgeCases:
         assert interp.get_planning_language_tendency() == pytest.approx(0.0)
         assert interp.get_follow_through_likelihood() == pytest.approx(0.0)
         assert interp.influences_proactivity() == pytest.approx(0.0)
-        assert interp.get_self_disclosure_modifier() == pytest.approx(-0.2)
+        assert interp.get_self_disclosure_modifier() == pytest.approx(-0.217, abs=0.01)
         assert interp.get_enthusiasm_baseline() == pytest.approx(0.0)
         assert interp.get_validation_tendency() == pytest.approx(0.0)
         assert interp.get_conflict_avoidance() == pytest.approx(0.0)
@@ -1277,7 +1266,7 @@ class TestEdgeCases:
         assert interp.get_planning_language_tendency() == pytest.approx(1.0)
         assert interp.get_follow_through_likelihood() == pytest.approx(1.0)
         assert interp.influences_proactivity() == pytest.approx(1.0)
-        assert interp.get_self_disclosure_modifier() == pytest.approx(0.2)
+        assert interp.get_self_disclosure_modifier() == pytest.approx(0.217, abs=0.01)
         assert interp.get_enthusiasm_baseline() == pytest.approx(1.0)
         assert interp.get_validation_tendency() == pytest.approx(1.0)
         assert interp.get_conflict_avoidance() == pytest.approx(1.0)

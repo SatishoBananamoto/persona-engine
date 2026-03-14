@@ -82,6 +82,7 @@ EVIDENCE_STRESS_THRESHOLD = DEFAULT_CONFIG.evidence_stress_threshold
 UNKNOWN_DOMAIN_BASE = DEFAULT_CONFIG.unknown_domain_base
 OPENNESS_COMPETENCE_WEIGHT = DEFAULT_CONFIG.openness_competence_weight
 CROSS_TURN_INERTIA = DEFAULT_CONFIG.cross_turn_inertia
+PERSONALITY_FIELD_INERTIA = DEFAULT_CONFIG.personality_field_inertia
 FAMILIARITY_BOOST_PER_EPISODE = DEFAULT_CONFIG.familiarity_boost_per_episode
 FAMILIARITY_BOOST_CAP = DEFAULT_CONFIG.familiarity_boost_cap
 TIME_PRESSURE_TURN_THRESHOLD = DEFAULT_CONFIG.time_pressure_turn_threshold
@@ -400,7 +401,7 @@ class TurnPlanner:
         # Cross-turn inertia smoothing — elasticity
         if self._prior_snapshot:
             before_e = elasticity
-            elasticity = _smooth(self._prior_snapshot.elasticity, elasticity, CROSS_TURN_INERTIA)
+            elasticity = _smooth(self._prior_snapshot.elasticity, elasticity, PERSONALITY_FIELD_INERTIA)
             if abs(elasticity - before_e) > 0.001:
                 ctx.num(
                     source_type="cross_turn",
@@ -411,7 +412,7 @@ class TurnPlanner:
                     after=elasticity,
                     effect=f"Cross-turn inertia: {before_e:.3f} → {elasticity:.3f} (prev={self._prior_snapshot.elasticity:.3f})",
                     weight=0.7,
-                    reason=f"inertia={CROSS_TURN_INERTIA}",
+                    reason=f"inertia={PERSONALITY_FIELD_INERTIA}",
                 )
 
         # Stance
@@ -484,7 +485,7 @@ class TurnPlanner:
         )
         if self._prior_snapshot:
             before_f = formality
-            formality = _smooth(self._prior_snapshot.formality, formality, CROSS_TURN_INERTIA)
+            formality = _smooth(self._prior_snapshot.formality, formality, PERSONALITY_FIELD_INERTIA)
             if abs(formality - before_f) > 0.001:
                 ctx.num(
                     source_type="cross_turn",
@@ -495,11 +496,11 @@ class TurnPlanner:
                     after=formality,
                     effect=f"Cross-turn inertia: {before_f:.3f} → {formality:.3f}",
                     weight=0.7,
-                    reason=f"inertia={CROSS_TURN_INERTIA}",
+                    reason=f"inertia={PERSONALITY_FIELD_INERTIA}",
                 )
 
             before_d = directness
-            directness = _smooth(self._prior_snapshot.directness, directness, CROSS_TURN_INERTIA)
+            directness = _smooth(self._prior_snapshot.directness, directness, PERSONALITY_FIELD_INERTIA)
             if abs(directness - before_d) > 0.001:
                 ctx.num(
                     source_type="cross_turn",
@@ -510,7 +511,7 @@ class TurnPlanner:
                     after=directness,
                     effect=f"Cross-turn inertia: {before_d:.3f} → {directness:.3f}",
                     weight=0.7,
-                    reason=f"inertia={CROSS_TURN_INERTIA}",
+                    reason=f"inertia={PERSONALITY_FIELD_INERTIA}",
                 )
 
         logger.debug(
@@ -549,7 +550,7 @@ class TurnPlanner:
         disclosure_level = self._compute_disclosure(context.topic_signature, ctx)
         if self._prior_snapshot:
             before_disc = disclosure_level
-            disclosure_level = _smooth(self._prior_snapshot.disclosure, disclosure_level, CROSS_TURN_INERTIA)
+            disclosure_level = _smooth(self._prior_snapshot.disclosure, disclosure_level, PERSONALITY_FIELD_INERTIA)
             if abs(disclosure_level - before_disc) > 0.001:
                 ctx.num(
                     source_type="cross_turn",
@@ -560,7 +561,7 @@ class TurnPlanner:
                     after=disclosure_level,
                     effect=f"Cross-turn inertia: {before_disc:.3f} → {disclosure_level:.3f}",
                     weight=0.7,
-                    reason=f"inertia={CROSS_TURN_INERTIA}",
+                    reason=f"inertia={PERSONALITY_FIELD_INERTIA}",
                 )
 
         # Uncertainty action
