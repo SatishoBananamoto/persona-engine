@@ -48,8 +48,10 @@ class ResponseGenerator:
         self._config = config or ResponseConfig()
         self._persona = persona
 
-        # Allow direct adapter injection (for testing) or auto-create
-        if adapter:
+        # In strict mode, force TemplateAdapter for deterministic output
+        if self._config.strict_mode and not isinstance(adapter, TemplateAdapter):
+            self._adapter = TemplateAdapter()
+        elif adapter:
             self._adapter = adapter
         else:
             self._adapter = self._create_adapter()

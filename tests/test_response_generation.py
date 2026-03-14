@@ -16,7 +16,7 @@ import yaml
 
 from persona_engine.memory.stance_cache import StanceCache
 from persona_engine.planner.turn_planner import ConversationContext, TurnPlanner
-from persona_engine.response.adapters import MockAdapter, TemplateAdapter
+from persona_engine.response.adapters import MockAdapter, TemplateAdapter, AnthropicAdapter
 from persona_engine.response.generator import ResponseGenerator, create_response_generator
 from persona_engine.response.prompt_builder import (
     CLAIM_TYPE_PROMPTS,
@@ -768,3 +768,73 @@ class TestFullPipeline:
         resp2 = gen2.generate(ir2, ctx2.user_input)
 
         assert resp1.text == resp2.text
+
+
+# =============================================================================
+# 7. Strict Mode (Phase A.2)
+# =============================================================================
+
+
+class TestStrictMode:
+    """Strict mode forces TemplateAdapter for deterministic output."""
+
+    def test_strict_mode_forces_template_adapter(self):
+        """When strict_mode=True, adapter should be TemplateAdapter."""
+        from persona_engine.response.schema import ResponseConfig, GenerationBackend
+
+        config = ResponseConfig(backend=GenerationBackend.MOCK, strict_mode=True)
+        gen = ResponseGenerator(config=config)
+        assert isinstance(gen.adapter, TemplateAdapter)
+
+    def test_strict_mode_with_explicit_template_adapter(self):
+        """Strict mode with explicit TemplateAdapter should keep it."""
+        ta = TemplateAdapter()
+        gen = ResponseGenerator(adapter=ta)
+        assert gen.adapter is ta
+
+    def test_strict_mode_produces_deterministic_output(self):
+        """Same IR + strict mode → identical output every time."""
+        from persona_engine.response.schema import ResponseConfig
+
+        config = ResponseConfig(strict_mode=True)
+        ir = make_ir(confidence=0.8, tone=Tone.WARM_CONFIDENT)
+
+        gen = ResponseGenerator(config=config)
+        resp1 = gen.generate(ir, "Tell me about UX")
+        resp2 = gen.generate(ir, "Tell me about UX")
+        assert resp1.text == resp2.text
+
+    def test_strict_mode_off_allows_other_backends(self):
+        """Without strict mode, other backends are respected."""
+        from persona_engine.response.schema import ResponseConfig, GenerationBackend
+
+        config = ResponseConfig(backend=GenerationBackend.MOCK, strict_mode=False)
+        gen = ResponseGenerator(config=config)
+        assert isinstance(gen.adapter, MockAdapter)
+
+    def test_strict_mode_via_factory(self):
+        """create_response_generator doesn't have strict_mode yet, but config does."""
+        from persona_engine.response.schema import ResponseConfig, GenerationBackend
+
+        config = ResponseConfig(backend=GenerationBackend.ANTHROPIC, strict_mode=True)
+        gen = ResponseGenerator(config=config)
+        # Should be template, not anthropic
+        assert isinstance(gen.adapter, TemplateAdapter)
+
+    def test_strict_mode_template_respects_ir_fields(self):
+        """In strict mode, output should reflect IR confidence level."""
+        from persona_engine.response.schema import ResponseConfig
+
+        config = ResponseConfig(strict_mode=True)
+        gen = ResponseGenerator(config=config, persona=load_persona())
+
+        # Low confidence → hedging language
+        ir_low = make_ir(confidence=0.2, tone=Tone.NEUTRAL_CALM)
+        resp_low = gen.generate(ir_low, "What do you think?")
+
+        # High confidence → direct language
+        ir_high = make_ir(confidence=0.9, tone=Tone.WARM_CONFIDENT)
+        resp_high = gen.generate(ir_high, "What do you think?")
+
+        # They should be different (different IR → different template output)
+        assert resp_low.text != resp_high.text

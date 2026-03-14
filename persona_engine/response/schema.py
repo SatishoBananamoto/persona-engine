@@ -52,3 +52,7 @@ class ResponseConfig(BaseModel):
     max_tokens: int = 300
     temperature: float = 0.7
     api_key: str | None = None
+    strict_mode: bool = Field(
+        default=False,
+        description="When True, forces TemplateAdapter for deterministic output regardless of backend setting",
+    )

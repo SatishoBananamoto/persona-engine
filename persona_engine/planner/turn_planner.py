@@ -50,6 +50,7 @@ from persona_engine.schema.ir_schema import (
     KnowledgeAndDisclosure,
     KnowledgeClaimType,
     MemoryOps,
+    MemoryReadRequest,
     MemoryWriteIntent,
     ResponseStructure,
     Tone,
@@ -163,8 +164,9 @@ class TurnPlanner:
         4. Knowledge & safety — disclosure, uncertainty, claim type, patterns, constraints
         5. Finalization — memory writes, IR assembly, stance cache, snapshot
         """
-        ctx, turn_seed, memory_ops = self._stage_foundation(context)
+        ctx, turn_seed, memory_ops, memory_context = self._stage_foundation(context)
         foundation = self._stage_interpretation(context, ctx)
+        foundation["memory_context"] = memory_context
         metrics = self._stage_behavioral_metrics(context, ctx, foundation)
         knowledge = self._stage_knowledge_safety(context, ctx, foundation, metrics)
         return self._stage_finalization(
@@ -177,10 +179,11 @@ class TurnPlanner:
 
     def _stage_foundation(
         self, context: ConversationContext
-    ) -> tuple[TraceContext, int, MemoryOps]:
+    ) -> tuple[TraceContext, int, MemoryOps, dict[str, Any]]:
         """Stage 1: TraceContext setup, per-turn seed, and memory context."""
         ctx = TraceContext()
         memory_ops = MemoryOps()
+        memory_context: dict[str, Any] = {}
 
         turn_seed = create_turn_seed(
             base_seed=self.determinism.seed if self.determinism.seed is not None else 0,
@@ -216,7 +219,7 @@ class TurnPlanner:
                     weight=0.7,
                 )
 
-        return ctx, turn_seed, memory_ops
+        return ctx, turn_seed, memory_ops, memory_context
 
     def _stage_interpretation(
         self, context: ConversationContext, ctx: TraceContext
@@ -356,7 +359,7 @@ class TurnPlanner:
         )
 
         # Confidence (+ cross-turn smoothing)
-        confidence = self._compute_confidence(proficiency, ctx)
+        confidence = self._compute_confidence(proficiency, ctx, memory_context=foundation.get("memory_context"))
         if self._prior_snapshot:
             before_smooth = confidence
             confidence = _smooth(self._prior_snapshot.confidence, confidence, CROSS_TURN_INERTIA)
@@ -571,6 +574,31 @@ class TurnPlanner:
         uncertainty_action = knowledge["uncertainty_action"]
         claim_enum = knowledge["claim_enum"]
 
+        # Memory read requests (document what was read during this turn)
+        read_requests: list[MemoryReadRequest] = []
+        memory_context = foundation.get("memory_context", {})
+        if self.memory and memory_context:
+            if memory_context.get("known_facts"):
+                read_requests.append(MemoryReadRequest(
+                    query_type="fact",
+                    query=f"Facts relevant to {context.topic_signature}",
+                ))
+            if memory_context.get("active_preferences"):
+                read_requests.append(MemoryReadRequest(
+                    query_type="preference",
+                    query="Active user preferences",
+                ))
+            if memory_context.get("topic_episodes"):
+                read_requests.append(MemoryReadRequest(
+                    query_type="episode",
+                    query=f"Episodes about {context.topic_signature}",
+                ))
+            if memory_context.get("relationship"):
+                read_requests.append(MemoryReadRequest(
+                    query_type="relationship",
+                    query="Current relationship state",
+                ))
+
         # Memory write intents
         write_intents: list[MemoryWriteIntent] = []
         if self.memory:
@@ -598,7 +626,10 @@ class TurnPlanner:
                     privacy_level=0.1,
                     source="observed_behavior",
                 ))
-            memory_ops = MemoryOps(write_intents=write_intents)
+            memory_ops = MemoryOps(
+                read_requests=read_requests,
+                write_intents=write_intents,
+            )
 
         # Propagate invariants into safety plan
         ctx.safety_plan.cannot_claim = list(self.persona.invariants.cannot_claim)
@@ -837,12 +868,13 @@ class TurnPlanner:
     def _compute_confidence(
         self,
         proficiency: float,
-        ctx: "TraceContext"
+        ctx: "TraceContext",
+        memory_context: dict[str, Any] | None = None,
     ) -> float:
         """
         Compute response confidence.
 
-        Sequence: base (proficiency) → trait → cognitive → authority bias → bounds
+        Sequence: base (proficiency) → trait → cognitive → authority bias → memory → bounds
         """
 
         # Base from proficiency
@@ -898,6 +930,40 @@ class TurnPlanner:
                 effect=f"Authority bias: {auth_mod.modifier:+.3f}",
                 weight=auth_mod.strength,
                 reason=auth_mod.trigger
+            )
+
+        # Memory knowledge boost: prior facts about this topic increase confidence
+        if memory_context and memory_context.get("known_facts"):
+            fact_count = len(memory_context["known_facts"])
+            # Diminishing returns: +0.05 for first fact, +0.03 each after, max +0.15
+            memory_boost = min(0.15, 0.05 + 0.03 * (fact_count - 1))
+            before_mem = confidence
+            confidence = confidence + memory_boost
+            ctx.num(
+                source_type="memory",
+                source_id="known_facts_boost",
+                target_field="response_structure.confidence",
+                operation="add",
+                before=before_mem,
+                after=confidence,
+                effect=f"Memory boost: +{memory_boost:.3f} from {fact_count} known fact(s)",
+                weight=0.7,
+                reason=f"{fact_count} facts retrieved from memory",
+            )
+        if memory_context and memory_context.get("previously_discussed"):
+            before_disc = confidence
+            familiarity_boost = 0.03
+            confidence = confidence + familiarity_boost
+            ctx.num(
+                source_type="memory",
+                source_id="topic_familiarity",
+                target_field="response_structure.confidence",
+                operation="add",
+                before=before_disc,
+                after=confidence,
+                effect=f"Topic familiarity boost: +{familiarity_boost:.3f}",
+                weight=0.5,
+                reason="Topic previously discussed",
             )
 
         # Bounds clamp

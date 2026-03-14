@@ -85,11 +85,17 @@ class ResponseGenerator:
             strict_mode: If True, enforce strict verbosity limits
         """
         self.persona = persona
-        self.adapter = adapter or create_adapter(provider)
+        self.strict_mode = strict_mode
+
+        # In strict mode, force TemplateAdapter for deterministic output
+        if strict_mode and not isinstance(adapter, TemplateAdapter):
+            self.adapter = TemplateAdapter()
+        else:
+            self.adapter = adapter or create_adapter(provider)
+
         self.prompt_builder = IRPromptBuilder()
         self.style_modulator = StyleModulator()
-        self.strict_mode = strict_mode
-        
+
         # Pre-build system prompt (constant for persona)
         self._system_prompt = self.prompt_builder.build_system_prompt(persona)
     
@@ -222,7 +228,11 @@ def create_response_generator(
     Returns:
         Configured ResponseGenerator
     """
-    adapter = create_adapter(provider=provider, api_key=api_key)
+    adapter: BaseLLMAdapter
+    if strict_mode:
+        adapter = TemplateAdapter()
+    else:
+        adapter = create_adapter(provider=provider, api_key=api_key)
     return ResponseGenerator(
         persona=persona,
         adapter=adapter,

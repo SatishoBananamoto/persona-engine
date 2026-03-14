@@ -731,3 +731,173 @@ class TestPromptBuilderMemoryFormatting:
         result = builder._format_memory_context(ctx)
         assert "PREVIOUS" in result
         assert "API design" in result
+
+
+# =============================================================================
+# 6. Memory reads influence IR generation (Phase A.1)
+# =============================================================================
+
+
+class TestMemoryReadsInfluenceIR:
+    """Test that stored facts boost confidence and populate read_requests."""
+
+    def test_known_facts_boost_confidence(self):
+        """Persona with stored facts about a topic has higher confidence."""
+        persona = load_persona()
+
+        # Without memory
+        planner_no_mem = TurnPlanner(
+            persona=persona,
+            determinism=DeterminismManager(seed=42),
+        )
+        ctx_no_mem = make_context(
+            user_input="What are the best practices for user interviews?",
+            topic="ux_research",
+            domain="ux_research",
+        )
+        ir_no_mem = planner_no_mem.generate_ir(ctx_no_mem)
+
+        # With memory containing relevant facts
+        memory = MemoryManager()
+        memory.remember_fact(
+            content="User works as a senior UX researcher at Google",
+            category="occupation",
+            confidence=0.9,
+            turn=0,
+        )
+        memory.remember_fact(
+            content="User prefers contextual inquiry over surveys",
+            category="interests",
+            confidence=0.85,
+            turn=1,
+        )
+
+        planner_mem = TurnPlanner(
+            persona=persona,
+            determinism=DeterminismManager(seed=42),
+            memory_manager=memory,
+        )
+        ctx_mem = make_context(
+            user_input="What are the best practices for user interviews?",
+            topic="ux_research",
+            domain="ux_research",
+        )
+        ir_mem = planner_mem.generate_ir(ctx_mem)
+
+        # Memory should boost confidence
+        assert ir_mem.response_structure.confidence > ir_no_mem.response_structure.confidence, (
+            f"Memory facts should boost confidence: "
+            f"with_mem={ir_mem.response_structure.confidence:.3f} vs "
+            f"no_mem={ir_no_mem.response_structure.confidence:.3f}"
+        )
+
+    def test_previously_discussed_boosts_confidence(self):
+        """Topics previously discussed get a familiarity boost."""
+        persona = load_persona()
+
+        memory = MemoryManager()
+        memory.record_episode(
+            content="Discussed ux_research: deep dive into usability testing",
+            topic="ux_research",
+            outcome="productive",
+            turn_start=1,
+            turn_end=3,
+        )
+
+        planner = TurnPlanner(
+            persona=persona,
+            determinism=DeterminismManager(seed=42),
+            memory_manager=memory,
+        )
+        ctx = make_context(
+            user_input="Let's talk more about usability testing approaches",
+            topic="ux_research",
+            domain="ux_research",
+            turn=5,
+        )
+        ir = planner.generate_ir(ctx)
+
+        # Check that a memory citation for topic familiarity exists
+        memory_cites = [
+            c for c in ir.citations
+            if c.source_id == "topic_familiarity" or c.source_id == "episodic_store"
+        ]
+        assert len(memory_cites) > 0, "Should have memory citation for previously discussed topic"
+
+    def test_read_requests_populated_in_ir(self):
+        """IR should contain read_requests documenting what was retrieved."""
+        persona = load_persona()
+
+        memory = MemoryManager()
+        memory.remember_fact(
+            content="User is experienced with Figma",
+            category="interests",
+            confidence=0.9,
+            turn=0,
+        )
+
+        planner = TurnPlanner(
+            persona=persona,
+            determinism=DeterminismManager(seed=42),
+            memory_manager=memory,
+        )
+        ctx = make_context(
+            user_input="Tell me about prototyping tools",
+            topic="design_tools",
+            domain="ux_research",
+        )
+        ir = planner.generate_ir(ctx)
+
+        assert len(ir.memory_ops.read_requests) > 0, "IR should document memory reads"
+        fact_reads = [r for r in ir.memory_ops.read_requests if r.query_type == "fact"]
+        assert len(fact_reads) > 0, "Should have fact read request"
+
+    def test_memory_confidence_boost_is_bounded(self):
+        """Even with many facts, confidence boost is capped at +0.15."""
+        persona = load_persona()
+
+        memory = MemoryManager()
+        for i in range(10):
+            memory.remember_fact(
+                content=f"Fact {i} about UX research methodology",
+                category="general",
+                confidence=0.9,
+                turn=i,
+            )
+
+        planner = TurnPlanner(
+            persona=persona,
+            determinism=DeterminismManager(seed=42),
+            memory_manager=memory,
+        )
+        ctx = make_context(
+            user_input="What's the latest in UX research?",
+            topic="ux_research",
+            domain="ux_research",
+        )
+        ir = planner.generate_ir(ctx)
+
+        # Check the memory boost citation
+        boost_cites = [c for c in ir.citations if c.source_id == "known_facts_boost"]
+        assert len(boost_cites) == 1
+        # The boost should be capped at 0.15
+        assert "+0.150" in boost_cites[0].effect or "+0.15" in boost_cites[0].effect
+
+    def test_no_memory_no_boost(self):
+        """Without memory manager, no memory citations should appear."""
+        persona = load_persona()
+
+        planner = TurnPlanner(
+            persona=persona,
+            determinism=DeterminismManager(seed=42),
+        )
+        ctx = make_context(
+            user_input="Tell me about user research",
+            topic="ux_research",
+            domain="ux_research",
+        )
+        ir = planner.generate_ir(ctx)
+
+        memory_boost_cites = [c for c in ir.citations if c.source_id == "known_facts_boost"]
+        assert len(memory_boost_cites) == 0
+        assert len(ir.memory_ops.read_requests) == 0
