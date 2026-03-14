@@ -1,6 +1,7 @@
 """Behavioral engine module for persona behavior interpretation"""
 
 from persona_engine.behavioral.bias_simulator import (
+    MAX_BIAS_IMPACT,
     BiasModifier,
     BiasSimulator,
     BiasType,

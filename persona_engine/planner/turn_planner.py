@@ -22,6 +22,7 @@ from persona_engine.behavioral import (
     BehavioralRulesEngine,
     BiasModifier,
     BiasSimulator,
+    MAX_BIAS_IMPACT,
     CognitiveStyleInterpreter,
     StateManager,
     TraitInterpreter,
@@ -37,6 +38,14 @@ from persona_engine.behavioral.emotional_appraisal import (
 )
 from persona_engine.behavioral.linguistic_markers import (
     build_personality_language_directives,
+)
+from persona_engine.behavioral.social_cognition import (
+    AdaptationDirectives,
+    SchemaEffect,
+    compute_adaptation,
+    compute_schema_effect,
+    detect_schema_relevance,
+    infer_user_model,
 )
 from persona_engine.behavioral.trait_interactions import TraitInteractionEngine
 from persona_engine.memory import MemoryManager, StanceCache
@@ -196,7 +205,11 @@ class TurnPlanner:
         )
         self.rules = BehavioralRulesEngine(persona)
 
-        # Initialize bias simulator
+        # Initialize bias simulator (Phase R6: wire persona-declared biases)
+        persona_biases = [
+            {"type": b.type, "strength": b.strength}
+            for b in persona.biases
+        ] if persona.biases else None
         self.bias_simulator = BiasSimulator(
             traits={
                 "openness": persona.psychology.big_five.openness,
@@ -206,6 +219,7 @@ class TurnPlanner:
                 "neuroticism": persona.psychology.big_five.neuroticism,
             },
             value_priorities=self.values.get_value_priorities(),
+            persona_biases=persona_biases,
         )
 
         # Track bias modifiers for current turn (reset per turn)
@@ -321,12 +335,8 @@ class TurnPlanner:
             default_relevance=DEFAULT_TOPIC_RELEVANCE,
         )
 
-        # Bias modifiers
-        self._current_bias_modifiers = self.bias_simulator.compute_modifiers(
-            user_input=context.user_input,
-            value_alignment=topic_relevance,
-            ctx=ctx,
-        )
+        # Bias modifiers (proficiency computed after domain detection below)
+        # Preliminary computation — will be updated with proficiency after domain detection
 
         # State evolution
         self.state.evolve_state_post_turn(
@@ -381,6 +391,14 @@ class TurnPlanner:
                 ),
                 weight=0.9,
             )
+
+        # Bias modifiers (now with proficiency for DK bias)
+        self._current_bias_modifiers = self.bias_simulator.compute_modifiers(
+            user_input=context.user_input,
+            value_alignment=topic_relevance,
+            ctx=ctx,
+            proficiency=proficiency,
+        )
 
         return {
             "topic_relevance": topic_relevance,
@@ -497,6 +515,34 @@ class TurnPlanner:
                         f"Appraisal ({appraisal.dominant_emotion}): "
                         f"valence {appraisal.valence_delta:+.3f}, "
                         f"arousal {appraisal.arousal_delta:+.3f}"
+                    ),
+                    weight=0.7,
+                )
+
+        # Phase R6: Social cognition — user modeling and adaptation
+        user_model = infer_user_model(context.user_input)
+        adaptation = compute_adaptation(
+            user_model, self.persona.psychology.big_five,
+            base_disclosure=self.persona.disclosure_policy.base_openness,
+        )
+
+        # Phase R6: Self-schema protection
+        self_schemas = getattr(self.persona, 'self_schemas', []) or []
+        schema_match, schema_challenge = detect_schema_relevance(
+            context.user_input, self_schemas
+        )
+        schema_effect = compute_schema_effect(schema_match, schema_challenge)
+        if schema_match:
+            confidence += schema_effect.confidence_modifier
+            elasticity += schema_effect.elasticity_modifier
+            if abs(schema_effect.confidence_modifier) > 0.001 or abs(schema_effect.elasticity_modifier) > 0.001:
+                ctx.add_basic_citation(
+                    source_type="rule",
+                    source_id="self_schema",
+                    effect=(
+                        f"Self-schema '{schema_match}' {'challenged' if schema_challenge else 'validated'}: "
+                        f"conf {schema_effect.confidence_modifier:+.2f}, "
+                        f"elast {schema_effect.elasticity_modifier:+.2f}"
                     ),
                     weight=0.7,
                 )
@@ -622,6 +668,8 @@ class TurnPlanner:
             "directness": directness,
             "trait_guidance": trait_guidance,
             "cognitive_guidance": cognitive_guidance,
+            "adaptation": adaptation,
+            "schema_effect": schema_effect,
         }
 
     def _stage_knowledge_safety(
@@ -655,6 +703,26 @@ class TurnPlanner:
                     weight=0.7,
                     reason=f"inertia={PERSONALITY_FIELD_INERTIA}",
                 )
+
+        # Phase R6: Apply empathy gap bias to disclosure
+        disclosure_bias = self.bias_simulator.get_total_modifier_for_field(
+            self._current_bias_modifiers,
+            "knowledge_disclosure.disclosure_level"
+        )
+        if abs(disclosure_bias) > 0.001:
+            before_bias = disclosure_level
+            disclosure_level = max(0.0, min(1.0, disclosure_level + disclosure_bias))
+            ctx.num(
+                source_type="trait",
+                source_id="empathy_gap_bias",
+                target_field="knowledge_disclosure.disclosure_level",
+                operation="add",
+                before=before_bias,
+                after=disclosure_level,
+                effect=f"Empathy gap bias: disclosure {disclosure_bias:+.3f}",
+                weight=min(abs(disclosure_bias) / MAX_BIAS_IMPACT, 1.0),
+                reason=f"empathy_gap={disclosure_bias:+.3f}"
+            )
 
         # Uncertainty action
         time_pressure = self._compute_time_pressure(
@@ -819,11 +887,19 @@ class TurnPlanner:
         # Collect behavioral directives from trait + cognitive guidance (Phase R1)
         trait_guidance: TraitGuidance | None = metrics.get("trait_guidance")
         cognitive_guidance: CognitiveGuidance | None = metrics.get("cognitive_guidance")
+        adaptation: AdaptationDirectives | None = metrics.get("adaptation")
+        schema_effect: SchemaEffect | None = metrics.get("schema_effect")
         behavioral_directives: list[str] = []
         if trait_guidance:
             behavioral_directives.extend(trait_guidance.prompt_directives)
         if cognitive_guidance:
             behavioral_directives.extend(cognitive_guidance.prompt_directives)
+
+        # Phase R6: Social cognition directives
+        if adaptation and adaptation.prompt_directives:
+            behavioral_directives.extend(adaptation.prompt_directives)
+        if schema_effect and schema_effect.prompt_directive:
+            behavioral_directives.append(schema_effect.prompt_directive)
 
         # Phase R5: Personality-specific language directives (LIWC-grounded)
         current_mood = self.state.get_mood()
@@ -1019,6 +1095,9 @@ class TurnPlanner:
             ctx=ctx
         )
 
+        # Phase R6: Record stance as anchor for anchoring bias
+        self.bias_simulator.set_anchor(stance)
+
         return stance, rationale
 
 
@@ -1057,23 +1136,28 @@ class TurnPlanner:
             reason=f"trait={trait_elasticity:.2f}, cognitive={cognitive_elasticity:.2f}"
         )
 
-        # Apply Confirmation Bias modifier (Phase 2)
-        conf_mod = self.bias_simulator.get_modifier_for_field(
+        # Apply elasticity bias modifiers (confirmation + anchoring + status_quo)
+        elasticity_bias = self.bias_simulator.get_total_modifier_for_field(
             self._current_bias_modifiers,
             "response_structure.elasticity"
         )
-        if conf_mod:
-            biased = elasticity + conf_mod.modifier
+        if abs(elasticity_bias) > 0.001:
+            biased = elasticity + elasticity_bias
+            # Find bias names for citation
+            bias_names = [
+                m.bias_type.value for m in self._current_bias_modifiers
+                if m.target_field == "response_structure.elasticity"
+            ]
             elasticity = ctx.num(
                 source_type="rule",
-                source_id="confirmation_bias",
+                source_id="elasticity_biases",
                 target_field="response_structure.elasticity",
                 operation="add",
                 before=elasticity,
                 after=biased,
-                effect=f"Confirmation bias: {conf_mod.modifier:+.3f}",
-                weight=conf_mod.strength,
-                reason=conf_mod.trigger
+                effect=f"Bias ({', '.join(bias_names)}): {elasticity_bias:+.3f}",
+                weight=min(abs(elasticity_bias) / MAX_BIAS_IMPACT, 1.0),
+                reason=f"combined_bias={elasticity_bias:+.3f}"
             )
 
         # Clamp to [0.1, 0.9] bounds
@@ -1138,23 +1222,27 @@ class TurnPlanner:
             reason="Risk tolerance/need for closure influence"
         )
 
-        # Apply Authority Bias modifier (Phase 2)
-        auth_mod = self.bias_simulator.get_modifier_for_field(
+        # Apply confidence bias modifiers (authority + dunning-kruger)
+        confidence_bias = self.bias_simulator.get_total_modifier_for_field(
             self._current_bias_modifiers,
             "response_structure.confidence"
         )
-        if auth_mod:
-            biased = confidence + auth_mod.modifier
+        if abs(confidence_bias) > 0.001:
+            biased = confidence + confidence_bias
+            bias_names = [
+                m.bias_type.value for m in self._current_bias_modifiers
+                if m.target_field == "response_structure.confidence"
+            ]
             confidence = ctx.num(
-                source_type="value",
-                source_id="authority_bias",
+                source_type="rule",
+                source_id="confidence_biases",
                 target_field="response_structure.confidence",
                 operation="add",
                 before=confidence,
                 after=biased,
-                effect=f"Authority bias: {auth_mod.modifier:+.3f}",
-                weight=auth_mod.strength,
-                reason=auth_mod.trigger
+                effect=f"Bias ({', '.join(bias_names)}): {confidence_bias:+.3f}",
+                weight=min(abs(confidence_bias) / MAX_BIAS_IMPACT, 1.0),
+                reason=f"combined_bias={confidence_bias:+.3f}"
             )
 
         # Memory knowledge boost: prior facts about this topic increase confidence
@@ -1357,25 +1445,28 @@ class TurnPlanner:
                     reason=f"E={self.persona.psychology.big_five.extraversion:.2f}"
                 )
 
-        # Check for negativity bias (Phase 2)
-        # Negativity bias increases arousal, which may shift tone selection
-        neg_mod = self.bias_simulator.get_modifier_for_field(
+        # Apply arousal bias modifiers (negativity + availability)
+        arousal_bias = self.bias_simulator.get_total_modifier_for_field(
             self._current_bias_modifiers,
             "communication_style.arousal"
         )
-        if neg_mod:
+        if abs(arousal_bias) > 0.001:
             arousal_before = arousal
-            arousal = min(1.0, arousal + neg_mod.modifier)
+            arousal = min(1.0, max(0.0, arousal + arousal_bias))
+            bias_names = [
+                m.bias_type.value for m in self._current_bias_modifiers
+                if m.target_field == "communication_style.arousal"
+            ]
             ctx.num(
                 source_type="trait",
-                source_id="negativity_bias",
+                source_id="arousal_biases",
                 target_field="communication_style.arousal",
                 operation="add",
                 before=arousal_before,
                 after=arousal,
-                effect=f"Negativity bias: arousal {neg_mod.modifier:+.3f}",
-                weight=neg_mod.strength,
-                reason=neg_mod.trigger
+                effect=f"Bias ({', '.join(bias_names)}): arousal {arousal_bias:+.3f}",
+                weight=min(abs(arousal_bias) / MAX_BIAS_IMPACT, 1.0),
+                reason=f"combined_bias={arousal_bias:+.3f}"
             )
 
         tone = self.traits.get_tone_from_mood(valence, arousal, stress)

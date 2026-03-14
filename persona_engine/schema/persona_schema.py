@@ -433,6 +433,13 @@ class Persona(BaseModel):
     response_patterns: list[ResponsePattern] = Field(default_factory=list)
     biases: list[Bias] = Field(default_factory=list)
 
+    # Self-schemas (Phase R6: identity dimensions the persona protects)
+    self_schemas: list[str] = Field(
+        default_factory=list,
+        description="Self-schema labels like 'competent_researcher', 'caring_person'. "
+        "When challenged on a schema-relevant dimension, elasticity drops and confidence rises."
+    )
+
     # Dynamic state (initial values)
     initial_state: DynamicState
 

@@ -1255,7 +1255,12 @@ class TestBiasAndSafetyPlanIntegrity:
         )
         ir = planner.generate_ir(ctx)
 
-        CANONICAL = {"confirmation_bias", "negativity_bias", "authority_bias"}
+        CANONICAL = {
+            "confirmation_bias", "negativity_bias", "authority_bias",
+            "anchoring_bias", "status_quo_bias", "availability_bias",
+            "empathy_gap_bias", "dunning_kruger_bias",
+            "elasticity_biases", "confidence_biases", "arousal_biases",
+        }
 
         rogue_ids = {
             c.source_id

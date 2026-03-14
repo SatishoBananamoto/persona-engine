@@ -56,6 +56,20 @@ NEGATION_WORDS = frozenset([
     "shouldn't", "wouldn't", "hardly", "barely", "neither",
 ])
 
+# Change proposal markers (for status quo bias)
+CHANGE_MARKERS = frozenset([
+    "change", "switch", "replace", "new approach", "different way",
+    "instead", "alternative", "rethink", "overhaul", "transform",
+    "upgrade", "redesign", "migrate", "pivot",
+])
+
+# Emotional content markers (for empathy gap)
+EMOTIONAL_CONTENT_MARKERS = frozenset([
+    "feel", "feeling", "hurt", "painful", "heartbroken", "devastated",
+    "overwhelmed", "emotional", "crying", "struggling", "suffering",
+    "grief", "lonely", "depressed", "anxious",
+])
+
 
 # =============================================================================
 # Data Structures
@@ -66,6 +80,11 @@ class BiasType(StrEnum):
     CONFIRMATION = "confirmation_bias"
     NEGATIVITY = "negativity_bias"
     AUTHORITY = "authority_bias"
+    ANCHORING = "anchoring_bias"
+    STATUS_QUO = "status_quo_bias"
+    AVAILABILITY = "availability_bias"
+    EMPATHY_GAP = "empathy_gap"
+    DUNNING_KRUGER = "dunning_kruger_bias"
 
 
 @dataclass
@@ -152,11 +171,14 @@ class BiasSimulator:
         self,
         traits: dict[str, float],
         value_priorities: dict[str, float],
+        persona_biases: list[dict] | None = None,
     ):
         """
         Args:
             traits: Big 5 traits dict (openness, conscientiousness, etc.)
             value_priorities: Schwartz values normalized priorities
+            persona_biases: Optional list of persona-declared biases
+                [{"type": "anchoring_bias", "strength": 0.4}, ...]
         """
         self.traits = traits
         self.values = value_priorities
@@ -164,17 +186,37 @@ class BiasSimulator:
         # Precompute trait accessors
         self.neuroticism = traits.get("neuroticism", 0.5)
         self.openness = traits.get("openness", 0.5)
+        self.conscientiousness = traits.get("conscientiousness", 0.5)
+        self.agreeableness = traits.get("agreeableness", 0.5)
+        self.extraversion = traits.get("extraversion", 0.5)
 
         # Precompute value accessors for conformity-related values
         self.conformity = value_priorities.get("conformity", 0.0)
         self.tradition = value_priorities.get("tradition", 0.0)
         self.security = value_priorities.get("security", 0.0)
 
+        # Phase R6.2: Persona-declared bias strength overrides
+        self._strength_overrides: dict[str, float] = {}
+        if persona_biases:
+            for bias in persona_biases:
+                self._strength_overrides[bias["type"]] = bias["strength"]
+
+        # Anchoring state: tracks first claim for anchoring bias
+        self._anchor_stance: str | None = None
+
+    def _apply_override(self, bias_type: str, computed_strength: float) -> float:
+        """Apply persona-declared strength override if available."""
+        if bias_type in self._strength_overrides:
+            # Blend: persona declaration dominates (70% override, 30% computed)
+            return self._strength_overrides[bias_type] * 0.7 + computed_strength * 0.3
+        return computed_strength
+
     def compute_modifiers(
         self,
         user_input: str,
         value_alignment: float = 0.0,
         ctx: Optional["TraceContext"] = None,
+        proficiency: float = 0.5,
     ) -> list[BiasModifier]:
         """
         Compute all applicable bias modifiers for current context.
@@ -183,6 +225,7 @@ class BiasSimulator:
             user_input: The user's input text
             value_alignment: How aligned is input with persona's values (0-1)
             ctx: TraceContext for citation (optional)
+            proficiency: Domain proficiency (0-1) for Dunning-Kruger bias
 
         Returns:
             List of BiasModifier objects to apply
@@ -204,6 +247,31 @@ class BiasSimulator:
         auth_mod = self._compute_authority_bias(input_lower, ctx)
         if auth_mod:
             modifiers.append(auth_mod)
+
+        # 4. Anchoring Bias (affects elasticity — anchors to first stance)
+        anchor_mod = self._compute_anchoring_bias(ctx)
+        if anchor_mod:
+            modifiers.append(anchor_mod)
+
+        # 5. Status Quo Bias (affects elasticity — resists change proposals)
+        sq_mod = self._compute_status_quo_bias(input_lower, ctx)
+        if sq_mod:
+            modifiers.append(sq_mod)
+
+        # 6. Availability Bias (affects arousal — overweights recent negative info)
+        avail_mod = self._compute_availability_bias(input_lower, ctx)
+        if avail_mod:
+            modifiers.append(avail_mod)
+
+        # 7. Empathy Gap (affects disclosure — underestimates emotional reactions)
+        eg_mod = self._compute_empathy_gap(input_lower, ctx)
+        if eg_mod:
+            modifiers.append(eg_mod)
+
+        # 8. Dunning-Kruger Bias (affects confidence — overconfident in low-proficiency)
+        dk_mod = self._compute_dunning_kruger_bias(proficiency, ctx)
+        if dk_mod:
+            modifiers.append(dk_mod)
 
         return modifiers
 
@@ -352,13 +420,241 @@ class BiasSimulator:
             strength=adjusted_strength,
         )
 
+    # ---- Phase R6 New Biases ----
+
+    def set_anchor(self, stance: str) -> None:
+        """Record first stance as anchor for anchoring bias."""
+        if self._anchor_stance is None and stance:
+            self._anchor_stance = stance
+
+    def _compute_anchoring_bias(
+        self,
+        ctx: Optional["TraceContext"] = None,
+    ) -> BiasModifier | None:
+        """Anchoring Bias: Once a stance is set, resist changing it.
+
+        Trigger: Having a prior anchor stance.
+        Personality: Low-O (less flexible) amplifies; High-O counters.
+        Effect: Reduces elasticity (anchored to first position).
+        """
+        if self._anchor_stance is None:
+            return None
+
+        # Low-O = more anchored
+        raw_strength = (1 - self.openness) * 0.8
+        adjusted = self._apply_override("anchoring_bias", raw_strength)
+
+        if adjusted < 0.1:
+            return None
+
+        modifier = -min(adjusted * MAX_BIAS_IMPACT, MAX_BIAS_IMPACT)
+
+        if ctx:
+            ctx.add_basic_citation(
+                source_type="rule",
+                source_id="anchoring_bias",
+                effect=f"Anchored to prior stance → elasticity {modifier:+.3f}",
+                weight=adjusted,
+            )
+
+        return BiasModifier(
+            bias_type=BiasType.ANCHORING,
+            target_field="response_structure.elasticity",
+            operation="add",
+            modifier=modifier,
+            trigger=f"anchor_set=True, openness={self.openness:.2f}",
+            strength=adjusted,
+        )
+
+    def _compute_status_quo_bias(
+        self,
+        input_lower: str,
+        ctx: Optional["TraceContext"] = None,
+    ) -> BiasModifier | None:
+        """Status Quo Bias: Resist proposed changes.
+
+        Trigger: Change-proposal markers in input.
+        Personality: Low-O + High-C (prefer established ways).
+        Effect: Reduces elasticity.
+        """
+        matched = [m for m in CHANGE_MARKERS if m in input_lower]
+        if not matched:
+            return None
+
+        # Low-O + High-C = more status quo bias
+        susceptibility = ((1 - self.openness) + self.conscientiousness) / 2.0
+        if susceptibility < 0.5:
+            return None
+
+        marker_strength = min(len(matched) / 2.0, 1.0)
+        raw_strength = marker_strength * (susceptibility - 0.5) / 0.5
+        adjusted = self._apply_override("status_quo_bias", raw_strength)
+
+        if adjusted < 0.1:
+            return None
+
+        modifier = -min(adjusted * MAX_BIAS_IMPACT, MAX_BIAS_IMPACT)
+
+        if ctx:
+            ctx.add_basic_citation(
+                source_type="rule",
+                source_id="status_quo_bias",
+                effect=f"Change proposal ('{matched[0]}') + low-O/high-C → elasticity {modifier:+.3f}",
+                weight=adjusted,
+            )
+
+        return BiasModifier(
+            bias_type=BiasType.STATUS_QUO,
+            target_field="response_structure.elasticity",
+            operation="add",
+            modifier=modifier,
+            trigger=f"change_markers={len(matched)}, susceptibility={susceptibility:.2f}",
+            strength=adjusted,
+        )
+
+    def _compute_availability_bias(
+        self,
+        input_lower: str,
+        ctx: Optional["TraceContext"] = None,
+    ) -> BiasModifier | None:
+        """Availability Bias: Overweight negative examples (availability heuristic).
+
+        Trigger: Negative content in input.
+        Personality: High-N (more available negative examples in memory).
+        Effect: Increases arousal (overreacts to negative information).
+        """
+        negative_count = _count_unnegated_markers(input_lower)
+        if negative_count == 0:
+            return None
+
+        # High-N = more negative examples available in memory
+        if self.neuroticism < 0.5:
+            return None
+
+        marker_strength = min(negative_count / 3.0, 1.0)
+        raw_strength = marker_strength * (self.neuroticism - 0.5) / 0.5
+        adjusted = self._apply_override("availability_bias", raw_strength)
+
+        if adjusted < 0.1:
+            return None
+
+        modifier = min(adjusted * MAX_BIAS_IMPACT, MAX_BIAS_IMPACT)
+
+        if ctx:
+            ctx.add_basic_citation(
+                source_type="trait",
+                source_id="availability_bias",
+                effect=f"Negative info + high-N availability → arousal {modifier:+.3f}",
+                weight=adjusted,
+            )
+
+        return BiasModifier(
+            bias_type=BiasType.AVAILABILITY,
+            target_field="communication_style.arousal",
+            operation="add",
+            modifier=modifier,
+            trigger=f"negative_markers={negative_count}, neuroticism={self.neuroticism:.2f}",
+            strength=adjusted,
+        )
+
+    def _compute_empathy_gap(
+        self,
+        input_lower: str,
+        ctx: Optional["TraceContext"] = None,
+    ) -> BiasModifier | None:
+        """Empathy Gap: Underestimates others' emotional reactions.
+
+        Trigger: Emotional content in user input.
+        Personality: Low-A + Low-N (less emotionally attuned).
+        Effect: Reduces disclosure (doesn't engage emotionally).
+        """
+        matched = [m for m in EMOTIONAL_CONTENT_MARKERS if m in input_lower]
+        if not matched:
+            return None
+
+        # Low-A + Low-N = more empathy gap
+        empathy_deficit = ((1 - self.agreeableness) + (1 - self.neuroticism)) / 2.0
+        if empathy_deficit < 0.6:
+            return None
+
+        marker_strength = min(len(matched) / 2.0, 1.0)
+        raw_strength = marker_strength * (empathy_deficit - 0.6) / 0.4
+        adjusted = self._apply_override("empathy_gap", raw_strength)
+
+        if adjusted < 0.1:
+            return None
+
+        modifier = -min(adjusted * MAX_BIAS_IMPACT, MAX_BIAS_IMPACT)
+
+        if ctx:
+            ctx.add_basic_citation(
+                source_type="trait",
+                source_id="empathy_gap",
+                effect=f"Emotional content ('{matched[0]}') + low-A/low-N → disclosure {modifier:+.3f}",
+                weight=adjusted,
+            )
+
+        return BiasModifier(
+            bias_type=BiasType.EMPATHY_GAP,
+            target_field="knowledge_disclosure.disclosure_level",
+            operation="add",
+            modifier=modifier,
+            trigger=f"emotional_markers={len(matched)}, empathy_deficit={empathy_deficit:.2f}",
+            strength=adjusted,
+        )
+
+    def _compute_dunning_kruger_bias(
+        self,
+        proficiency: float,
+        ctx: Optional["TraceContext"] = None,
+    ) -> BiasModifier | None:
+        """Dunning-Kruger Bias: Overconfident when unknowledgeable.
+
+        Trigger: Low proficiency in current domain.
+        Personality: Low-O + High-C (less self-aware, more certain).
+        Effect: Increases confidence despite low expertise.
+        """
+        if proficiency > 0.35:
+            return None  # Only triggers for genuinely low proficiency
+
+        # Low-O + High-C = more susceptible to DK effect
+        susceptibility = ((1 - self.openness) + self.conscientiousness) / 2.0
+        if susceptibility < 0.5:
+            return None
+
+        # Strength inversely proportional to proficiency
+        raw_strength = (0.35 - proficiency) / 0.35 * (susceptibility - 0.5) / 0.5
+        adjusted = self._apply_override("dunning_kruger_bias", raw_strength)
+
+        if adjusted < 0.1:
+            return None
+
+        modifier = min(adjusted * MAX_BIAS_IMPACT, MAX_BIAS_IMPACT)
+
+        if ctx:
+            ctx.add_basic_citation(
+                source_type="rule",
+                source_id="dunning_kruger_bias",
+                effect=f"Low proficiency ({proficiency:.2f}) + low-O/high-C → confidence {modifier:+.3f}",
+                weight=adjusted,
+            )
+
+        return BiasModifier(
+            bias_type=BiasType.DUNNING_KRUGER,
+            target_field="response_structure.confidence",
+            operation="add",
+            modifier=modifier,
+            trigger=f"proficiency={proficiency:.2f}, susceptibility={susceptibility:.2f}",
+            strength=adjusted,
+        )
+
     def get_modifier_for_field(
         self,
         modifiers: list[BiasModifier],
         field: str,
     ) -> BiasModifier | None:
         """
-        Get the modifier targeting a specific field, if any.
+        Get the first modifier targeting a specific field, if any.
 
         Args:
             modifiers: List from compute_modifiers()
@@ -371,6 +667,24 @@ class BiasSimulator:
             if mod.target_field == field:
                 return mod
         return None
+
+    def get_total_modifier_for_field(
+        self,
+        modifiers: list[BiasModifier],
+        field: str,
+    ) -> float:
+        """Sum all modifiers targeting a specific field.
+
+        Phase R6: Multiple biases may target the same field (e.g., confirmation
+        + anchoring + status_quo all reduce elasticity). Sum them, bounded by
+        MAX_BIAS_IMPACT.
+        """
+        total = 0.0
+        for mod in modifiers:
+            if mod.target_field == field:
+                total += mod.modifier
+        # Bound total to [-MAX_BIAS_IMPACT, MAX_BIAS_IMPACT] per field
+        return max(-MAX_BIAS_IMPACT * 2, min(MAX_BIAS_IMPACT * 2, total))
 
 
 # =============================================================================
