@@ -83,12 +83,19 @@ def sample_big_five(
     # Transform to logit space
     logit_means = _logit(means_01)
 
-    # Transform SDs to logit space (approximate: Jacobian of logit at the mean)
+    # Transform SDs to logit space (delta method: Jacobian of logit at the mean)
     # d(logit)/dp = 1 / (p * (1-p)), so logit_sd ≈ sd_01 / (mean * (1-mean))
+    # NOTE: This approximation blows up near 0 and 1. We cap logit_sd to prevent
+    # pathological sampling at boundary means. Cap of 3.0 keeps 99.7% of samples
+    # within ~6 logit units, which maps to roughly [0.002, 0.998] in output space.
+    MAX_LOGIT_SD = 3.0
     jacobian = 1.0 / (means_01 * (1.0 - means_01))
-    logit_sds = sds_01 * jacobian
+    logit_sds = np.minimum(sds_01 * jacobian, MAX_LOGIT_SD)
 
     # Build covariance matrix in logit space: Cov = diag(SD) @ Corr @ diag(SD)
+    # NOTE: Using raw-space correlation as logit-space correlation is an approximation.
+    # The nonlinear sigmoid transform changes correlation structure, but for moderate
+    # correlations (max |r|=0.43) the distortion is small. Documented trade-off for v1.
     logit_cov = np.diag(logit_sds) @ correlation @ np.diag(logit_sds)
 
     # Ensure positive semi-definite (numerical safety)

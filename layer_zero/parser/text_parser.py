@@ -114,9 +114,10 @@ TRAIT_ADJECTIVES = {
 }
 
 GENDER_KEYWORDS = {
-    "male": ["male", "man", "he", "his", "boy", "gentleman"],
-    "female": ["female", "woman", "she", "her", "girl", "lady"],
-    "non-binary": ["non-binary", "nonbinary", "nb", "enby", "they/them"],
+    # Only nouns, not pronouns — "he"/"she"/"her" cause false positives
+    "male": ["male", "man", "boy", "gentleman"],
+    "female": ["female", "woman", "girl", "lady"],
+    "non-binary": ["non-binary", "nonbinary", "enby"],
 }
 
 # =============================================================================
@@ -124,11 +125,11 @@ GENDER_KEYWORDS = {
 # =============================================================================
 
 _AGE_PATTERN = re.compile(
-    r"(?:^|\s)(\d{1,2})[\s-]?year[\s-]?old(?:s)?(?:\s|$|,|\.)",
+    r"(?:^|\s)(\d{1,3})[\s-]?year[\s-]?old(?:s)?(?:\s|$|,|\.)",
     re.IGNORECASE,
 )
 _AGE_PATTERN_2 = re.compile(
-    r"(?:age[d]?\s*[:=]?\s*(\d{1,2}))",
+    r"(?:age[d]?\s*[:=]?\s*(\d{1,3}))",
     re.IGNORECASE,
 )
 _AGE_PATTERN_3 = re.compile(
@@ -167,8 +168,9 @@ def parse_description(text: str) -> MintRequest:
             req.occupation = occ
             break
     if req.occupation is None:
-        for occ in OCCUPATIONS:
-            if " " not in occ and re.search(r"\b" + re.escape(occ) + r"\b", lower):
+        # Sort single-word occupations longest-first for deterministic matching
+        for occ in sorted((o for o in OCCUPATIONS if " " not in o), key=len, reverse=True):
+            if re.search(r"\b" + re.escape(occ) + r"\b", lower):
                 req.occupation = occ
                 break
 

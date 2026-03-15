@@ -58,54 +58,51 @@ def normalize_occupation(occupation: str) -> str | None:
 
 
 def infer_culture_region(location: str) -> str | None:
-    """Infer culture region from location string. Very basic heuristic."""
+    """Infer culture region from location string. Uses word-boundary matching."""
+    import re
     lower = location.lower()
 
-    western_markers = [
-        "us", "usa", "united states", "america", "canada", "uk", "united kingdom",
-        "england", "france", "germany", "australia", "new zealand", "netherlands",
-        "sweden", "norway", "denmark", "finland", "ireland", "spain", "italy",
-        "portugal", "belgium", "austria", "switzerland",
-    ]
-    east_asian_markers = [
-        "china", "japan", "korea", "taiwan", "hong kong", "singapore",
-        "tokyo", "beijing", "shanghai", "seoul",
-    ]
-    south_asian_markers = [
-        "india", "pakistan", "bangladesh", "sri lanka", "nepal",
-        "mumbai", "delhi", "bangalore", "kolkata",
-    ]
-    latin_markers = [
-        "mexico", "brazil", "argentina", "colombia", "chile", "peru",
-        "venezuela", "ecuador", "sao paulo", "buenos aires",
-    ]
-    middle_east_markers = [
-        "saudi", "emirates", "uae", "dubai", "qatar", "iran", "iraq",
-        "egypt", "turkey", "israel", "jordan", "lebanon",
-    ]
-    african_markers = [
-        "nigeria", "kenya", "south africa", "ethiopia", "ghana", "tanzania",
-        "uganda", "rwanda", "nairobi", "lagos", "johannesburg",
+    # Mapping: (region_name, markers). Word-boundary matching prevents "us" in "Houston".
+    _REGION_MARKERS: list[tuple[str, list[str]]] = [
+        ("western", [
+            "us", "usa", "united states", "america", "canada", "uk", "united kingdom",
+            "england", "france", "germany", "australia", "new zealand", "netherlands",
+            "sweden", "norway", "denmark", "finland", "ireland", "spain", "italy",
+            "portugal", "belgium", "austria", "switzerland",
+        ]),
+        ("east_asian", [
+            "china", "japan", "korea", "taiwan", "hong kong", "singapore",
+            "tokyo", "beijing", "shanghai", "seoul",
+        ]),
+        ("south_asian", [
+            "india", "pakistan", "bangladesh", "sri lanka", "nepal",
+            "mumbai", "delhi", "bangalore", "kolkata",
+        ]),
+        ("latin_american", [
+            "mexico", "brazil", "argentina", "colombia", "chile", "peru",
+            "venezuela", "ecuador", "sao paulo", "buenos aires",
+        ]),
+        ("middle_eastern", [
+            "saudi", "emirates", "uae", "dubai", "qatar", "iran", "iraq",
+            "egypt", "turkey", "israel", "jordan", "lebanon",
+        ]),
+        ("sub_saharan_african", [
+            "nigeria", "kenya", "south africa", "ethiopia", "ghana", "tanzania",
+            "uganda", "rwanda", "nairobi", "lagos", "johannesburg",
+        ]),
     ]
 
-    for marker in western_markers:
-        if marker in lower:
-            return "western"
-    for marker in east_asian_markers:
-        if marker in lower:
-            return "east_asian"
-    for marker in south_asian_markers:
-        if marker in lower:
-            return "south_asian"
-    for marker in latin_markers:
-        if marker in lower:
-            return "latin_american"
-    for marker in middle_east_markers:
-        if marker in lower:
-            return "middle_eastern"
-    for marker in african_markers:
-        if marker in lower:
-            return "sub_saharan_african"
+    # Short markers that need exact or delimiter-bounded matching
+    _SHORT_EXACT = {"us", "uk"}
+
+    for region, markers in _REGION_MARKERS:
+        for marker in markers:
+            if marker in _SHORT_EXACT:
+                # Require delimiter: "US" at end, ", US", "US," etc.
+                if re.search(r'(?:^|[,\s])' + re.escape(marker) + r'(?:$|[,\s.])', lower):
+                    return region
+            elif re.search(r'\b' + re.escape(marker) + r'\b', lower):
+                return region
 
     return None
 
@@ -174,16 +171,33 @@ def compute_big_five_prior(request: MintRequest) -> dict[str, TraitPrior]:
                     mapping_strength=max(priors[trait].mapping_strength, culture_confidence * 0.6),
                 )
 
-    # --- Trait hint adjectives ---
+    # --- Trait hint adjectives (deduplicate: only strongest hint per trait) ---
     from layer_zero.parser.text_parser import TRAIT_ADJECTIVES
+    best_hint_per_trait: dict[str, float] = {}
     for hint in request.trait_hints:
         if hint in TRAIT_ADJECTIVES:
             target_trait, delta = TRAIT_ADJECTIVES[hint]
-            priors[target_trait] = TraitPrior(
-                mean=priors[target_trait].mean + delta,
-                std_dev=priors[target_trait].std_dev,
-                source="trait_hint",
-                mapping_strength=max(priors[target_trait].mapping_strength, 0.5),
+            if target_trait not in best_hint_per_trait or abs(delta) > abs(best_hint_per_trait[target_trait]):
+                best_hint_per_trait[target_trait] = delta
+
+    for target_trait, delta in best_hint_per_trait.items():
+        priors[target_trait] = TraitPrior(
+            mean=priors[target_trait].mean + delta,
+            std_dev=priors[target_trait].std_dev,
+            source="trait_hint",
+            mapping_strength=max(priors[target_trait].mapping_strength, 0.5),
+        )
+
+    # --- Cap total shift from baseline (prevent extreme means) ---
+    MAX_TOTAL_SHIFT = 0.25
+    for trait in BIG_FIVE_TRAITS:
+        if priors[trait].source != "override":
+            capped_mean = max(BASELINE_MEAN - MAX_TOTAL_SHIFT, min(BASELINE_MEAN + MAX_TOTAL_SHIFT, priors[trait].mean))
+            priors[trait] = TraitPrior(
+                mean=capped_mean,
+                std_dev=priors[trait].std_dev,
+                source=priors[trait].source,
+                mapping_strength=priors[trait].mapping_strength,
             )
 
     # --- Explicit overrides (REPLACE, not shift — these are user-specified) ---
