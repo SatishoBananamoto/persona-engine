@@ -128,10 +128,13 @@
 - [x] **Phase 8: Consistency validator** — 11 rules, 3 modes, 19 tests
 - [x] **Phase 9: Persona assembler + provenance** — engine integration works, 12 tests
 - [x] **Phase 10: Public API** — mint() + from_description() end-to-end, 19 tests
-- [ ] **Phase 11: CSV parser** (deferred — not blocking)
-- [ ] **Phase 12: Export** (deferred — not blocking)
+- [x] **Phase 11: CSV parser** — parse_csv + from_csv, 16 tests
+- [x] **Phase 12: Export** — YAML + JSON with engine round-trip, 8 tests
+- [x] **Integration tests** — 16 end-to-end tests (cascade, policy, determinism, provenance)
+- [x] **Review round 2** — 6 bugs + 5 arch mismatches fixed from code review
+- [x] All review findings addressed
 
-**STATUS: Layer Zero v1 core is functional. 207 tests passing. End-to-end pipeline works.**
+**STATUS: Layer Zero v1 COMPLETE. 247 tests passing. All 12 phases done. End-to-end verified.**
 
 ---
 
