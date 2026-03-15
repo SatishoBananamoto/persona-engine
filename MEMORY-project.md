@@ -22,10 +22,12 @@
 
 ## Project Overview
 
+- **Codename:** Layer Zero
+- **External name:** Persona Minting Machine
 - **Repo:** SatishoBananamoto/persona-engine
 - **Working branch:** `claude/external-review` (our work — does not touch other branches)
 - **Engine branch:** `claude/general-session-VUY6r` (separate Claude session refining the core engine)
-- **Goal:** Build a persona compiler layer that takes user inputs (segment data, prompts, toggles) and compiles psychologically coherent Persona objects for the engine
+- **Goal:** Build Layer Zero — a layer that takes user inputs (segment data, prompts, toggles) and mints psychologically coherent Persona objects for the engine
 
 ---
 
@@ -53,6 +55,11 @@
 - **Date:** 2026-03-15
 - **Decision:** All memory entries (both project and main) must carry a tag from a fixed registry. Tags are immutable. New tags require registry update first.
 - **Reasoning:** Satish identified that untagged entries make it hard to scan, filter, and understand entry purpose at a glance. Tags prevent drift by making intent explicit.
+
+### `[DECISION]` [DEC-005] Project naming
+- **Date:** 2026-03-15
+- **Decision:** Internal codename is "Layer Zero" (`layer-zero` in code/refs). External name is "Persona Minting Machine" (for docs/README if shipped publicly).
+- **Reasoning:** Layer Zero captures the architectural position (foundation layer before the engine). Persona Minting Machine is memorable and describes what it does — mints personas from raw inputs.
 
 ---
 
