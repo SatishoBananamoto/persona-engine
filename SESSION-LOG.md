@@ -122,13 +122,43 @@ All documents + code on `claude/external-review`:
 
 ---
 
+## Hardening After v1 Completion
+
+After completing all 12 phases, continued building:
+
+### Round 3 Improvements
+- **Expanded occupation coverage:** 30 → 52 occupations in trait data, 21 new value profiles, 25 new domain mappings
+- **Added `priors/cognitive.py`:** 18 occupation-specific cognitive profiles (data scientists get +0.10 analytical, entrepreneurs +0.10 risk tolerance)
+- **Cognitive derivation now uses Big Five + occupation + residual** (was Big Five only)
+- **Differentiated mapping_strength in provenance:** Was hardcoded 0.5, now varies 0.40-0.55 based on actual empirical strength
+- **Added provenance notes** explaining each derivation (e.g., "O→analytical, r~0.35")
+- **Fixed B3: Big Five overrides pinned exactly** in batch generation (was approximate via tiny SD)
+- **Fixed B1: Shared latent variance decomposed** correctly (total SD matches documented budget)
+- **Fixed B5: Policy returns provenance explicitly** (no side-effect mutation)
+
+### All Review Findings Addressed
+From the Phases 5-10 review:
+- ✅ B1: Shared latent variance inflation — fixed (variance budget decomposition)
+- ✅ B2: Cascade collapse validator dead code — wired into pipeline
+- ✅ B3: Big Five overrides approximate — now exact pinned
+- ✅ B4: Provenance parent fields wrong — corrected per derivation
+- ✅ B5: Policy provenance side-effect — returns tuple now
+- ✅ B6: scipy crash — fallback to numpy
+- ✅ A2: Missing cognitive.py — created with 18 occupation profiles
+- ✅ A3: Goals had no residual — added noise to value ranking
+- ✅ P1: Missing provenance — expanded to ~100% coverage
+- ✅ P2: mapping_strength hardcoded — differentiated per field
+
+---
+
 ## Current Status
 
-**Layer Zero v1: COMPLETE**
-- 14 source files, ~2800 LOC
+**Layer Zero v1: COMPLETE + HARDENED**
+- 15 source files, ~3200 LOC
 - 13 test files, 247 tests, 0 failures
 - All 12 implementation phases done
-- 2 review cycles completed with fixes applied
+- 3 review cycles completed with all findings addressed
+- 52 occupation mappings (up from 30)
 - End-to-end integration verified with persona-engine
 
 ---
@@ -139,5 +169,5 @@ All documents + code on `claude/external-review`:
 - [ ] Narrative enricher (optional LLM-based background stories)
 - [ ] CLI interface (typer-based)
 - [ ] MCP server mode (post-v1)
-- [ ] More occupation mappings (27 covered, ~30 in parser missing data)
 - [ ] Human realism check (show generated personas to Satish)
+- [ ] Age interpolation (currently bracket-based, architecture mentions linear interpolation)
