@@ -150,8 +150,16 @@ def validate_batch_diversity(
         return warnings
 
     # Compute pairwise Euclidean distances
-    from scipy.spatial.distance import pdist
-    distances = pdist(big_five_batch)
+    try:
+        from scipy.spatial.distance import pdist
+        distances = pdist(big_five_batch)
+    except ImportError:
+        # scipy is optional — fallback to manual Euclidean distance
+        n = len(big_five_batch)
+        distances = np.array([
+            np.linalg.norm(big_five_batch[i] - big_five_batch[j])
+            for i in range(n) for j in range(i + 1, n)
+        ])
     min_dist = distances.min() if len(distances) > 0 else 0.0
 
     if min_dist < t["batch_min_distance"]:

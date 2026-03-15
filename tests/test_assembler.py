@@ -17,7 +17,10 @@ def _make_assembled(occupation="nurse", age=35, seed=42, persona_index=0):
     req = MintRequest(occupation=occupation, age=age)
 
     filled = fill_gaps(bf, sv, req, priors, seed=seed, persona_index=persona_index)
-    policy = apply_policy_defaults(filled, occupation=occupation)
+    policy, policy_prov = apply_policy_defaults(filled, occupation=occupation)
+    if "_provenance" not in filled:
+        filled["_provenance"] = {}
+    filled["_provenance"].update(policy_prov)
 
     return assemble_persona(
         big_five=bf, schwartz=sv, filled=filled, policy=policy,

@@ -75,10 +75,10 @@ def apply_policy_defaults(
         occupation: Persona's occupation for cannot_claim inference.
 
     Returns:
-        Dict with all policy-layer fields added.
+        Tuple of (policy_fields_dict, policy_provenance_dict).
     """
     policy: dict[str, Any] = {}
-    provenance: dict[str, FieldProvenance] = persona_fields.get("_provenance", {})
+    provenance: dict[str, FieldProvenance] = {}
 
     # --- Uncertainty policy (system default) ---
     policy["uncertainty"] = dict(SYSTEM_POLICY_DEFAULTS["uncertainty"])
@@ -157,5 +157,4 @@ def apply_policy_defaults(
     policy["time_scarcity"] = 0.3
     policy["topic_sensitivities"] = []
 
-    persona_fields["_provenance"] = provenance
-    return policy
+    return policy, provenance

@@ -38,6 +38,7 @@ from layer_zero.models import (
     TraitPrior,
 )
 from layer_zero.parser.text_parser import parse_description
+from layer_zero.parser.csv_parser import parse_csv, segment_to_mint_requests
 from layer_zero.priors.big_five import (
     compute_big_five_prior,
     get_culture_value_shifts,
@@ -47,7 +48,7 @@ from layer_zero.priors.values import generate_schwartz_values
 from layer_zero.sampler import sample_big_five
 from layer_zero.gap_filler import fill_gaps
 from layer_zero.policy import apply_policy_defaults
-from layer_zero.validator import validate_persona, validate_batch_diversity
+from layer_zero.validator import validate_persona, validate_batch_diversity, validate_cascade_collapse
 from layer_zero.assembler import assemble_persona
 
 __version__ = "0.1.0"
@@ -161,6 +162,49 @@ def from_description(
     return _run_pipeline(request, validate=validate, validator_config=validator_config)
 
 
+def from_csv(
+    path: str,
+    *,
+    count_per_segment: int = 10,
+    seed: int = 42,
+    validate: str = "warn",
+    validator_config: dict[str, float] | None = None,
+) -> list[MintedPersona]:
+    """Mint personas from a CSV segment file (Tier 3).
+
+    Each CSV row defines a segment with age ranges, gender distributions,
+    occupations, and locations. Generates count_per_segment personas per row.
+
+    CSV columns: segment_name, age_min, age_max, occupation, location,
+                 gender_dist (format: "female:0.6,male:0.4"), count
+
+    Args:
+        path: Path to CSV file.
+        count_per_segment: Default personas per segment (overridden by row 'count' column).
+        seed: Random seed.
+        validate: Validator mode.
+        validator_config: Custom thresholds.
+
+    Returns:
+        List of MintedPersona objects (all segments combined).
+    """
+    segments = parse_csv(path)
+    all_personas: list[MintedPersona] = []
+
+    for seg_idx, segment in enumerate(segments):
+        if segment.count <= 0:
+            segment.count = count_per_segment
+
+        seg_seed = seed + seg_idx * 10000
+        mint_requests = segment_to_mint_requests(segment, seed=seg_seed)
+
+        for req in mint_requests:
+            result = _run_pipeline(req, validate=validate, validator_config=validator_config)
+            all_personas.extend(result)
+
+    return all_personas
+
+
 # =============================================================================
 # Internal pipeline
 # =============================================================================
@@ -211,7 +255,11 @@ def _run_pipeline(
         filled["age"] = request.age
         filled["occupation"] = request.occupation
         filled["location"] = request.location
-        policy = apply_policy_defaults(filled, occupation=request.occupation)
+        policy, policy_provenance = apply_policy_defaults(filled, occupation=request.occupation)
+        # Merge policy provenance into filled provenance
+        if "_provenance" not in filled:
+            filled["_provenance"] = {}
+        filled["_provenance"].update(policy_provenance)
 
         # Validate
         validation = validate_persona(
@@ -244,11 +292,28 @@ def _run_pipeline(
         mp.warnings = [w.message for w in validation.warnings]
         personas.append(mp)
 
-    # Batch diversity check
-    if count > 1:
+    # Batch checks (only meaningful for count > 1)
+    if count > 1 and validate != "silent":
+        # Rule 9: Batch diversity
         diversity_warnings = validate_batch_diversity(all_bf_for_diversity, validator_config)
         if diversity_warnings:
             for mp in personas:
                 mp.warnings.extend([w.message for w in diversity_warnings])
+
+        # Rule 11: Cascade collapse — check downstream fields retain entropy
+        cognitive_analytical = [
+            p.persona.psychology.cognitive_style.analytical_intuitive for p in personas
+        ]
+        comm_formality = [
+            p.persona.psychology.communication.formality for p in personas
+        ]
+        for field_name, values_list in [
+            ("cognitive_style.analytical_intuitive", cognitive_analytical),
+            ("communication.formality", comm_formality),
+        ]:
+            collapse_warnings = validate_cascade_collapse(values_list, field_name, validator_config)
+            if collapse_warnings:
+                for mp in personas:
+                    mp.warnings.extend([w.message for w in collapse_warnings])
 
     return personas

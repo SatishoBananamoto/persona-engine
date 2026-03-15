@@ -129,12 +129,20 @@ def fill_gaps(
     )
     result["cognitive_style"] = cognitive
 
+    # Provenance with accurate parent fields per derivation
+    _cog_parents = {
+        "analytical_intuitive": ("psychology.big_five.openness",),
+        "systematic_heuristic": ("psychology.big_five.conscientiousness",),
+        "risk_tolerance": ("psychology.big_five.openness", "psychology.big_five.extraversion", "psychology.big_five.neuroticism"),
+        "need_for_closure": ("psychology.big_five.conscientiousness", "psychology.big_five.openness", "psychology.big_five.neuroticism"),
+        "cognitive_complexity": ("psychology.big_five.openness", "psychology.big_five.conscientiousness"),
+    }
     for field_name, val in cognitive.items():
         provenance[f"psychology.cognitive_style.{field_name}"] = FieldProvenance(
             value=val, source="derived", mapping_strength=0.5,
             inferential_depth=1,
             confidence=FieldProvenance.compute_confidence("derived", 0.5, 1),
-            parent_fields=("psychology.big_five.openness", "psychology.big_five.conscientiousness"),
+            parent_fields=_cog_parents.get(field_name, ()),
         )
 
     # --- Communication Preferences (derived from Big Five + residual SD=0.08) ---
@@ -164,12 +172,18 @@ def fill_gaps(
     )
     result["communication"] = communication
 
+    _comm_parents = {
+        "verbosity": ("psychology.big_five.conscientiousness", "psychology.big_five.extraversion"),
+        "formality": ("psychology.big_five.conscientiousness", "psychology.big_five.extraversion"),
+        "directness": ("psychology.big_five.extraversion", "psychology.big_five.agreeableness"),
+        "emotional_expressiveness": ("psychology.big_five.extraversion", "psychology.big_five.neuroticism"),
+    }
     for field_name, val in communication.items():
         provenance[f"psychology.communication.{field_name}"] = FieldProvenance(
             value=val, source="derived", mapping_strength=0.5,
             inferential_depth=1,
             confidence=FieldProvenance.compute_confidence("derived", 0.5, 1),
-            parent_fields=("psychology.big_five.extraversion", "psychology.big_five.agreeableness"),
+            parent_fields=_comm_parents.get(field_name, ()),
         )
 
     # --- Knowledge Domains (from occupation, proficiency 0.4-0.6 = familiarity) ---
@@ -178,11 +192,11 @@ def fill_gaps(
     else:
         result["knowledge_domains"] = _infer_domains(request.occupation, request.industry)
 
-    # --- Goals (from occupation + top values) ---
+    # --- Goals (from occupation + top values + residual via shuffled value ranking) ---
     if request.goals:
         result["goals"] = request.goals
     else:
-        result["goals"] = _infer_goals(request.occupation, values)
+        result["goals"] = _infer_goals(request.occupation, values, rng)
 
     # --- Social Roles (template + communication prefs + residual) ---
     result["social_roles"] = _build_social_roles(communication, rng)
@@ -214,6 +228,53 @@ def fill_gaps(
         rng=rng, sd=0.05,
     )
 
+    # --- Provenance for remaining fields ---
+    provenance["identity.education"] = FieldProvenance(
+        value=result["education"],
+        source="explicit" if request.education else "template",
+        confidence=0.95 if request.education else 0.4,
+    )
+    provenance["goals"] = FieldProvenance(
+        value=result["goals"],
+        source="explicit" if request.goals else "derived",
+        confidence=0.95 if request.goals else FieldProvenance.compute_confidence("derived", 0.4, 1),
+        parent_fields=("psychology.values",) if not request.goals else (),
+    )
+    provenance["knowledge_domains"] = FieldProvenance(
+        value=result["knowledge_domains"],
+        source="explicit" if request.domains else "template",
+        confidence=0.95 if request.domains else 0.4,
+        parent_fields=("identity.occupation",) if not request.domains else (),
+    )
+    provenance["privacy_sensitivity"] = FieldProvenance(
+        value=result["privacy_sensitivity"],
+        source="derived", mapping_strength=0.4, inferential_depth=1,
+        confidence=FieldProvenance.compute_confidence("derived", 0.4, 1),
+        parent_fields=("psychology.big_five.neuroticism", "psychology.big_five.agreeableness", "psychology.big_five.extraversion"),
+    )
+    for role_name in result["social_roles"]:
+        provenance[f"social_roles.{role_name}"] = FieldProvenance(
+            value=result["social_roles"][role_name],
+            source="derived", mapping_strength=0.4, inferential_depth=2,
+            confidence=FieldProvenance.compute_confidence("derived", 0.4, 2),
+            parent_fields=("psychology.communication",),
+        )
+    for state_field in ("mood_valence", "mood_arousal", "stress"):
+        provenance[f"initial_state.{state_field}"] = FieldProvenance(
+            value=result["initial_state"][state_field],
+            source="derived", mapping_strength=0.4, inferential_depth=1,
+            confidence=FieldProvenance.compute_confidence("derived", 0.4, 1),
+            parent_fields=("psychology.big_five",),
+        )
+    for dt in result.get("decision_tendencies", []):
+        provenance[f"decision_tendencies.{dt['type']}"] = FieldProvenance(
+            value=dt["strength"],
+            source="derived", mapping_strength=0.3, inferential_depth=2,
+            confidence=FieldProvenance.compute_confidence("derived", 0.3, 2),
+            parent_fields=("psychology.values", "psychology.big_five"),
+            notes="Low confidence — decision tendency, not empirical bias",
+        )
+
     result["_provenance"] = provenance
     return result
 
@@ -237,7 +298,11 @@ def _derive_with_residual(
 
     residual = 0.0
     if rng is not None:
-        residual = rng.normal(0, sd) + shared
+        # Decompose variance budget: total_var = independent_var + shared_var
+        # so independent_sd = sqrt(sd^2 - shared^2) to maintain documented total SD
+        shared_abs = abs(shared)
+        independent_sd = math.sqrt(max(0.0, sd ** 2 - shared_abs ** 2))
+        residual = rng.normal(0, independent_sd) + shared
 
     return float(np.clip(base + residual, clamp_lo, clamp_hi))
 
@@ -300,15 +365,23 @@ def _infer_domains(occupation: str | None, industry: str | None) -> list[dict]:
     return [{"domain": "General", "proficiency": 0.3, "subdomains": []}]
 
 
-def _infer_goals(occupation: str | None, values: dict[str, float]) -> list[str]:
-    """Infer goals from occupation and top values."""
+def _infer_goals(
+    occupation: str | None,
+    values: dict[str, float],
+    rng: np.random.Generator | None = None,
+) -> list[str]:
+    """Infer goals from occupation and top values with residual variance."""
     goals = []
 
     if occupation:
         goals.append(f"Excel in {occupation} role")
 
-    # Top 2 values → goals
-    sorted_values = sorted(values.items(), key=lambda x: x[1], reverse=True)
+    # Add small noise to value ranking to vary which goals get picked
+    noisy_values = {
+        k: v + (rng.normal(0, 0.05) if rng else 0.0)
+        for k, v in values.items()
+    }
+    sorted_values = sorted(noisy_values.items(), key=lambda x: x[1], reverse=True)
     value_to_goal = {
         "self_direction": "Maintain autonomy and independence",
         "stimulation": "Seek new experiences and challenges",
