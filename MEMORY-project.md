@@ -61,6 +61,32 @@
 - **Decision:** Internal codename is "Layer Zero" (`layer-zero` in code/refs). External name is "Persona Minting Machine" (for docs/README if shipped publicly).
 - **Reasoning:** Layer Zero captures the architectural position (foundation layer before the engine). Persona Minting Machine is memorable and describes what it does — mints personas from raw inputs.
 
+### `[DECISION]` [DEC-006] Three-layer model (from external review)
+- **Date:** 2026-03-15
+- **Decision:** Split persona generation into Evidence, Persona, and Policy layers. Policy fields (claim_policy, disclosure bounds, knowledge_boundary_strictness) are system-governed defaults, not derived from personality traits.
+- **Reasoning:** External reviewer identified that persona-derived safety policies create risk — a high-openness persona could get weaker epistemic guardrails. Policy must be system-controlled.
+
+### `[DECISION]` [DEC-007] Logit-normal sampling (from external review)
+- **Date:** 2026-03-15
+- **Decision:** Replace multivariate normal + clamp with logit-normal transform. Sample in unbounded logit space, apply sigmoid to get [0,1].
+- **Reasoning:** Clamping distorts means, variances, and correlations at boundaries. Logit-normal preserves the correlation structure.
+
+### `[DECISION]` [DEC-008] Calibrated residual variance at every derivation step
+- **Date:** 2026-03-15
+- **Decision:** Each derived field gets `f(parent_traits) + calibrated_residual` instead of pure deterministic derivation. Related fields share latent residuals.
+- **Reasoning:** Prevents cascade collapse — stochasticity entering only at trait sampling causes downstream fields to become overly correlated and too uniform across personas from the same segment.
+
+### `[DECISION]` [DEC-009] Provenance per field
+- **Date:** 2026-03-15
+- **Decision:** Every generated field carries FieldProvenance (source type, confidence, mapping strength, inferential depth, parent fields).
+- **Reasoning:** Enables debugging, ethical review, and transparency. Confidence based on source type + mapping strength + depth decay, not just hop count.
+
+### `[LEARNING]` [L-003] Cascade collapse in derived persona fields
+- **Date:** 2026-03-15
+- **Context:** External reviewer identified that deterministic derivation from sampled traits compresses conditional variance. 10 nurses from the same segment converge on identical cognitive styles, policies, and behavioral rules.
+- **Lesson:** When building multi-stage inference pipelines, add controlled stochasticity at every stage, not just the first. Deterministic projections of random variables are not equivalent to independent random variables.
+- **Also saved to:** main memory (feedback file)
+
 ---
 
 ## Progress
@@ -85,7 +111,11 @@
 - [x] Defined ethical guardrails
 - [x] Defined 4-tier input system
 - [x] Defined 7-stage pipeline
-- [ ] Build Layer Zero (not started — pending architecture review)
+- [x] External review of architecture — 5 blocking issues identified and fixed
+- [x] Architecture v2 written — three-layer model, logit-normal sampling, provenance, policy separation
+- [x] Cascade collapse problem identified and solved (calibrated residual variance)
+- [ ] Implementation plan (drafting)
+- [ ] Build Layer Zero (not started)
 
 ---
 
