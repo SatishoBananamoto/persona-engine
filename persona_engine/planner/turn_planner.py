@@ -188,7 +188,7 @@ class TurnPlanner:
         )
         ctx, turn_seed, memory_ops, memory_context = self._stage_foundation(context)
         foundation = self._stage_interpretation(context, ctx)
-        foundation["memory_context"] = memory_context
+        foundation.memory_context = memory_context
         metrics = self._stage_behavioral_metrics(context, ctx, foundation)
         knowledge = self._stage_knowledge_safety(context, ctx, foundation, metrics)
         return self._stage_finalization(

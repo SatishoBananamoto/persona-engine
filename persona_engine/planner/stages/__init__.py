@@ -14,6 +14,11 @@ from persona_engine.planner.stages.interpretation import InterpretationStage
 from persona_engine.planner.stages.behavioral import BehavioralMetricsStage
 from persona_engine.planner.stages.knowledge import KnowledgeSafetyStage
 from persona_engine.planner.stages.finalization import FinalizationStage
+from persona_engine.planner.stages.stage_results import (
+    BehavioralMetricsResult,
+    InterpretationResult,
+    KnowledgeSafetyResult,
+)
 
 __all__ = [
     "FoundationStage",
@@ -21,4 +26,7 @@ __all__ = [
     "BehavioralMetricsStage",
     "KnowledgeSafetyStage",
     "FinalizationStage",
+    "InterpretationResult",
+    "BehavioralMetricsResult",
+    "KnowledgeSafetyResult",
 ]

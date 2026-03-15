@@ -20,6 +20,11 @@ from persona_engine.behavioral.social_cognition import (
     SchemaEffect,
 )
 from persona_engine.planner.engine_config import DEFAULT_CONFIG
+from persona_engine.planner.stages.stage_results import (
+    BehavioralMetricsResult,
+    InterpretationResult,
+    KnowledgeSafetyResult,
+)
 from persona_engine.planner.trace_context import TraceContext, clamp01
 from persona_engine.schema.ir_schema import (
     Citation,
@@ -57,20 +62,16 @@ class KnowledgeSafetyStage:
         self,
         context: ConversationContext,
         ctx: TraceContext,
-        foundation: dict[str, Any],
-        metrics: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Run the knowledge & safety stage.
-
-        Returns:
-            Dict with disclosure_level, uncertainty_action, claim_enum.
-        """
+        foundation: InterpretationResult,
+        metrics: BehavioralMetricsResult,
+    ) -> KnowledgeSafetyResult:
+        """Run the knowledge & safety stage."""
         p = self.planner
-        proficiency = foundation["proficiency"]
-        domain = foundation["domain"]
-        confidence = metrics["confidence"]
-        stance = metrics["stance"]
-        rationale = metrics["rationale"]
+        proficiency = foundation.proficiency
+        domain = foundation.domain
+        confidence = metrics.confidence
+        stance = metrics.stance
+        rationale = metrics.rationale
 
         # Disclosure (+ cross-turn smoothing)
         disclosure_level = self.compute_disclosure(context.topic_signature, ctx)
@@ -111,7 +112,7 @@ class KnowledgeSafetyStage:
             )
 
         # Schema validation disclosure boost
-        schema_effect: SchemaEffect | None = metrics.get("schema_effect")
+        schema_effect: SchemaEffect | None = metrics.schema_effect
         if schema_effect and abs(schema_effect.disclosure_modifier) > 0.001:
             before_sd = disclosure_level
             disclosure_level = max(0.0, min(1.0, disclosure_level + schema_effect.disclosure_modifier))
@@ -127,7 +128,7 @@ class KnowledgeSafetyStage:
             )
 
         # Disclosure reciprocity
-        adaptation: AdaptationDirectives | None = metrics.get("adaptation")
+        adaptation: AdaptationDirectives | None = metrics.adaptation
         if adaptation and adaptation.disclosure_reciprocity > 0.01:
             before_dr = disclosure_level
             disclosure_level = max(0.0, min(1.0, disclosure_level + adaptation.disclosure_reciprocity))
@@ -209,11 +210,11 @@ class KnowledgeSafetyStage:
                     weight=1.0,
                 )
 
-        return {
-            "disclosure_level": disclosure_level,
-            "uncertainty_action": uncertainty_action,
-            "claim_enum": claim_enum,
-        }
+        return KnowledgeSafetyResult(
+            disclosure_level=disclosure_level,
+            uncertainty_action=uncertainty_action,
+            claim_enum=claim_enum,
+        )
 
     # ========================================================================
     # Disclosure

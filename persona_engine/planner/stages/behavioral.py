@@ -29,6 +29,11 @@ from persona_engine.planner.domain_detection import (
 )
 from persona_engine.planner.engine_config import DEFAULT_CONFIG
 from persona_engine.planner.stance_generator import generate_stance_safe
+from persona_engine.planner.stages.stage_results import (
+    BehavioralMetricsResult,
+    InterpretationResult,
+    KnowledgeSafetyResult,
+)
 from persona_engine.planner.trace_context import TraceContext, clamp01
 from persona_engine.schema.ir_schema import (
     Tone,
@@ -124,19 +129,13 @@ class BehavioralMetricsStage:
         self,
         context: ConversationContext,
         ctx: TraceContext,
-        foundation: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Run the behavioral metrics stage.
-
-        Returns:
-            Dict with elasticity, stance, rationale, confidence, competence,
-            tone, verbosity, formality, directness, trait_guidance,
-            cognitive_guidance, adaptation, schema_effect.
-        """
+        foundation: InterpretationResult,
+    ) -> BehavioralMetricsResult:
+        """Run the behavioral metrics stage."""
         p = self.planner
-        domain = foundation["domain"]
-        proficiency = foundation["proficiency"]
-        persona_domains = foundation["persona_domains"]
+        domain = foundation.domain
+        proficiency = foundation.proficiency
+        persona_domains = foundation.persona_domains
 
         # Elasticity (early for stance cache logic)
         elasticity = self.compute_elasticity(proficiency, ctx)
@@ -172,14 +171,14 @@ class BehavioralMetricsStage:
         stance, rationale = self.generate_stance(
             context=context,
             proficiency=proficiency,
-            expert_allowed=foundation["expert_allowed"],
+            expert_allowed=foundation.expert_allowed,
             evidence_strength=evidence_strength,
             current_elasticity=elasticity,
             ctx=ctx,
         )
 
         # Confidence (+ cross-turn smoothing)
-        confidence = self.compute_confidence(proficiency, ctx, memory_context=foundation.get("memory_context"))
+        confidence = self.compute_confidence(proficiency, ctx, memory_context=foundation.memory_context)
         if p._prior_snapshot:
             before_smooth = confidence
             confidence = _smooth(p._prior_snapshot.confidence, confidence, CROSS_TURN_INERTIA)
@@ -415,21 +414,21 @@ class BehavioralMetricsStage:
             "Behavioral metrics computed",
             extra={"confidence": confidence, "elasticity": elasticity, "tone": str(tone)},
         )
-        return {
-            "elasticity": elasticity,
-            "stance": stance,
-            "rationale": rationale,
-            "confidence": confidence,
-            "competence": competence,
-            "tone": tone,
-            "verbosity": verbosity,
-            "formality": formality,
-            "directness": directness,
-            "trait_guidance": trait_guidance,
-            "cognitive_guidance": cognitive_guidance,
-            "adaptation": adaptation,
-            "schema_effect": schema_effect,
-        }
+        return BehavioralMetricsResult(
+            elasticity=elasticity,
+            stance=stance,
+            rationale=rationale,
+            confidence=confidence,
+            competence=competence,
+            tone=tone,
+            verbosity=verbosity,
+            formality=formality,
+            directness=directness,
+            trait_guidance=trait_guidance,
+            cognitive_guidance=cognitive_guidance,
+            adaptation=adaptation,
+            schema_effect=schema_effect,
+        )
 
     # ========================================================================
     # Elasticity

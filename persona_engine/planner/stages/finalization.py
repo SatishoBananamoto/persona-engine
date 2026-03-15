@@ -30,6 +30,11 @@ from persona_engine.planner.stages.behavioral import (
     CognitiveGuidance,
     TraitGuidance,
 )
+from persona_engine.planner.stages.stage_results import (
+    BehavioralMetricsResult,
+    InterpretationResult,
+    KnowledgeSafetyResult,
+)
 from persona_engine.validation.cross_turn import TurnSnapshot
 
 if TYPE_CHECKING:
@@ -50,34 +55,30 @@ class FinalizationStage:
         ctx: TraceContext,
         turn_seed: int,
         memory_ops: MemoryOps,
-        foundation: dict[str, Any],
-        metrics: dict[str, Any],
-        knowledge: dict[str, Any],
+        foundation: InterpretationResult,
+        metrics: BehavioralMetricsResult,
+        knowledge: KnowledgeSafetyResult,
     ) -> IntermediateRepresentation:
-        """Run the finalization stage.
-
-        Returns:
-            The fully assembled IntermediateRepresentation.
-        """
+        """Run the finalization stage."""
         p = self.planner
-        user_intent = foundation["user_intent"]
-        needs_clarification = foundation["needs_clarification"]
-        stance = metrics["stance"]
-        rationale = metrics["rationale"]
-        elasticity = metrics["elasticity"]
-        confidence = metrics["confidence"]
-        competence = metrics["competence"]
-        tone = metrics["tone"]
-        verbosity = metrics["verbosity"]
-        formality = metrics["formality"]
-        directness = metrics["directness"]
-        disclosure_level = knowledge["disclosure_level"]
-        uncertainty_action = knowledge["uncertainty_action"]
-        claim_enum = knowledge["claim_enum"]
+        user_intent = foundation.user_intent
+        needs_clarification = foundation.needs_clarification
+        stance = metrics.stance
+        rationale = metrics.rationale
+        elasticity = metrics.elasticity
+        confidence = metrics.confidence
+        competence = metrics.competence
+        tone = metrics.tone
+        verbosity = metrics.verbosity
+        formality = metrics.formality
+        directness = metrics.directness
+        disclosure_level = knowledge.disclosure_level
+        uncertainty_action = knowledge.uncertainty_action
+        claim_enum = knowledge.claim_enum
 
         # Memory read requests
         read_requests: list[MemoryReadRequest] = []
-        memory_context = foundation.get("memory_context", {})
+        memory_context = foundation.memory_context
         if p.memory and memory_context:
             if memory_context.get("known_facts"):
                 read_requests.append(MemoryReadRequest(
@@ -137,10 +138,10 @@ class FinalizationStage:
         ctx.safety_plan.must_avoid = list(p.persona.invariants.must_avoid)
 
         # Collect behavioral directives
-        trait_guidance: TraitGuidance | None = metrics.get("trait_guidance")
-        cognitive_guidance: CognitiveGuidance | None = metrics.get("cognitive_guidance")
-        adaptation: AdaptationDirectives | None = metrics.get("adaptation")
-        schema_effect: SchemaEffect | None = metrics.get("schema_effect")
+        trait_guidance: TraitGuidance | None = metrics.trait_guidance
+        cognitive_guidance: CognitiveGuidance | None = metrics.cognitive_guidance
+        adaptation: AdaptationDirectives | None = metrics.adaptation
+        schema_effect: SchemaEffect | None = metrics.schema_effect
         behavioral_directives: list[str] = []
         if trait_guidance:
             behavioral_directives.extend(trait_guidance.prompt_directives)

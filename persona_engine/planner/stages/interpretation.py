@@ -13,6 +13,7 @@ from persona_engine.planner.domain_detection import (
 )
 from persona_engine.planner.engine_config import DEFAULT_CONFIG
 from persona_engine.planner.intent_analyzer import analyze_intent
+from persona_engine.planner.stages.stage_results import InterpretationResult
 from persona_engine.planner.trace_context import TraceContext
 
 if TYPE_CHECKING:
@@ -35,13 +36,8 @@ class InterpretationStage:
         self,
         context: ConversationContext,
         ctx: TraceContext,
-    ) -> dict[str, Any]:
-        """Run the interpretation stage.
-
-        Returns:
-            Dict with topic_relevance, persona_domains, domain, proficiency,
-            expert_allowed, user_intent, needs_clarification, policy_modifications.
-        """
+    ) -> InterpretationResult:
+        """Run the interpretation stage."""
         p = self.planner
 
         # Topic relevance
@@ -132,16 +128,16 @@ class InterpretationStage:
             proficiency=proficiency,
         )
 
-        return {
-            "topic_relevance": topic_relevance,
-            "persona_domains": persona_domains,
-            "domain": domain,
-            "proficiency": proficiency,
-            "expert_allowed": expert_allowed,
-            "user_intent": user_intent,
-            "needs_clarification": needs_clarification,
-            "policy_modifications": policy_modifications,
-        }
+        return InterpretationResult(
+            topic_relevance=topic_relevance,
+            persona_domains=persona_domains,
+            domain=domain,
+            proficiency=proficiency,
+            expert_allowed=expert_allowed,
+            user_intent=user_intent,
+            needs_clarification=needs_clarification,
+            policy_modifications=policy_modifications,
+        )
 
     def detect_domain(self, user_input: str, ctx: TraceContext | None = None) -> str:
         """Detect domain from user input using keyword scoring."""
