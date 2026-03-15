@@ -154,11 +154,13 @@ From the Phases 5-10 review:
 ## Current Status
 
 **Layer Zero v1: COMPLETE + HARDENED**
-- 15 source files, ~3200 LOC
-- 13 test files, 247 tests, 0 failures
+- 15 source files, ~3400 LOC
+- 14 test files, 265 tests, 0 failures
 - All 12 implementation phases done
 - 3 review cycles completed with all findings addressed
-- 52 occupation mappings (up from 30)
+- 52 occupation trait mappings, 39 value profiles, 18 cognitive profiles
+- Age interpolation (smooth, not bracket-based)
+- 18 edge case tests (zero input, extremes, contradictions, large batch)
 - End-to-end integration verified with persona-engine
 
 ---
