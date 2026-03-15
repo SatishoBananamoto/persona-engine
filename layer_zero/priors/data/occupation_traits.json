@@ -1,0 +1,132 @@
+{
+  "_meta": {
+    "description": "Occupation → Big Five trait shifts based on Holland RIASEC mapping + meta-analytic data",
+    "sources": [
+      "Holland (1997) RIASEC vocational types",
+      "Barrick & Mount (1991) Big Five and job performance meta-analysis",
+      "Zhao & Seibert (2006) Entrepreneurship and Big Five",
+      "University of Edinburgh (2024) personality-occupation fit"
+    ],
+    "notes": "Shifts are relative to population baseline (0.5). Positive = above average, negative = below."
+  },
+  "nurse": {
+    "riasec": "Social",
+    "shifts": {"openness": 0.0, "conscientiousness": 0.05, "extraversion": 0.03, "agreeableness": 0.10, "neuroticism": 0.02}
+  },
+  "doctor": {
+    "riasec": "Investigative-Social",
+    "shifts": {"openness": 0.05, "conscientiousness": 0.10, "extraversion": 0.0, "agreeableness": 0.03, "neuroticism": -0.03}
+  },
+  "physician": {
+    "riasec": "Investigative-Social",
+    "shifts": {"openness": 0.05, "conscientiousness": 0.10, "extraversion": 0.0, "agreeableness": 0.03, "neuroticism": -0.03}
+  },
+  "surgeon": {
+    "riasec": "Realistic-Investigative",
+    "shifts": {"openness": 0.02, "conscientiousness": 0.12, "extraversion": 0.02, "agreeableness": -0.05, "neuroticism": -0.05}
+  },
+  "therapist": {
+    "riasec": "Social-Artistic",
+    "shifts": {"openness": 0.08, "conscientiousness": 0.03, "extraversion": 0.03, "agreeableness": 0.12, "neuroticism": 0.02}
+  },
+  "psychologist": {
+    "riasec": "Social-Investigative",
+    "shifts": {"openness": 0.10, "conscientiousness": 0.05, "extraversion": 0.02, "agreeableness": 0.08, "neuroticism": 0.0}
+  },
+  "teacher": {
+    "riasec": "Social",
+    "shifts": {"openness": 0.05, "conscientiousness": 0.05, "extraversion": 0.05, "agreeableness": 0.08, "neuroticism": 0.0}
+  },
+  "professor": {
+    "riasec": "Investigative-Social",
+    "shifts": {"openness": 0.12, "conscientiousness": 0.05, "extraversion": 0.0, "agreeableness": 0.02, "neuroticism": 0.0}
+  },
+  "software engineer": {
+    "riasec": "Investigative-Realistic",
+    "shifts": {"openness": 0.08, "conscientiousness": 0.05, "extraversion": -0.05, "agreeableness": -0.02, "neuroticism": 0.0}
+  },
+  "engineer": {
+    "riasec": "Realistic-Investigative",
+    "shifts": {"openness": 0.05, "conscientiousness": 0.08, "extraversion": -0.03, "agreeableness": -0.02, "neuroticism": -0.02}
+  },
+  "data scientist": {
+    "riasec": "Investigative",
+    "shifts": {"openness": 0.10, "conscientiousness": 0.05, "extraversion": -0.05, "agreeableness": 0.0, "neuroticism": 0.0}
+  },
+  "researcher": {
+    "riasec": "Investigative",
+    "shifts": {"openness": 0.12, "conscientiousness": 0.05, "extraversion": -0.03, "agreeableness": 0.0, "neuroticism": 0.0}
+  },
+  "product manager": {
+    "riasec": "Enterprising-Social",
+    "shifts": {"openness": 0.05, "conscientiousness": 0.05, "extraversion": 0.05, "agreeableness": 0.02, "neuroticism": -0.02}
+  },
+  "designer": {
+    "riasec": "Artistic",
+    "shifts": {"openness": 0.12, "conscientiousness": 0.0, "extraversion": 0.02, "agreeableness": 0.02, "neuroticism": 0.03}
+  },
+  "chef": {
+    "riasec": "Realistic-Artistic",
+    "shifts": {"openness": 0.05, "conscientiousness": 0.05, "extraversion": 0.02, "agreeableness": -0.05, "neuroticism": 0.03}
+  },
+  "lawyer": {
+    "riasec": "Enterprising-Investigative",
+    "shifts": {"openness": 0.03, "conscientiousness": 0.10, "extraversion": 0.03, "agreeableness": -0.05, "neuroticism": 0.02}
+  },
+  "accountant": {
+    "riasec": "Conventional",
+    "shifts": {"openness": -0.05, "conscientiousness": 0.12, "extraversion": -0.05, "agreeableness": 0.02, "neuroticism": -0.02}
+  },
+  "journalist": {
+    "riasec": "Artistic-Enterprising",
+    "shifts": {"openness": 0.10, "conscientiousness": 0.0, "extraversion": 0.08, "agreeableness": -0.02, "neuroticism": 0.05}
+  },
+  "musician": {
+    "riasec": "Artistic",
+    "shifts": {"openness": 0.15, "conscientiousness": -0.05, "extraversion": 0.03, "agreeableness": 0.02, "neuroticism": 0.05}
+  },
+  "artist": {
+    "riasec": "Artistic",
+    "shifts": {"openness": 0.15, "conscientiousness": -0.05, "extraversion": 0.0, "agreeableness": 0.02, "neuroticism": 0.05}
+  },
+  "entrepreneur": {
+    "riasec": "Enterprising",
+    "shifts": {"openness": 0.08, "conscientiousness": 0.05, "extraversion": 0.08, "agreeableness": -0.05, "neuroticism": -0.08}
+  },
+  "salesperson": {
+    "riasec": "Enterprising",
+    "shifts": {"openness": 0.0, "conscientiousness": 0.02, "extraversion": 0.10, "agreeableness": 0.03, "neuroticism": -0.03}
+  },
+  "consultant": {
+    "riasec": "Enterprising-Investigative",
+    "shifts": {"openness": 0.05, "conscientiousness": 0.05, "extraversion": 0.05, "agreeableness": 0.0, "neuroticism": -0.02}
+  },
+  "social worker": {
+    "riasec": "Social",
+    "shifts": {"openness": 0.05, "conscientiousness": 0.03, "extraversion": 0.03, "agreeableness": 0.12, "neuroticism": 0.03}
+  },
+  "fitness coach": {
+    "riasec": "Social-Enterprising",
+    "shifts": {"openness": 0.02, "conscientiousness": 0.05, "extraversion": 0.10, "agreeableness": 0.05, "neuroticism": -0.05}
+  },
+  "scientist": {
+    "riasec": "Investigative",
+    "shifts": {"openness": 0.12, "conscientiousness": 0.08, "extraversion": -0.05, "agreeableness": 0.0, "neuroticism": 0.0}
+  },
+  "pharmacist": {
+    "riasec": "Investigative-Conventional",
+    "shifts": {"openness": 0.0, "conscientiousness": 0.10, "extraversion": -0.02, "agreeableness": 0.03, "neuroticism": -0.02}
+  },
+  "pilot": {
+    "riasec": "Realistic-Investigative",
+    "shifts": {"openness": 0.02, "conscientiousness": 0.10, "extraversion": 0.03, "agreeableness": -0.02, "neuroticism": -0.08}
+  },
+  "police officer": {
+    "riasec": "Realistic-Enterprising",
+    "shifts": {"openness": -0.03, "conscientiousness": 0.08, "extraversion": 0.03, "agreeableness": -0.03, "neuroticism": -0.03}
+  },
+  "firefighter": {
+    "riasec": "Realistic-Social",
+    "shifts": {"openness": 0.0, "conscientiousness": 0.05, "extraversion": 0.05, "agreeableness": 0.05, "neuroticism": -0.05}
+  }
+}
