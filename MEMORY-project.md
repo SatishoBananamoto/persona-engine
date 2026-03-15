@@ -120,7 +120,8 @@
 - [x] **Phase 3: Big Five priors** — 30 occupations, 6 age brackets, 6 culture regions, correlation matrix (25 tests)
 - [x] **Phase 4: Logit-normal sampler** — multivariate correlated sampling with sigmoid bounds (18 tests)
 - [x] Code review round 1 — 5 bugs + 2 statistical issues found and fixed (106 tests passing)
-- [ ] Product alignment review (agent running)
+- [x] Product alignment review — on track, 3 items to address before Phase 9
+- [x] Code review round 1 bugs fixed (5 bugs + 2 statistical issues)
 - [ ] **Phase 5: Schwartz circumplex generator**
 - [ ] **Phase 6: Gap filler + residuals**
 - [ ] **Phase 7: Policy applier**
