@@ -114,8 +114,21 @@
 - [x] External review of architecture — 5 blocking issues identified and fixed
 - [x] Architecture v2 written — three-layer model, logit-normal sampling, provenance, policy separation
 - [x] Cascade collapse problem identified and solved (calibrated residual variance)
-- [ ] Implementation plan (drafting)
-- [ ] Build Layer Zero (not started)
+- [x] Implementation plan written (IMPLEMENTATION-PLAN.md, 12 phases)
+- [x] **Phase 1: Core models** — MintRequest, SegmentRequest, FieldProvenance, MintedPersona, TraitPrior (32 tests)
+- [x] **Phase 2: Text parser** — regex-based description parsing (31 tests)
+- [x] **Phase 3: Big Five priors** — 30 occupations, 6 age brackets, 6 culture regions, correlation matrix (25 tests)
+- [x] **Phase 4: Logit-normal sampler** — multivariate correlated sampling with sigmoid bounds (18 tests)
+- [x] Code review round 1 — 5 bugs + 2 statistical issues found and fixed (106 tests passing)
+- [ ] Product alignment review (agent running)
+- [ ] **Phase 5: Schwartz circumplex generator**
+- [ ] **Phase 6: Gap filler + residuals**
+- [ ] **Phase 7: Policy applier**
+- [ ] **Phase 8: Consistency validator**
+- [ ] **Phase 9: Persona assembler + provenance**
+- [ ] **Phase 10: Public API**
+- [ ] **Phase 11: CSV parser**
+- [ ] **Phase 12: Export**
 
 ---
 
