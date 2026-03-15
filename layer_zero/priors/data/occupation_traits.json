@@ -128,5 +128,89 @@
   "firefighter": {
     "riasec": "Realistic-Social",
     "shifts": {"openness": 0.0, "conscientiousness": 0.05, "extraversion": 0.05, "agreeableness": 0.05, "neuroticism": -0.05}
+  },
+  "developer": {
+    "riasec": "Investigative-Realistic",
+    "shifts": {"openness": 0.08, "conscientiousness": 0.05, "extraversion": -0.05, "agreeableness": -0.02, "neuroticism": 0.0}
+  },
+  "programmer": {
+    "riasec": "Investigative-Realistic",
+    "shifts": {"openness": 0.08, "conscientiousness": 0.05, "extraversion": -0.05, "agreeableness": -0.02, "neuroticism": 0.0}
+  },
+  "architect": {
+    "riasec": "Artistic-Investigative",
+    "shifts": {"openness": 0.10, "conscientiousness": 0.05, "extraversion": 0.0, "agreeableness": 0.0, "neuroticism": 0.0}
+  },
+  "professor": {
+    "riasec": "Investigative-Social",
+    "shifts": {"openness": 0.12, "conscientiousness": 0.05, "extraversion": 0.0, "agreeableness": 0.02, "neuroticism": 0.0}
+  },
+  "data analyst": {
+    "riasec": "Investigative-Conventional",
+    "shifts": {"openness": 0.05, "conscientiousness": 0.08, "extraversion": -0.05, "agreeableness": 0.0, "neuroticism": 0.0}
+  },
+  "project manager": {
+    "riasec": "Enterprising-Conventional",
+    "shifts": {"openness": 0.02, "conscientiousness": 0.08, "extraversion": 0.05, "agreeableness": 0.02, "neuroticism": -0.02}
+  },
+  "writer": {
+    "riasec": "Artistic",
+    "shifts": {"openness": 0.12, "conscientiousness": -0.02, "extraversion": -0.03, "agreeableness": 0.0, "neuroticism": 0.05}
+  },
+  "editor": {
+    "riasec": "Artistic-Conventional",
+    "shifts": {"openness": 0.08, "conscientiousness": 0.08, "extraversion": -0.02, "agreeableness": 0.02, "neuroticism": 0.0}
+  },
+  "photographer": {
+    "riasec": "Artistic-Realistic",
+    "shifts": {"openness": 0.12, "conscientiousness": 0.0, "extraversion": 0.0, "agreeableness": 0.0, "neuroticism": 0.02}
+  },
+  "financial analyst": {
+    "riasec": "Investigative-Conventional",
+    "shifts": {"openness": 0.02, "conscientiousness": 0.10, "extraversion": -0.02, "agreeableness": -0.02, "neuroticism": 0.0}
+  },
+  "marketing manager": {
+    "riasec": "Enterprising-Artistic",
+    "shifts": {"openness": 0.05, "conscientiousness": 0.03, "extraversion": 0.08, "agreeableness": 0.02, "neuroticism": -0.02}
+  },
+  "counselor": {
+    "riasec": "Social",
+    "shifts": {"openness": 0.08, "conscientiousness": 0.03, "extraversion": 0.03, "agreeableness": 0.10, "neuroticism": 0.02}
+  },
+  "dentist": {
+    "riasec": "Investigative-Realistic",
+    "shifts": {"openness": 0.0, "conscientiousness": 0.10, "extraversion": 0.0, "agreeableness": 0.03, "neuroticism": -0.02}
+  },
+  "veterinarian": {
+    "riasec": "Investigative-Realistic",
+    "shifts": {"openness": 0.05, "conscientiousness": 0.08, "extraversion": 0.0, "agreeableness": 0.05, "neuroticism": 0.0}
+  },
+  "mechanic": {
+    "riasec": "Realistic",
+    "shifts": {"openness": -0.02, "conscientiousness": 0.05, "extraversion": 0.0, "agreeableness": 0.0, "neuroticism": -0.02}
+  },
+  "electrician": {
+    "riasec": "Realistic-Investigative",
+    "shifts": {"openness": 0.0, "conscientiousness": 0.05, "extraversion": 0.0, "agreeableness": 0.0, "neuroticism": -0.02}
+  },
+  "paramedic": {
+    "riasec": "Realistic-Social",
+    "shifts": {"openness": 0.0, "conscientiousness": 0.05, "extraversion": 0.05, "agreeableness": 0.05, "neuroticism": 0.02}
+  },
+  "librarian": {
+    "riasec": "Conventional-Investigative",
+    "shifts": {"openness": 0.08, "conscientiousness": 0.05, "extraversion": -0.08, "agreeableness": 0.05, "neuroticism": 0.0}
+  },
+  "biologist": {
+    "riasec": "Investigative",
+    "shifts": {"openness": 0.10, "conscientiousness": 0.08, "extraversion": -0.05, "agreeableness": 0.0, "neuroticism": 0.0}
+  },
+  "chemist": {
+    "riasec": "Investigative-Realistic",
+    "shifts": {"openness": 0.08, "conscientiousness": 0.10, "extraversion": -0.05, "agreeableness": 0.0, "neuroticism": 0.0}
+  },
+  "physicist": {
+    "riasec": "Investigative",
+    "shifts": {"openness": 0.12, "conscientiousness": 0.08, "extraversion": -0.05, "agreeableness": -0.02, "neuroticism": 0.0}
   }
 }

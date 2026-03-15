@@ -129,20 +129,21 @@ def fill_gaps(
     )
     result["cognitive_style"] = cognitive
 
-    # Provenance with accurate parent fields per derivation
-    _cog_parents = {
-        "analytical_intuitive": ("psychology.big_five.openness",),
-        "systematic_heuristic": ("psychology.big_five.conscientiousness",),
-        "risk_tolerance": ("psychology.big_five.openness", "psychology.big_five.extraversion", "psychology.big_five.neuroticism"),
-        "need_for_closure": ("psychology.big_five.conscientiousness", "psychology.big_five.openness", "psychology.big_five.neuroticism"),
-        "cognitive_complexity": ("psychology.big_five.openness", "psychology.big_five.conscientiousness"),
+    # Provenance with accurate parent fields and differentiated mapping strength
+    _cog_meta = {
+        "analytical_intuitive": (("psychology.big_five.openness",), 0.55, "O→analytical, r~0.35"),
+        "systematic_heuristic": (("psychology.big_five.conscientiousness",), 0.50, "C→systematic, r~0.30"),
+        "risk_tolerance": (("psychology.big_five.openness", "psychology.big_five.extraversion", "psychology.big_five.neuroticism"), 0.45, "O+E-N→risk, composite"),
+        "need_for_closure": (("psychology.big_five.conscientiousness", "psychology.big_five.openness", "psychology.big_five.neuroticism"), 0.45, "C-O+N→NFC"),
+        "cognitive_complexity": (("psychology.big_five.openness", "psychology.big_five.conscientiousness"), 0.50, "O+C→complexity"),
     }
     for field_name, val in cognitive.items():
+        parents, strength, notes = _cog_meta.get(field_name, ((), 0.4, ""))
         provenance[f"psychology.cognitive_style.{field_name}"] = FieldProvenance(
-            value=val, source="derived", mapping_strength=0.5,
+            value=val, source="derived", mapping_strength=strength,
             inferential_depth=1,
-            confidence=FieldProvenance.compute_confidence("derived", 0.5, 1),
-            parent_fields=_cog_parents.get(field_name, ()),
+            confidence=FieldProvenance.compute_confidence("derived", strength, 1),
+            parent_fields=parents, notes=notes,
         )
 
     # --- Communication Preferences (derived from Big Five + residual SD=0.08) ---
@@ -172,18 +173,19 @@ def fill_gaps(
     )
     result["communication"] = communication
 
-    _comm_parents = {
-        "verbosity": ("psychology.big_five.conscientiousness", "psychology.big_five.extraversion"),
-        "formality": ("psychology.big_five.conscientiousness", "psychology.big_five.extraversion"),
-        "directness": ("psychology.big_five.extraversion", "psychology.big_five.agreeableness"),
-        "emotional_expressiveness": ("psychology.big_five.extraversion", "psychology.big_five.neuroticism"),
+    _comm_meta = {
+        "verbosity": (("psychology.big_five.conscientiousness", "psychology.big_five.extraversion"), 0.40, "C+E→verbosity"),
+        "formality": (("psychology.big_five.conscientiousness", "psychology.big_five.extraversion"), 0.50, "C-E→formality"),
+        "directness": (("psychology.big_five.extraversion", "psychology.big_five.agreeableness"), 0.55, "E-A→directness, r~0.35"),
+        "emotional_expressiveness": (("psychology.big_five.extraversion", "psychology.big_five.neuroticism"), 0.50, "E+N→expressiveness"),
     }
     for field_name, val in communication.items():
+        parents, strength, notes = _comm_meta.get(field_name, ((), 0.4, ""))
         provenance[f"psychology.communication.{field_name}"] = FieldProvenance(
-            value=val, source="derived", mapping_strength=0.5,
+            value=val, source="derived", mapping_strength=strength,
             inferential_depth=1,
-            confidence=FieldProvenance.compute_confidence("derived", 0.5, 1),
-            parent_fields=_comm_parents.get(field_name, ()),
+            confidence=FieldProvenance.compute_confidence("derived", strength, 1),
+            parent_fields=parents, notes=notes,
         )
 
     # --- Knowledge Domains (from occupation, proficiency 0.4-0.6 = familiarity) ---
@@ -345,6 +347,31 @@ DOMAIN_MAP: dict[str, list[dict[str, Any]]] = {
     "consultant": [{"domain": "Business", "proficiency": 0.50, "subdomains": ["Strategy", "Analysis"]}],
     "scientist": [{"domain": "Science", "proficiency": 0.55, "subdomains": ["Research", "Methodology"]}],
     "product manager": [{"domain": "Technology", "proficiency": 0.45, "subdomains": ["Product Strategy"]}],
+    "developer": [{"domain": "Technology", "proficiency": 0.55, "subdomains": ["Software Development"]}],
+    "programmer": [{"domain": "Technology", "proficiency": 0.55, "subdomains": ["Programming"]}],
+    "architect": [{"domain": "Design", "proficiency": 0.55, "subdomains": ["Architecture", "Design Systems"]}],
+    "data analyst": [{"domain": "Technology", "proficiency": 0.50, "subdomains": ["Data Analysis", "Statistics"]}],
+    "project manager": [{"domain": "Business", "proficiency": 0.45, "subdomains": ["Project Management"]}],
+    "writer": [{"domain": "Media", "proficiency": 0.50, "subdomains": ["Writing", "Storytelling"]}],
+    "editor": [{"domain": "Media", "proficiency": 0.50, "subdomains": ["Editing", "Content"]}],
+    "photographer": [{"domain": "Arts", "proficiency": 0.50, "subdomains": ["Photography", "Visual Arts"]}],
+    "financial analyst": [{"domain": "Finance", "proficiency": 0.55, "subdomains": ["Financial Analysis"]}],
+    "marketing manager": [{"domain": "Business", "proficiency": 0.50, "subdomains": ["Marketing", "Strategy"]}],
+    "counselor": [{"domain": "Social Services", "proficiency": 0.50, "subdomains": ["Counseling"]}],
+    "dentist": [{"domain": "Healthcare", "proficiency": 0.55, "subdomains": ["Dentistry"]}],
+    "veterinarian": [{"domain": "Healthcare", "proficiency": 0.55, "subdomains": ["Veterinary Medicine"]}],
+    "mechanic": [{"domain": "Engineering", "proficiency": 0.50, "subdomains": ["Mechanical Systems"]}],
+    "electrician": [{"domain": "Engineering", "proficiency": 0.50, "subdomains": ["Electrical Systems"]}],
+    "paramedic": [{"domain": "Healthcare", "proficiency": 0.50, "subdomains": ["Emergency Medicine"]}],
+    "librarian": [{"domain": "Education", "proficiency": 0.45, "subdomains": ["Information Science"]}],
+    "biologist": [{"domain": "Science", "proficiency": 0.55, "subdomains": ["Biology", "Research"]}],
+    "chemist": [{"domain": "Science", "proficiency": 0.55, "subdomains": ["Chemistry", "Research"]}],
+    "physicist": [{"domain": "Science", "proficiency": 0.55, "subdomains": ["Physics", "Research"]}],
+    "police officer": [{"domain": "Law Enforcement", "proficiency": 0.50, "subdomains": ["Public Safety"]}],
+    "firefighter": [{"domain": "Emergency Services", "proficiency": 0.50, "subdomains": ["Fire Safety"]}],
+    "pilot": [{"domain": "Aviation", "proficiency": 0.55, "subdomains": ["Flight Operations"]}],
+    "pharmacist": [{"domain": "Healthcare", "proficiency": 0.55, "subdomains": ["Pharmacology"]}],
+    "accountant": [{"domain": "Finance", "proficiency": 0.55, "subdomains": ["Accounting", "Tax"]}],
 }
 
 
