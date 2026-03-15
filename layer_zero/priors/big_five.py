@@ -214,10 +214,43 @@ def compute_big_five_prior(request: MintRequest) -> dict[str, TraitPrior]:
 
 
 def _get_age_shifts(age: int) -> dict[str, float]:
-    """Get trait shifts for a given age from age bracket data."""
-    for bracket in _AGE_BRACKETS:
+    """Get trait shifts for a given age using linear interpolation between brackets.
+
+    Instead of flat bracket lookup, interpolates between the midpoints of
+    adjacent brackets for smoother age trajectories.
+    """
+    # Find which bracket the age falls in
+    for i, bracket in enumerate(_AGE_BRACKETS):
         if bracket["age_min"] <= age <= bracket["age_max"]:
+            # Compute midpoint of this bracket
+            mid = (bracket["age_min"] + bracket["age_max"]) / 2.0
+
+            # If we're in the first or last bracket, use flat values
+            if i == 0 and age <= mid:
+                return bracket["shifts"]
+            if i == len(_AGE_BRACKETS) - 1 and age >= mid:
+                return bracket["shifts"]
+
+            # Interpolate between this bracket and the adjacent one
+            if age < mid and i > 0:
+                prev = _AGE_BRACKETS[i - 1]
+                prev_mid = (prev["age_min"] + prev["age_max"]) / 2.0
+                t = (age - prev_mid) / (mid - prev_mid) if mid != prev_mid else 0.5
+                return {
+                    trait: prev["shifts"].get(trait, 0.0) * (1 - t) + bracket["shifts"].get(trait, 0.0) * t
+                    for trait in set(prev["shifts"]) | set(bracket["shifts"])
+                }
+            elif age >= mid and i < len(_AGE_BRACKETS) - 1:
+                nxt = _AGE_BRACKETS[i + 1]
+                nxt_mid = (nxt["age_min"] + nxt["age_max"]) / 2.0
+                t = (age - mid) / (nxt_mid - mid) if nxt_mid != mid else 0.5
+                return {
+                    trait: bracket["shifts"].get(trait, 0.0) * (1 - t) + nxt["shifts"].get(trait, 0.0) * t
+                    for trait in set(bracket["shifts"]) | set(nxt["shifts"])
+                }
+
             return bracket["shifts"]
+
     # Fallback: use last bracket for very old ages
     return _AGE_BRACKETS[-1]["shifts"]
 
