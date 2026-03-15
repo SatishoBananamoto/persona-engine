@@ -1021,6 +1021,69 @@ class TestMemoryManager:
         created = memory_manager.process_write_intents(intents, turn=1)
         assert len(created) == 1
 
+    def test_strict_policy_skips_low_confidence(self, memory_manager: MemoryManager):
+        """write_policy='strict' should skip intents below STRICT_CONFIDENCE_THRESHOLD."""
+        intents = [
+            MemoryWriteIntent(
+                content_type="fact",
+                content="Low-confidence guess",
+                confidence=0.4,
+                privacy_level=0.3,
+                source="inferred_from_context",
+            ),
+            MemoryWriteIntent(
+                content_type="fact",
+                content="High-confidence fact",
+                confidence=0.9,
+                privacy_level=0.3,
+                source="user_stated",
+            ),
+        ]
+        created = memory_manager.process_write_intents(
+            intents, turn=1, write_policy="strict"
+        )
+        assert len(created) == 1
+        assert created[0].content == "High-confidence fact"
+
+    def test_lenient_policy_writes_all(self, memory_manager: MemoryManager):
+        """write_policy='lenient' should write all intents regardless of confidence."""
+        intents = [
+            MemoryWriteIntent(
+                content_type="fact",
+                content="Low-confidence guess",
+                confidence=0.4,
+                privacy_level=0.3,
+                source="inferred_from_context",
+            ),
+            MemoryWriteIntent(
+                content_type="fact",
+                content="High-confidence fact",
+                confidence=0.9,
+                privacy_level=0.3,
+                source="user_stated",
+            ),
+        ]
+        created = memory_manager.process_write_intents(
+            intents, turn=1, write_policy="lenient"
+        )
+        assert len(created) == 2
+
+    def test_strict_policy_threshold_boundary(self, memory_manager: MemoryManager):
+        """Intent exactly at threshold (0.7) should pass in strict mode."""
+        intents = [
+            MemoryWriteIntent(
+                content_type="fact",
+                content="Borderline fact",
+                confidence=0.7,
+                privacy_level=0.3,
+                source="user_stated",
+            ),
+        ]
+        created = memory_manager.process_write_intents(
+            intents, turn=1, write_policy="strict"
+        )
+        assert len(created) == 1
+
     def test_fulfill_read_requests_fact(self, memory_manager: MemoryManager):
         memory_manager.remember_fact("User works as engineer", category="occupation", turn=1)
         requests = [

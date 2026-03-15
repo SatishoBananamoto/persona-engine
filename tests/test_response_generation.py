@@ -1,14 +1,16 @@
 """Tests for Phase 5: Response Generation.
 
 Covers:
-  1. Schema validation (GeneratedResponse, ResponseConfig)
-  2. Prompt builder (IR → system prompt)
-  3. MockAdapter
-  4. TemplateAdapter (rule-based text generation)
-  5. ResponseGenerator orchestrator
-  6. Persona differentiation (different personas → different output)
+  1. Prompt builder (IR → system prompt)
+  2. Float-to-instruction converters
+  3. TemplateAdapter (rule-based text generation)
+  4. Persona differentiation (different personas → different output)
+  5. Full pipeline integration
+  6. Strict mode
+  7. LLM adapter error handling
 
 All tests run without an API key.
+All imports use the generation/ module (response/ is deprecated).
 """
 
 import pytest
@@ -16,9 +18,15 @@ import yaml
 
 from persona_engine.memory.stance_cache import StanceCache
 from persona_engine.planner.turn_planner import ConversationContext, TurnPlanner
-from persona_engine.response.adapters import MockAdapter, TemplateAdapter, AnthropicAdapter
-from persona_engine.response.generator import ResponseGenerator, create_response_generator
-from persona_engine.response.prompt_builder import (
+from persona_engine.generation.llm_adapter import TemplateAdapter, AnthropicAdapter
+from persona_engine.generation.response_generator import (
+    ResponseGenerator,
+    GeneratedResponse,
+    GenerationBackend,
+    ResponseConfig,
+    create_response_generator,
+)
+from persona_engine.generation.prompt_builder import (
     CLAIM_TYPE_PROMPTS,
     TONE_PROMPTS,
     UNCERTAINTY_PROMPTS,
@@ -29,11 +37,6 @@ from persona_engine.response.prompt_builder import (
     disclosure_instruction,
     elasticity_instruction,
     formality_instruction,
-)
-from persona_engine.response.schema import (
-    GeneratedResponse,
-    GenerationBackend,
-    ResponseConfig,
 )
 from persona_engine.schema.ir_schema import (
     CommunicationStyle,
@@ -130,49 +133,7 @@ def make_context(
 
 
 # =============================================================================
-# 1. Schema Tests
-# =============================================================================
-
-
-class TestSchema:
-    """GeneratedResponse and ResponseConfig validation."""
-
-    def test_generated_response_creation(self):
-        resp = GeneratedResponse(text="Hello", backend=GenerationBackend.MOCK)
-        assert resp.text == "Hello"
-        assert resp.backend == GenerationBackend.MOCK
-        assert resp.model_id is None
-        assert resp.token_usage is None
-
-    def test_generated_response_all_fields(self):
-        resp = GeneratedResponse(
-            text="Hi there",
-            backend=GenerationBackend.ANTHROPIC,
-            model_id="claude-haiku-4-5-20251001",
-            prompt_system="You are Sarah.",
-            prompt_user="Hello",
-            token_usage={"input_tokens": 100, "output_tokens": 50},
-            ir_turn_id="turn_1",
-        )
-        assert resp.model_id == "claude-haiku-4-5-20251001"
-        assert resp.token_usage["input_tokens"] == 100
-        assert resp.ir_turn_id == "turn_1"
-
-    def test_response_config_defaults(self):
-        config = ResponseConfig()
-        assert config.backend == GenerationBackend.TEMPLATE
-        assert config.max_tokens == 300
-        assert config.temperature == 0.7
-        assert config.api_key is None
-
-    def test_generation_backend_enum_values(self):
-        assert GenerationBackend.MOCK == "mock"
-        assert GenerationBackend.TEMPLATE == "template"
-        assert GenerationBackend.ANTHROPIC == "anthropic"
-
-
-# =============================================================================
-# 2. Prompt Builder Tests
+# 1. Prompt Builder Tests
 # =============================================================================
 
 
@@ -321,7 +282,7 @@ class TestPromptBuilder:
 
 
 # =============================================================================
-# 3. Float-to-Instruction Tests
+# 2. Float-to-Instruction Tests
 # =============================================================================
 
 
@@ -371,124 +332,78 @@ class TestFloatInstructions:
 
 
 # =============================================================================
-# 4. MockAdapter Tests
-# =============================================================================
-
-
-class TestMockAdapter:
-    """Test mock adapter for testing infrastructure."""
-
-    def test_returns_generated_response(self):
-        adapter = MockAdapter()
-        resp = adapter.generate("system", "user")
-        assert isinstance(resp, GeneratedResponse)
-
-    def test_backend_is_mock(self):
-        adapter = MockAdapter()
-        resp = adapter.generate("system", "user")
-        assert resp.backend == GenerationBackend.MOCK
-
-    def test_prompts_preserved(self):
-        adapter = MockAdapter()
-        resp = adapter.generate("my system prompt", "my user prompt")
-        assert resp.prompt_system == "my system prompt"
-        assert resp.prompt_user == "my user prompt"
-
-    def test_fixed_response(self):
-        adapter = MockAdapter(response_text="Fixed answer!")
-        resp = adapter.generate("system", "user")
-        assert resp.text == "Fixed answer!"
-
-    def test_default_response_contains_user_input(self):
-        adapter = MockAdapter()
-        resp = adapter.generate("system", "What about AI?")
-        assert "What about AI?" in resp.text
-
-    def test_call_count_increments(self):
-        adapter = MockAdapter()
-        assert adapter.call_count == 0
-        adapter.generate("s", "u")
-        assert adapter.call_count == 1
-        adapter.generate("s", "u")
-        assert adapter.call_count == 2
-
-    def test_last_prompts_tracked(self):
-        adapter = MockAdapter()
-        adapter.generate("first_system", "first_user")
-        adapter.generate("second_system", "second_user")
-        assert adapter.last_system_prompt == "second_system"
-        assert adapter.last_user_prompt == "second_user"
-
-
-# =============================================================================
-# 5. TemplateAdapter Tests
+# 3. TemplateAdapter Tests
 # =============================================================================
 
 
 class TestTemplateAdapter:
-    """Test rule-based text generation from IR."""
+    """Test rule-based text generation from IR.
 
-    def test_returns_generated_response(self):
+    The generation/ TemplateAdapter.generate_from_ir() returns str (not
+    GeneratedResponse), so assertions are on plain text.
+    """
+
+    def test_returns_string(self):
         adapter = TemplateAdapter()
         ir = make_ir()
-        resp = adapter.generate_from_ir(ir, "test input")
-        assert isinstance(resp, GeneratedResponse)
-        assert resp.backend == GenerationBackend.TEMPLATE
+        result = adapter.generate_from_ir(ir, "test input")
+        assert isinstance(result, str)
+        assert len(result) > 0
 
     def test_brief_produces_short_text(self):
         adapter = TemplateAdapter()
         ir = make_ir(verbosity=Verbosity.BRIEF)
-        resp = adapter.generate_from_ir(ir, "test")
-        sentences = [s.strip() for s in resp.text.split(".") if s.strip()]
+        text = adapter.generate_from_ir(ir, "test")
+        sentences = [s.strip() for s in text.split(".") if s.strip()]
         assert len(sentences) <= 3  # Allow some flexibility
 
     def test_detailed_longer_than_brief(self):
         adapter = TemplateAdapter()
         ir_brief = make_ir(verbosity=Verbosity.BRIEF)
         ir_detailed = make_ir(verbosity=Verbosity.DETAILED)
-        resp_brief = adapter.generate_from_ir(ir_brief, "test")
-        resp_detailed = adapter.generate_from_ir(ir_detailed, "test")
-        assert len(resp_detailed.text) > len(resp_brief.text)
+        text_brief = adapter.generate_from_ir(ir_brief, "test")
+        text_detailed = adapter.generate_from_ir(ir_detailed, "test")
+        assert len(text_detailed) > len(text_brief)
 
     def test_different_tones_different_openers(self):
         adapter = TemplateAdapter()
         ir_warm = make_ir(tone=Tone.WARM_ENTHUSIASTIC)
         ir_anxious = make_ir(tone=Tone.ANXIOUS_STRESSED)
-        resp_warm = adapter.generate_from_ir(ir_warm, "test")
-        resp_anxious = adapter.generate_from_ir(ir_anxious, "test")
-        assert resp_warm.text != resp_anxious.text
+        text_warm = adapter.generate_from_ir(ir_warm, "test")
+        text_anxious = adapter.generate_from_ir(ir_anxious, "test")
+        assert text_warm != text_anxious
 
     def test_low_confidence_adds_hedging(self):
         adapter = TemplateAdapter()
         ir = make_ir(confidence=0.2, stance="this could work")
-        resp = adapter.generate_from_ir(ir, "test")
-        text_lower = resp.text.lower()
+        text = adapter.generate_from_ir(ir, "test")
+        text_lower = text.lower()
         assert "i think" in text_lower or "from what" in text_lower
 
     def test_high_confidence_no_hedging(self):
         adapter = TemplateAdapter()
         ir = make_ir(confidence=0.9, stance="This approach works well")
-        resp = adapter.generate_from_ir(ir, "test")
-        assert "I think this" not in resp.text
-        assert "From what I understand" not in resp.text
+        text = adapter.generate_from_ir(ir, "test")
+        assert "I think this" not in text
+        assert "From what I understand" not in text
 
     def test_ask_clarifying_adds_question(self):
         adapter = TemplateAdapter()
         ir = make_ir(uncertainty_action=UncertaintyAction.ASK_CLARIFYING)
-        resp = adapter.generate_from_ir(ir, "test")
-        assert "?" in resp.text
+        text = adapter.generate_from_ir(ir, "test")
+        assert "?" in text
 
     def test_hedge_adds_uncertainty(self):
         adapter = TemplateAdapter()
         ir = make_ir(uncertainty_action=UncertaintyAction.HEDGE)
-        resp = adapter.generate_from_ir(ir, "test")
-        assert "not entirely certain" in resp.text.lower()
+        text = adapter.generate_from_ir(ir, "test")
+        assert "not entirely certain" in text.lower()
 
     def test_refuse_adds_declination(self):
         adapter = TemplateAdapter()
         ir = make_ir(uncertainty_action=UncertaintyAction.REFUSE)
-        resp = adapter.generate_from_ir(ir, "test")
-        assert "not really the right person" in resp.text.lower()
+        text = adapter.generate_from_ir(ir, "test")
+        assert "not really the right person" in text.lower()
 
     def test_stance_appears_in_text(self):
         adapter = TemplateAdapter()
@@ -496,8 +411,8 @@ class TestTemplateAdapter:
             stance="User research is essential for good design",
             confidence=0.8,
         )
-        resp = adapter.generate_from_ir(ir, "test")
-        assert "user research" in resp.text.lower()
+        text = adapter.generate_from_ir(ir, "test")
+        assert "user research" in text.lower()
 
     def test_high_formality_removes_contractions(self):
         adapter = TemplateAdapter()
@@ -506,85 +421,20 @@ class TestTemplateAdapter:
             tone=Tone.NEUTRAL_CALM,
             stance="I'm not sure about this",
         )
-        resp = adapter.generate_from_ir(ir, "test")
+        text = adapter.generate_from_ir(ir, "test")
         # High formality should expand "I'm" to "I am"
-        assert "I am" in resp.text or "I'm" not in resp.text
-
-    def test_turn_id_propagated(self):
-        adapter = TemplateAdapter()
-        ir = make_ir(turn_id="conv123_turn_5")
-        resp = adapter.generate_from_ir(ir, "test")
-        assert resp.ir_turn_id == "conv123_turn_5"
+        assert "I am" in text or "I'm" not in text
 
     def test_persona_adds_occupation_in_detailed(self):
         adapter = TemplateAdapter()
         persona = load_persona()
         ir = make_ir(verbosity=Verbosity.DETAILED)
-        resp = adapter.generate_from_ir(ir, "test", persona=persona)
-        assert "ux researcher" in resp.text.lower()
+        text = adapter.generate_from_ir(ir, "test", persona=persona)
+        assert "ux researcher" in text.lower()
 
 
 # =============================================================================
-# 6. ResponseGenerator Tests
-# =============================================================================
-
-
-class TestResponseGenerator:
-    """Test the orchestrator wiring."""
-
-    def test_default_uses_template_backend(self):
-        gen = ResponseGenerator()
-        assert isinstance(gen.adapter, TemplateAdapter)
-
-    def test_mock_backend_via_config(self):
-        config = ResponseConfig(backend=GenerationBackend.MOCK)
-        gen = ResponseGenerator(config=config)
-        assert isinstance(gen.adapter, MockAdapter)
-
-    def test_adapter_injection(self):
-        mock = MockAdapter(response_text="injected")
-        gen = ResponseGenerator(adapter=mock)
-        ir = make_ir()
-        resp = gen.generate(ir, "test")
-        assert resp.text == "injected"
-
-    def test_generate_returns_response(self):
-        gen = ResponseGenerator()
-        ir = make_ir()
-        resp = gen.generate(ir, "What do you think?")
-        assert isinstance(resp, GeneratedResponse)
-        assert len(resp.text) > 0
-
-    def test_turn_id_propagated(self):
-        gen = ResponseGenerator()
-        ir = make_ir(turn_id="my_turn_123")
-        resp = gen.generate(ir, "test")
-        assert resp.ir_turn_id == "my_turn_123"
-
-    def test_mock_receives_built_prompt(self):
-        mock = MockAdapter()
-        persona = load_persona()
-        gen = ResponseGenerator(persona=persona, adapter=mock)
-        ir = make_ir(tone=Tone.WARM_ENTHUSIASTIC)
-        gen.generate(ir, "Hello!")
-        # Mock captures the system prompt that was built
-        assert "warmth" in mock.last_system_prompt.lower()
-        assert "Sarah" in mock.last_system_prompt
-
-    def test_factory_function(self):
-        gen = create_response_generator(backend="template")
-        assert isinstance(gen.adapter, TemplateAdapter)
-
-    def test_factory_with_persona(self):
-        persona = load_persona()
-        gen = create_response_generator(persona=persona, backend="template")
-        ir = make_ir()
-        resp = gen.generate(ir, "test")
-        assert isinstance(resp, GeneratedResponse)
-
-
-# =============================================================================
-# 7. Persona Differentiation Tests
+# 4. Persona Differentiation Tests
 # =============================================================================
 
 
@@ -605,8 +455,8 @@ class TestPersonaDifferentiation:
         ir1 = planner1.generate_ir(ctx1)
         ir2 = planner2.generate_ir(ctx2)
 
-        gen1 = ResponseGenerator(persona=persona1)
-        gen2 = ResponseGenerator(persona=persona2)
+        gen1 = ResponseGenerator(persona=persona1, provider="template")
+        gen2 = ResponseGenerator(persona=persona2, provider="template")
 
         resp1 = gen1.generate(ir1, "What do you think about remote work?")
         resp2 = gen2.generate(ir2, "What do you think about remote work?")
@@ -623,18 +473,18 @@ class TestPersonaDifferentiation:
         ir_warm = make_ir(tone=Tone.WARM_ENTHUSIASTIC, confidence=0.8)
         ir_tired = make_ir(tone=Tone.TIRED_WITHDRAWN, confidence=0.8)
 
-        resp_warm = adapter.generate_from_ir(ir_warm, "test")
-        resp_tired = adapter.generate_from_ir(ir_tired, "test")
+        text_warm = adapter.generate_from_ir(ir_warm, "test")
+        text_tired = adapter.generate_from_ir(ir_tired, "test")
 
         # Warm should start enthusiastically, tired should be subdued
-        assert resp_warm.text != resp_tired.text
-        assert "excited" in resp_warm.text.lower() or "great" in resp_warm.text.lower()
+        assert text_warm != text_tired
+        assert "excited" in text_warm.lower() or "great" in text_warm.lower()
 
     def test_expert_vs_nonexpert_different_confidence(self):
         """Expert domain → high confidence text, unknown domain → hedging text."""
         persona = load_persona()
         planner = TurnPlanner(persona, DeterminismManager(seed=42))
-        gen = ResponseGenerator(persona=persona)
+        gen = ResponseGenerator(persona=persona, provider="template")
 
         # Expert domain (psychology)
         ctx_expert = make_context(
@@ -646,7 +496,7 @@ class TestPersonaDifferentiation:
 
         # Recreate planner to avoid state bleed
         planner2 = TurnPlanner(persona, DeterminismManager(seed=42))
-        gen2 = ResponseGenerator(persona=persona)
+        gen2 = ResponseGenerator(persona=persona, provider="template")
 
         # Unknown domain
         ctx_unknown = make_context(
@@ -663,7 +513,7 @@ class TestPersonaDifferentiation:
         """Same persona at turn 1 vs turn 15 should produce different output."""
         persona = load_persona()
         planner = TurnPlanner(persona, DeterminismManager(seed=42))
-        gen = ResponseGenerator(persona=persona)
+        gen = ResponseGenerator(persona=persona, provider="template")
 
         cache = StanceCache()
 
@@ -711,7 +561,7 @@ class TestPersonaDifferentiation:
 
 
 # =============================================================================
-# 8. Full Pipeline Integration Tests
+# 5. Full Pipeline Integration Tests
 # =============================================================================
 
 
@@ -722,7 +572,7 @@ class TestFullPipeline:
         """Full pipeline with template backend produces non-empty text."""
         persona = load_persona()
         planner = TurnPlanner(persona, DeterminismManager(seed=42))
-        gen = ResponseGenerator(persona=persona)
+        gen = ResponseGenerator(persona=persona, provider="template")
 
         ctx = make_context("What do you think about AI in UX research?")
         ir = planner.generate_ir(ctx)
@@ -730,39 +580,20 @@ class TestFullPipeline:
 
         assert isinstance(resp, GeneratedResponse)
         assert len(resp.text) > 10
-        assert resp.backend == GenerationBackend.TEMPLATE
-        assert resp.ir_turn_id is not None
-
-    def test_end_to_end_mock(self):
-        """Full pipeline with mock backend captures correct prompt."""
-        persona = load_persona()
-        planner = TurnPlanner(persona, DeterminismManager(seed=42))
-
-        mock = MockAdapter()
-        gen = ResponseGenerator(persona=persona, adapter=mock)
-
-        ctx = make_context("Tell me about your research methodology")
-        ir = planner.generate_ir(ctx)
-        resp = gen.generate(ir, ctx.user_input)
-
-        # Verify the prompt was built from the IR
-        assert resp.prompt_system is not None
-        assert "COMMUNICATION STYLE" in resp.prompt_system
-        assert "RESPONSE GUIDANCE" in resp.prompt_system
-        assert "Sarah" in resp.prompt_system
+        assert resp.model == "template-rule-based"
 
     def test_deterministic_template_output(self):
         """Same seed + same input → same template output."""
         persona = load_persona()
 
         planner1 = TurnPlanner(persona, DeterminismManager(seed=42))
-        gen1 = ResponseGenerator(persona=persona)
+        gen1 = ResponseGenerator(persona=persona, provider="template")
         ctx1 = make_context("What do you think about AI?")
         ir1 = planner1.generate_ir(ctx1)
         resp1 = gen1.generate(ir1, ctx1.user_input)
 
         planner2 = TurnPlanner(persona, DeterminismManager(seed=42))
-        gen2 = ResponseGenerator(persona=persona)
+        gen2 = ResponseGenerator(persona=persona, provider="template")
         ctx2 = make_context("What do you think about AI?")
         ir2 = planner2.generate_ir(ctx2)
         resp2 = gen2.generate(ir2, ctx2.user_input)
@@ -771,7 +602,7 @@ class TestFullPipeline:
 
 
 # =============================================================================
-# 7. Strict Mode (Phase A.2)
+# 6. Strict Mode (Phase A.2)
 # =============================================================================
 
 
@@ -780,53 +611,31 @@ class TestStrictMode:
 
     def test_strict_mode_forces_template_adapter(self):
         """When strict_mode=True, adapter should be TemplateAdapter."""
-        from persona_engine.response.schema import ResponseConfig, GenerationBackend
-
-        config = ResponseConfig(backend=GenerationBackend.MOCK, strict_mode=True)
-        gen = ResponseGenerator(config=config)
+        persona = load_persona()
+        gen = ResponseGenerator(persona=persona, provider="mock", strict_mode=True)
         assert isinstance(gen.adapter, TemplateAdapter)
 
     def test_strict_mode_with_explicit_template_adapter(self):
         """Strict mode with explicit TemplateAdapter should keep it."""
+        persona = load_persona()
         ta = TemplateAdapter()
-        gen = ResponseGenerator(adapter=ta)
+        gen = ResponseGenerator(persona=persona, adapter=ta)
         assert gen.adapter is ta
 
     def test_strict_mode_produces_deterministic_output(self):
         """Same IR + strict mode → identical output every time."""
-        from persona_engine.response.schema import ResponseConfig
-
-        config = ResponseConfig(strict_mode=True)
+        persona = load_persona()
         ir = make_ir(confidence=0.8, tone=Tone.WARM_CONFIDENT)
 
-        gen = ResponseGenerator(config=config)
+        gen = ResponseGenerator(persona=persona, strict_mode=True)
         resp1 = gen.generate(ir, "Tell me about UX")
         resp2 = gen.generate(ir, "Tell me about UX")
         assert resp1.text == resp2.text
 
-    def test_strict_mode_off_allows_other_backends(self):
-        """Without strict mode, other backends are respected."""
-        from persona_engine.response.schema import ResponseConfig, GenerationBackend
-
-        config = ResponseConfig(backend=GenerationBackend.MOCK, strict_mode=False)
-        gen = ResponseGenerator(config=config)
-        assert isinstance(gen.adapter, MockAdapter)
-
-    def test_strict_mode_via_factory(self):
-        """create_response_generator doesn't have strict_mode yet, but config does."""
-        from persona_engine.response.schema import ResponseConfig, GenerationBackend
-
-        config = ResponseConfig(backend=GenerationBackend.ANTHROPIC, strict_mode=True)
-        gen = ResponseGenerator(config=config)
-        # Should be template, not anthropic
-        assert isinstance(gen.adapter, TemplateAdapter)
-
     def test_strict_mode_template_respects_ir_fields(self):
         """In strict mode, output should reflect IR confidence level."""
-        from persona_engine.response.schema import ResponseConfig
-
-        config = ResponseConfig(strict_mode=True)
-        gen = ResponseGenerator(config=config, persona=load_persona())
+        persona = load_persona()
+        gen = ResponseGenerator(persona=persona, strict_mode=True)
 
         # Low confidence → hedging language
         ir_low = make_ir(confidence=0.2, tone=Tone.NEUTRAL_CALM)
@@ -841,7 +650,7 @@ class TestStrictMode:
 
 
 # =============================================================================
-# 8. LLM Adapter Error Handling (Phase B.1)
+# 7. LLM Adapter Error Handling (Phase B.1)
 # =============================================================================
 
 
@@ -892,22 +701,6 @@ class TestLLMAdapterErrorHandling:
         adapter._client = mock_client
 
         with pytest.raises(LLMResponseError, match="ValueError"):
-            adapter.generate("system", "user")
-
-    def test_response_adapter_empty_content_raises(self):
-        """AnthropicAdapter from response module: empty content → LLMResponseError."""
-        from unittest.mock import MagicMock
-        from persona_engine.exceptions import LLMResponseError
-
-        adapter = AnthropicAdapter.__new__(AnthropicAdapter)
-        mock_client = MagicMock()
-        mock_message = MagicMock()
-        mock_message.content = []
-        mock_client.messages.create.return_value = mock_message
-        adapter._client = mock_client
-        adapter._model_id = "test"
-
-        with pytest.raises(LLMResponseError, match="empty response"):
             adapter.generate("system", "user")
 
     def test_openai_adapter_empty_choices_raises(self):

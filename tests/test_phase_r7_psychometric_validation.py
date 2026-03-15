@@ -17,6 +17,8 @@ References:
 
 import pytest
 
+from conftest import make_persona_data as _make_base_persona_data
+
 from persona_engine.memory import StanceCache
 from persona_engine.planner.turn_planner import (
     ConversationContext,
@@ -65,53 +67,20 @@ CALM_TONES = {
 # ============================================================================
 
 def _make_persona_data(**overrides) -> dict:
-    """Create persona data dict with Big Five overrides."""
-    base = {
-        "persona_id": "PSYCHOMETRIC_TEST", "version": "1.0", "label": "Psychometric Test Persona",
-        "identity": {"age": 35, "gender": "female", "location": "London, UK",
-                     "education": "MSc Psychology", "occupation": "Researcher", "background": "Academic"},
-        "psychology": {
-            "big_five": {"openness": 0.5, "conscientiousness": 0.5,
-                         "extraversion": 0.5, "agreeableness": 0.5, "neuroticism": 0.5},
-            "values": {"self_direction": 0.5, "stimulation": 0.5, "hedonism": 0.5,
-                       "achievement": 0.5, "power": 0.5, "security": 0.5,
-                       "conformity": 0.5, "tradition": 0.5, "benevolence": 0.5,
-                       "universalism": 0.5},
-            "cognitive_style": {"analytical_intuitive": 0.5, "systematic_heuristic": 0.5,
-                                "risk_tolerance": 0.5, "need_for_closure": 0.5,
-                                "cognitive_complexity": 0.5},
-            "communication": {"verbosity": 0.5, "formality": 0.5,
-                              "directness": 0.5, "emotional_expressiveness": 0.5},
-        },
-        "knowledge_domains": [
-            {"domain": "Psychology", "proficiency": 0.8, "subdomains": ["cognitive", "social"]},
-            {"domain": "Research Methods", "proficiency": 0.7, "subdomains": []},
-        ],
-        "social_roles": {"default": {"formality": 0.5, "directness": 0.5, "emotional_expressiveness": 0.5}},
-        "invariants": {"identity_facts": ["Researcher", "London"], "cannot_claim": [], "must_avoid": []},
-        "initial_state": {"mood_valence": 0.2, "mood_arousal": 0.4,
-                          "fatigue": 0.2, "stress": 0.2, "engagement": 0.5},
-        "uncertainty": {"admission_threshold": 0.45, "hedging_frequency": 0.4,
-                        "clarification_tendency": 0.5, "knowledge_boundary_strictness": 0.6},
-        "claim_policy": {
-            "allowed_claim_types": ["personal_experience", "domain_expert", "general_common_knowledge"],
-            "citation_required_when": {"proficiency_below": 0.5, "factual_or_time_sensitive": True},
-            "lookup_behavior": "hedge",
-        },
-        "time_scarcity": 0.45, "privacy_sensitivity": 0.5,
-        "disclosure_policy": {
-            "base_openness": 0.55,
-            "factors": {"topic_sensitivity": -0.25, "trust_level": 0.3,
-                        "formal_context": -0.15, "positive_mood": 0.1},
-            "bounds": [0.1, 0.9],
-        },
+    """Psychometric test persona with researcher identity."""
+    base = _make_base_persona_data(**overrides)
+    base["persona_id"] = "PSYCHOMETRIC_TEST"
+    base["label"] = "Psychometric Test Persona"
+    base["identity"] = {
+        "age": 35, "gender": "female", "location": "London, UK",
+        "education": "MSc Psychology", "occupation": "Researcher",
+        "background": "Academic",
     }
-    # Apply Big Five overrides
-    for key, val in overrides.items():
-        if key in base["psychology"]["big_five"]:
-            base["psychology"]["big_five"][key] = val
-        elif key == "values":
-            base["psychology"]["values"].update(val)
+    base["knowledge_domains"] = [
+        {"domain": "Psychology", "proficiency": 0.8, "subdomains": ["cognitive", "social"]},
+        {"domain": "Research Methods", "proficiency": 0.7, "subdomains": []},
+    ]
+    base["invariants"]["identity_facts"] = ["Researcher", "London"]
     return base
 
 

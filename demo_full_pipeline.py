@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from persona_engine.memory.stance_cache import StanceCache
 from persona_engine.planner.turn_planner import ConversationContext, TurnPlanner
-from persona_engine.response import ResponseGenerator, ResponseConfig, GenerationBackend
+from persona_engine.generation import ResponseGenerator, create_response_generator
 from persona_engine.schema.ir_schema import ConversationGoal, InteractionMode
 from persona_engine.schema.persona_schema import Persona
 from persona_engine.utils.determinism import DeterminismManager
@@ -59,7 +59,6 @@ def demo_conversation(backend: str = "template", persona_path: str = "personas/u
     determinism = DeterminismManager(seed=42)
     planner = TurnPlanner(persona, determinism)
 
-    api_key = None
     if backend == "anthropic":
         import os
         api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -69,16 +68,8 @@ def demo_conversation(backend: str = "template", persona_path: str = "personas/u
             print("  Or run without --backend anthropic for template mode.")
             return
 
-    config = ResponseConfig(
-        backend=GenerationBackend(backend),
-        api_key=api_key,
-        model_id="claude-haiku-4-5-20251001",
-        max_tokens=500,
-    )
-    generator = ResponseGenerator(config=config, persona=persona)
-    print(f"  Backend: {config.backend.value}")
-    if backend == "anthropic":
-        print(f"  Model: {config.model_id}")
+    generator = create_response_generator(persona=persona, provider=backend)
+    print(f"  Backend: {backend}")
 
     print(f"\n{'='*20} DEMO CONVERSATIONS {'='*20}\n")
 
@@ -141,10 +132,9 @@ def demo_conversation(backend: str = "template", persona_path: str = "personas/u
         print(response.text)
         print()
 
-        if response.token_usage:
-            tokens = response.token_usage["input_tokens"] + response.token_usage["output_tokens"]
-            print(f"Tokens: {tokens}")
-        print(f"Backend: {response.backend.value}")
+        if response.estimated_tokens:
+            print(f"Estimated tokens: {response.estimated_tokens}")
+        print(f"Model: {response.model}")
         print()
 
     print(f"{'='*20} DEMO COMPLETE {'='*20}")

@@ -147,6 +147,103 @@ _SAMPLE_PERSONA_DATA: dict = {
 
 
 # ============================================================================
+# Shared test helper — canonical persona data factory
+# ============================================================================
+
+# Baseline persona data with all traits at 0.5.  Designed for R-phase tests
+# where a single trait is tweaked via overrides.
+_BASELINE_PERSONA_DATA: dict = {
+    "persona_id": "TEST",
+    "version": "1.0",
+    "label": "Test Persona",
+    "identity": {
+        "age": 30, "gender": "female", "location": "NYC",
+        "education": "BS", "occupation": "Engineer",
+        "background": "Test",
+    },
+    "psychology": {
+        "big_five": {
+            "openness": 0.5, "conscientiousness": 0.5,
+            "extraversion": 0.5, "agreeableness": 0.5,
+            "neuroticism": 0.5,
+        },
+        "values": {
+            "self_direction": 0.5, "stimulation": 0.5,
+            "hedonism": 0.5, "achievement": 0.5, "power": 0.5,
+            "security": 0.5, "conformity": 0.5, "tradition": 0.5,
+            "benevolence": 0.5, "universalism": 0.5,
+        },
+        "cognitive_style": {
+            "analytical_intuitive": 0.5, "systematic_heuristic": 0.5,
+            "risk_tolerance": 0.5, "need_for_closure": 0.5,
+            "cognitive_complexity": 0.5,
+        },
+        "communication": {
+            "verbosity": 0.5, "formality": 0.5,
+            "directness": 0.5, "emotional_expressiveness": 0.5,
+        },
+    },
+    "knowledge_domains": [
+        {"domain": "Engineering", "proficiency": 0.7, "subdomains": []},
+    ],
+    "social_roles": {
+        "default": {"formality": 0.5, "directness": 0.5, "emotional_expressiveness": 0.5},
+    },
+    "invariants": {
+        "identity_facts": ["Engineer"],
+        "cannot_claim": [],
+        "must_avoid": [],
+    },
+    "initial_state": {
+        "mood_valence": 0.2, "mood_arousal": 0.4,
+        "fatigue": 0.2, "stress": 0.2, "engagement": 0.5,
+    },
+    "uncertainty": {
+        "admission_threshold": 0.45, "hedging_frequency": 0.4,
+        "clarification_tendency": 0.5, "knowledge_boundary_strictness": 0.6,
+    },
+    "claim_policy": {
+        "allowed_claim_types": ["personal_experience", "domain_expert", "general_common_knowledge"],
+        "citation_required_when": {"proficiency_below": 0.5, "factual_or_time_sensitive": True},
+        "lookup_behavior": "hedge",
+    },
+    "time_scarcity": 0.45,
+    "privacy_sensitivity": 0.5,
+    "disclosure_policy": {
+        "base_openness": 0.55,
+        "factors": {"topic_sensitivity": -0.25, "trust_level": 0.3,
+                    "formal_context": -0.15, "positive_mood": 0.1},
+        "bounds": [0.1, 0.9],
+    },
+}
+
+
+def make_persona_data(**overrides) -> dict:
+    """Create a baseline persona data dict with trait overrides.
+
+    Supports three override styles:
+    - Big Five traits directly: ``openness=0.9``
+    - Cognitive style with ``cog_`` prefix: ``cog_analytical_intuitive=0.9``
+    - Values with ``val_`` prefix: ``val_self_direction=0.85``
+    - Values as dict: ``values={"self_direction": 0.85}``
+
+    Returns a fresh dict (safe to mutate).
+    """
+    import copy
+    base = copy.deepcopy(_BASELINE_PERSONA_DATA)
+    for key, val in overrides.items():
+        if key in base["psychology"]["big_five"]:
+            base["psychology"]["big_five"][key] = val
+        elif key.startswith("cog_"):
+            base["psychology"]["cognitive_style"][key[4:]] = val
+        elif key.startswith("val_"):
+            base["psychology"]["values"][key[4:]] = val
+        elif key == "values" and isinstance(val, dict):
+            base["psychology"]["values"].update(val)
+    return base
+
+
+# ============================================================================
 # Fixtures
 # ============================================================================
 

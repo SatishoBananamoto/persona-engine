@@ -15,9 +15,9 @@ Appraisal dimensions:
 Phase R4: Emotional cognition for psychological realism.
 """
 
-import re
 from dataclasses import dataclass
 
+from persona_engine.behavioral.negation import count_unnegated_markers
 from persona_engine.schema.persona_schema import BigFiveTraits
 
 
@@ -60,24 +60,26 @@ _PRAISE_MARKERS = {
 
 
 def detect_user_emotion(user_input: str) -> dict[str, float]:
-    """Detect emotional signals in user input via keyword matching.
+    """Detect emotional signals in user input via negation-aware keyword matching.
+
+    Markers preceded by a negation word within a 3-token window are ignored.
+    For example, "I'm not excited" will NOT register as joy.
 
     Returns dict of emotion category → intensity (0-1).
     """
     lower = user_input.lower()
-    words = set(re.findall(r'\b\w+\b', lower))
 
     signals: dict[str, float] = {}
 
-    # Count marker hits
-    enthusiasm_hits = len(words & _ENTHUSIASM_MARKERS)
-    frustration_hits = len(words & _FRUSTRATION_MARKERS)
-    worry_hits = len(words & _WORRY_MARKERS)
-    curiosity_hits = len(words & _CURIOSITY_MARKERS)
-    challenge_hits = len(words & _CHALLENGE_MARKERS)
-    praise_hits = len(words & _PRAISE_MARKERS)
+    # Negation-aware marker counting
+    enthusiasm_hits = count_unnegated_markers(user_input, _ENTHUSIASM_MARKERS)
+    frustration_hits = count_unnegated_markers(user_input, _FRUSTRATION_MARKERS)
+    worry_hits = count_unnegated_markers(user_input, _WORRY_MARKERS)
+    curiosity_hits = count_unnegated_markers(user_input, _CURIOSITY_MARKERS)
+    challenge_hits = count_unnegated_markers(user_input, _CHALLENGE_MARKERS)
+    praise_hits = count_unnegated_markers(user_input, _PRAISE_MARKERS)
 
-    # Also check multi-word patterns (not caught by single-word intersection)
+    # Also check multi-word patterns (not caught by single-word markers)
     for phrase in ["what if", "think about", "good job", "well done", "no way"]:
         if phrase in lower:
             if phrase in ("what if", "think about"):

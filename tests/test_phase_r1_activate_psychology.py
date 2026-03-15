@@ -16,6 +16,8 @@ import copy
 import pytest
 import yaml
 
+from conftest import make_persona_data
+
 from persona_engine.behavioral.trait_interpreter import TraitInterpreter
 from persona_engine.behavioral.cognitive_interpreter import CognitiveStyleInterpreter
 from persona_engine.behavioral.values_interpreter import ValuesInterpreter
@@ -51,85 +53,6 @@ def _load_persona(yaml_path: str) -> Persona:
         return Persona(**yaml.safe_load(f))
 
 
-def _make_persona_data(**overrides) -> dict:
-    """Create a persona data dict with overridable big_five traits."""
-    base = {
-        "persona_id": "TEST",
-        "version": "1.0",
-        "label": "Test Persona",
-        "identity": {
-            "age": 30, "gender": "female", "location": "NYC",
-            "education": "BS", "occupation": "Engineer",
-            "background": "Test",
-        },
-        "psychology": {
-            "big_five": {
-                "openness": 0.5, "conscientiousness": 0.5,
-                "extraversion": 0.5, "agreeableness": 0.5,
-                "neuroticism": 0.5,
-            },
-            "values": {
-                "self_direction": 0.5, "stimulation": 0.5,
-                "hedonism": 0.5, "achievement": 0.5, "power": 0.5,
-                "security": 0.5, "conformity": 0.5, "tradition": 0.5,
-                "benevolence": 0.5, "universalism": 0.5,
-            },
-            "cognitive_style": {
-                "analytical_intuitive": 0.5, "systematic_heuristic": 0.5,
-                "risk_tolerance": 0.5, "need_for_closure": 0.5,
-                "cognitive_complexity": 0.5,
-            },
-            "communication": {
-                "verbosity": 0.5, "formality": 0.5,
-                "directness": 0.5, "emotional_expressiveness": 0.5,
-            },
-        },
-        "knowledge_domains": [
-            {"domain": "Engineering", "proficiency": 0.7, "subdomains": []},
-        ],
-        "social_roles": {
-            "default": {"formality": 0.5, "directness": 0.5, "emotional_expressiveness": 0.5},
-        },
-        "invariants": {
-            "identity_facts": ["Engineer"],
-            "cannot_claim": [],
-            "must_avoid": [],
-        },
-        "initial_state": {
-            "mood_valence": 0.2, "mood_arousal": 0.4,
-            "fatigue": 0.2, "stress": 0.2, "engagement": 0.5,
-        },
-        "uncertainty": {
-            "admission_threshold": 0.45, "hedging_frequency": 0.4,
-            "clarification_tendency": 0.5, "knowledge_boundary_strictness": 0.6,
-        },
-        "claim_policy": {
-            "allowed_claim_types": ["personal_experience", "domain_expert", "general_common_knowledge"],
-            "citation_required_when": {"proficiency_below": 0.5, "factual_or_time_sensitive": True},
-            "lookup_behavior": "hedge",
-        },
-        "time_scarcity": 0.45,
-        "privacy_sensitivity": 0.5,
-        "disclosure_policy": {
-            "base_openness": 0.55,
-            "factors": {"topic_sensitivity": -0.25, "trust_level": 0.3,
-                        "formal_context": -0.15, "positive_mood": 0.1},
-            "bounds": [0.1, 0.9],
-        },
-    }
-    # Apply overrides to big_five
-    for key, val in overrides.items():
-        if key in base["psychology"]["big_five"]:
-            base["psychology"]["big_five"][key] = val
-        elif key.startswith("cog_"):
-            cog_key = key[4:]
-            base["psychology"]["cognitive_style"][cog_key] = val
-        elif key.startswith("val_"):
-            val_key = key[4:]
-            base["psychology"]["values"][val_key] = val
-    return base
-
-
 def _make_context(user_input: str = "What do you think?") -> ConversationContext:
     return ConversationContext(
         conversation_id="test",
@@ -158,58 +81,58 @@ class TestTraitGuidanceComputation:
 
     def test_high_agreeableness_validates_first(self):
         """High-A persona should have should_validate_first=True."""
-        ir = _generate_ir(_make_persona_data(agreeableness=0.85))
+        ir = _generate_ir(make_persona_data(agreeableness=0.85))
         # Check behavioral directives contain validation language
         assert any("acknowledge" in d.lower() or "point" in d.lower()
                     for d in ir.behavioral_directives)
 
     def test_low_agreeableness_no_validation(self):
         """Low-A persona should NOT validate first."""
-        ir = _generate_ir(_make_persona_data(agreeableness=0.2))
+        ir = _generate_ir(make_persona_data(agreeableness=0.2))
         assert not any("acknowledge" in d.lower() for d in ir.behavioral_directives)
 
     def test_high_agreeableness_hedging(self):
         """High-A persona should have hedging directives."""
-        ir = _generate_ir(_make_persona_data(agreeableness=0.85))
+        ir = _generate_ir(make_persona_data(agreeableness=0.85))
         assert any("hedging" in d.lower() or "perhaps" in d.lower()
                     for d in ir.behavioral_directives)
 
     def test_low_agreeableness_no_hedging(self):
         """Low-A should not have hedging."""
-        ir = _generate_ir(_make_persona_data(agreeableness=0.2))
+        ir = _generate_ir(make_persona_data(agreeableness=0.2))
         assert not any("hedging" in d.lower() for d in ir.behavioral_directives)
 
     def test_high_extraversion_proactive_followup(self):
         """High-E persona should have proactive follow-up directive."""
-        ir = _generate_ir(_make_persona_data(extraversion=0.85))
+        ir = _generate_ir(make_persona_data(extraversion=0.85))
         assert any("follow-up" in d.lower() or "question" in d.lower()
                     for d in ir.behavioral_directives)
 
     def test_low_extraversion_no_followup(self):
         """Low-E persona should NOT have proactive follow-up."""
-        ir = _generate_ir(_make_persona_data(extraversion=0.2))
+        ir = _generate_ir(make_persona_data(extraversion=0.2))
         assert not any("follow-up" in d.lower() for d in ir.behavioral_directives)
 
     def test_high_openness_abstract_language(self):
         """High-O persona should prefer abstract/metaphorical language."""
-        ir = _generate_ir(_make_persona_data(openness=0.85))
+        ir = _generate_ir(make_persona_data(openness=0.85))
         assert any("metaphor" in d.lower() or "abstract" in d.lower()
                     for d in ir.behavioral_directives)
 
     def test_low_openness_no_abstract(self):
         """Low-O persona should NOT have abstract language directive."""
-        ir = _generate_ir(_make_persona_data(openness=0.2))
+        ir = _generate_ir(make_persona_data(openness=0.2))
         assert not any("metaphor" in d.lower() for d in ir.behavioral_directives)
 
     def test_high_openness_novelty(self):
         """High-O persona should prefer novelty."""
-        ir = _generate_ir(_make_persona_data(openness=0.85))
+        ir = _generate_ir(make_persona_data(openness=0.85))
         assert any("creative" in d.lower() or "unconventional" in d.lower()
                     for d in ir.behavioral_directives)
 
     def test_trait_guidance_citation_exists(self):
         """TraitGuidance computation should generate a citation."""
-        ir = _generate_ir(_make_persona_data(agreeableness=0.85))
+        ir = _generate_ir(make_persona_data(agreeableness=0.85))
         trait_citations = [c for c in ir.citations
                           if c.source_id == "trait_guidance"]
         assert len(trait_citations) >= 1
@@ -220,8 +143,8 @@ class TestTraitGuidanceEffects:
 
     def test_enthusiasm_boost_affects_tone(self):
         """High-E persona should get arousal boost affecting tone selection."""
-        ir_high_e = _generate_ir(_make_persona_data(extraversion=0.9))
-        ir_low_e = _generate_ir(_make_persona_data(extraversion=0.15))
+        ir_high_e = _generate_ir(make_persona_data(extraversion=0.9))
+        ir_low_e = _generate_ir(make_persona_data(extraversion=0.15))
         # High-E should have warmer/more engaged tone OR same tone is fine
         # but there should be an enthusiasm citation
         high_e_cites = [c for c in ir_high_e.citations
@@ -234,22 +157,22 @@ class TestTraitGuidanceEffects:
     def test_conflict_avoidance_reduces_directness(self):
         """High-A persona facing contentious input should have reduced directness."""
         contentious = "Your approach is completely wrong and ridiculous"
-        ir_high_a = _generate_ir(_make_persona_data(agreeableness=0.9), contentious)
-        ir_low_a = _generate_ir(_make_persona_data(agreeableness=0.15), contentious)
+        ir_high_a = _generate_ir(make_persona_data(agreeableness=0.9), contentious)
+        ir_low_a = _generate_ir(make_persona_data(agreeableness=0.15), contentious)
         assert ir_high_a.communication_style.directness < ir_low_a.communication_style.directness
 
     def test_no_conflict_avoidance_on_neutral_input(self):
         """Neutral input should not trigger conflict avoidance."""
         neutral = "Tell me about your hobbies"
-        ir = _generate_ir(_make_persona_data(agreeableness=0.9), neutral)
+        ir = _generate_ir(make_persona_data(agreeableness=0.9), neutral)
         ca_cites = [c for c in ir.citations if c.source_id == "conflict_avoidance"]
         assert len(ca_cites) == 0
 
     def test_validation_test_high_vs_low_a(self):
         """Plan's 'Validation Test': High-A acknowledges, Low-A disagrees directly."""
         user_says = "I think remote work is terrible for productivity"
-        ir_a = _generate_ir(_make_persona_data(agreeableness=0.85), user_says)
-        ir_b = _generate_ir(_make_persona_data(agreeableness=0.2), user_says)
+        ir_a = _generate_ir(make_persona_data(agreeableness=0.85), user_says)
+        ir_b = _generate_ir(make_persona_data(agreeableness=0.2), user_says)
         # High-A should have validation directive
         assert any("acknowledge" in d.lower() for d in ir_a.behavioral_directives)
         assert not any("acknowledge" in d.lower() for d in ir_b.behavioral_directives)
@@ -264,37 +187,37 @@ class TestCognitiveGuidanceComputation:
 
     def test_high_analytical_reasoning_style(self):
         """High analytical persona should have analytical reasoning directives."""
-        ir = _generate_ir(_make_persona_data(cog_analytical_intuitive=0.9))
+        ir = _generate_ir(make_persona_data(cog_analytical_intuitive=0.9))
         assert any("step by step" in d.lower() or "logical" in d.lower()
                     for d in ir.behavioral_directives)
 
     def test_intuitive_reasoning_style(self):
         """Low analytical persona should have intuitive reasoning directives."""
-        ir = _generate_ir(_make_persona_data(cog_analytical_intuitive=0.15))
+        ir = _generate_ir(make_persona_data(cog_analytical_intuitive=0.15))
         assert any("gut feeling" in d.lower() or "instinct" in d.lower()
                     for d in ir.behavioral_directives)
 
     def test_high_cognitive_complexity_tradeoffs(self):
         """High complexity persona should acknowledge tradeoffs."""
-        ir = _generate_ir(_make_persona_data(cog_cognitive_complexity=0.85))
+        ir = _generate_ir(make_persona_data(cog_cognitive_complexity=0.85))
         assert any("tradeoff" in d.lower() or "counterargument" in d.lower()
                     for d in ir.behavioral_directives)
 
     def test_low_cognitive_complexity_decisive(self):
         """Low complexity persona should be decisive, black-and-white."""
-        ir = _generate_ir(_make_persona_data(cog_cognitive_complexity=0.15))
+        ir = _generate_ir(make_persona_data(cog_cognitive_complexity=0.15))
         assert any("decisive" in d.lower() or "black-and-white" in d.lower()
                     for d in ir.behavioral_directives)
 
     def test_high_nuance_level(self):
         """High complexity should produce nuanced views."""
-        ir = _generate_ir(_make_persona_data(cog_cognitive_complexity=0.85))
+        ir = _generate_ir(make_persona_data(cog_cognitive_complexity=0.85))
         assert any("nuance" in d.lower() or "multifaceted" in d.lower()
                     for d in ir.behavioral_directives)
 
     def test_cognitive_guidance_citation_exists(self):
         """CognitiveGuidance should generate a citation."""
-        ir = _generate_ir(_make_persona_data(cog_analytical_intuitive=0.9))
+        ir = _generate_ir(make_persona_data(cog_analytical_intuitive=0.9))
         cog_citations = [c for c in ir.citations
                         if c.source_id == "cognitive_guidance"]
         assert len(cog_citations) >= 1
@@ -303,11 +226,11 @@ class TestCognitiveGuidanceComputation:
         """Plan's 'Reasoning Style Test': analytical vs intuitive on same prompt."""
         prompt = "Should we use microservices or monolith?"
         ir_analytical = _generate_ir(
-            _make_persona_data(cog_analytical_intuitive=0.9, cog_cognitive_complexity=0.85),
+            make_persona_data(cog_analytical_intuitive=0.9, cog_cognitive_complexity=0.85),
             prompt,
         )
         ir_intuitive = _generate_ir(
-            _make_persona_data(cog_analytical_intuitive=0.2, cog_cognitive_complexity=0.3),
+            make_persona_data(cog_analytical_intuitive=0.2, cog_cognitive_complexity=0.3),
             prompt,
         )
         # Analytical should have step-by-step, intuitive should have gut feeling
@@ -329,7 +252,7 @@ class TestValueConflictResolution:
     def test_conflicting_values_expressed_in_stance(self):
         """Persona with high opposing values should express conflict in stance."""
         # self_direction and conformity are opposing
-        data = _make_persona_data(val_self_direction=0.85, val_conformity=0.8)
+        data = make_persona_data(val_self_direction=0.85, val_conformity=0.8)
         ir = _generate_ir(data)
         # Stance should mention feeling conflicted
         if ir.response_structure.stance:
@@ -339,14 +262,14 @@ class TestValueConflictResolution:
     def test_no_conflict_with_aligned_values(self):
         """Persona without opposing high values should NOT express conflict."""
         # benevolence and universalism are adjacent, not opposing
-        data = _make_persona_data(val_benevolence=0.85, val_universalism=0.8)
+        data = make_persona_data(val_benevolence=0.85, val_universalism=0.8)
         ir = _generate_ir(data)
         if ir.response_structure.stance:
             assert "conflicted" not in ir.response_structure.stance.lower()
 
     def test_conflict_citation_generated(self):
         """Value conflict should produce circumplex-related citations."""
-        data = _make_persona_data(val_self_direction=0.85, val_conformity=0.8)
+        data = make_persona_data(val_self_direction=0.85, val_conformity=0.8)
         ir = _generate_ir(data)
         conflict_cites = [c for c in ir.citations
                          if "schwartz" in c.source_id.lower() or
@@ -362,7 +285,7 @@ class TestValueConflictResolution:
 
     def test_internal_conflict_test_from_plan(self):
         """Plan's 'Internal Conflict Test': self_direction vs security on AI sharing."""
-        data = _make_persona_data(val_self_direction=0.85, val_security=0.8)
+        data = make_persona_data(val_self_direction=0.85, val_security=0.8)
         ir = _generate_ir(data, "Should companies be forced to share their AI models openly?")
         # Should detect conflict (self_direction opposes security on circumplex)
         if ir.response_structure.stance:
@@ -384,7 +307,7 @@ class TestDecisionPolicyWiring:
 
     def test_policy_matched_generates_citation(self):
         """When decision policy condition matches, it should be cited."""
-        data = _make_persona_data()
+        data = make_persona_data()
         data["decision_policies"] = [
             {"condition": "high_stakes_decision", "approach": "analytical_systematic",
              "time_needed": "extended"},
@@ -396,7 +319,7 @@ class TestDecisionPolicyWiring:
 
     def test_no_policy_match_no_citation(self):
         """When no policy matches, no decision_policy citation should appear."""
-        data = _make_persona_data()
+        data = make_persona_data()
         data["decision_policies"] = [
             {"condition": "high_stakes_decision", "approach": "analytical_systematic"},
         ]
@@ -414,14 +337,14 @@ class TestBehavioralDirectivesInIR:
 
     def test_directives_present_in_ir(self):
         """IR should contain behavioral_directives field."""
-        ir = _generate_ir(_make_persona_data(agreeableness=0.85, openness=0.85))
+        ir = _generate_ir(make_persona_data(agreeableness=0.85, openness=0.85))
         assert isinstance(ir.behavioral_directives, list)
         assert len(ir.behavioral_directives) > 0
 
     def test_moderate_traits_fewer_directives(self):
         """Moderate traits should produce fewer directives than extreme traits."""
-        ir_moderate = _generate_ir(_make_persona_data())
-        ir_extreme = _generate_ir(_make_persona_data(
+        ir_moderate = _generate_ir(make_persona_data())
+        ir_extreme = _generate_ir(make_persona_data(
             agreeableness=0.9, openness=0.9, extraversion=0.9,
             cog_analytical_intuitive=0.9, cog_cognitive_complexity=0.9,
         ))
@@ -429,7 +352,7 @@ class TestBehavioralDirectivesInIR:
 
     def test_directives_are_strings(self):
         """All directives should be non-empty strings."""
-        ir = _generate_ir(_make_persona_data(openness=0.9))
+        ir = _generate_ir(make_persona_data(openness=0.9))
         for d in ir.behavioral_directives:
             assert isinstance(d, str)
             assert len(d) > 10
@@ -445,7 +368,7 @@ class TestPromptBuilderIntegration:
     def test_prompt_contains_personality_section(self):
         """Generated prompt should contain personality-driven behavior section."""
         from persona_engine.generation.prompt_builder import IRPromptBuilder
-        ir = _generate_ir(_make_persona_data(openness=0.9, agreeableness=0.9))
+        ir = _generate_ir(make_persona_data(openness=0.9, agreeableness=0.9))
         builder = IRPromptBuilder()
         prompt = builder.build_generation_prompt(
             ir=ir,
@@ -457,7 +380,7 @@ class TestPromptBuilderIntegration:
     def test_prompt_without_directives_no_section(self):
         """Prompt with no directives should NOT have personality section header."""
         from persona_engine.generation.prompt_builder import IRPromptBuilder
-        ir = _generate_ir(_make_persona_data())
+        ir = _generate_ir(make_persona_data())
         builder = IRPromptBuilder()
         # Force empty directives
         prompt = builder.build_generation_prompt(
@@ -477,29 +400,29 @@ class TestTwinDifferentiation:
 
     def test_openness_twins_differ_in_directives(self):
         """High-O vs Low-O should produce different behavioral directives."""
-        ir_high = _generate_ir(_make_persona_data(openness=0.9))
-        ir_low = _generate_ir(_make_persona_data(openness=0.15))
+        ir_high = _generate_ir(make_persona_data(openness=0.9))
+        ir_low = _generate_ir(make_persona_data(openness=0.15))
         assert set(ir_high.behavioral_directives) != set(ir_low.behavioral_directives)
 
     def test_agreeableness_twins_differ_in_directness(self):
         """High-A vs Low-A should produce different directness on contentious input."""
         contentious = "That idea is completely wrong"
-        ir_high = _generate_ir(_make_persona_data(agreeableness=0.9), contentious)
-        ir_low = _generate_ir(_make_persona_data(agreeableness=0.15), contentious)
+        ir_high = _generate_ir(make_persona_data(agreeableness=0.9), contentious)
+        ir_low = _generate_ir(make_persona_data(agreeableness=0.15), contentious)
         assert ir_high.communication_style.directness < ir_low.communication_style.directness
 
     def test_extraversion_twins_differ_in_directives(self):
         """High-E vs Low-E should differ in proactivity directives."""
-        ir_high = _generate_ir(_make_persona_data(extraversion=0.9))
-        ir_low = _generate_ir(_make_persona_data(extraversion=0.15))
+        ir_high = _generate_ir(make_persona_data(extraversion=0.9))
+        ir_low = _generate_ir(make_persona_data(extraversion=0.15))
         high_has_followup = any("follow-up" in d.lower() for d in ir_high.behavioral_directives)
         low_has_followup = any("follow-up" in d.lower() for d in ir_low.behavioral_directives)
         assert high_has_followup and not low_has_followup
 
     def test_cognitive_twins_differ_in_reasoning(self):
         """Analytical vs intuitive should produce different reasoning directives."""
-        ir_analytical = _generate_ir(_make_persona_data(cog_analytical_intuitive=0.9))
-        ir_intuitive = _generate_ir(_make_persona_data(cog_analytical_intuitive=0.15))
+        ir_analytical = _generate_ir(make_persona_data(cog_analytical_intuitive=0.9))
+        ir_intuitive = _generate_ir(make_persona_data(cog_analytical_intuitive=0.15))
         analytical_dirs = " ".join(ir_analytical.behavioral_directives).lower()
         intuitive_dirs = " ".join(ir_intuitive.behavioral_directives).lower()
         assert "step by step" in analytical_dirs or "logical" in analytical_dirs
@@ -510,7 +433,7 @@ class TestTwinDifferentiation:
         traits = ["openness", "conscientiousness", "extraversion", "agreeableness", "neuroticism"]
         directive_sets = {}
         for trait in traits:
-            data = _make_persona_data(**{trait: 0.9})
+            data = make_persona_data(**{trait: 0.9})
             ir = _generate_ir(data)
             directive_sets[trait] = set(ir.behavioral_directives)
 
@@ -532,30 +455,30 @@ class TestZeroDeadMethods:
 
     def test_get_validation_tendency_influences_output(self):
         """get_validation_tendency should influence behavioral directives."""
-        ir = _generate_ir(_make_persona_data(agreeableness=0.9))
+        ir = _generate_ir(make_persona_data(agreeableness=0.9))
         assert any("acknowledge" in d.lower() for d in ir.behavioral_directives)
 
     def test_get_conflict_avoidance_influences_directness(self):
         """get_conflict_avoidance should reduce directness on contentious input."""
-        ir = _generate_ir(_make_persona_data(agreeableness=0.9),
+        ir = _generate_ir(make_persona_data(agreeableness=0.9),
                          "This is completely wrong and stupid")
         ca_cites = [c for c in ir.citations if c.source_id == "conflict_avoidance"]
         assert len(ca_cites) >= 1
 
     def test_influences_hedging_frequency_produces_directive(self):
         """influences_hedging_frequency should produce hedging directive for high-A."""
-        ir = _generate_ir(_make_persona_data(agreeableness=0.85))
+        ir = _generate_ir(make_persona_data(agreeableness=0.85))
         assert any("hedging" in d.lower() for d in ir.behavioral_directives)
 
     def test_get_enthusiasm_baseline_produces_citation(self):
         """get_enthusiasm_baseline should produce enthusiasm citation for high-E."""
-        ir = _generate_ir(_make_persona_data(extraversion=0.9))
+        ir = _generate_ir(make_persona_data(extraversion=0.9))
         e_cites = [c for c in ir.citations if c.source_id == "extraversion_enthusiasm"]
         assert len(e_cites) >= 1
 
     def test_get_negative_tone_bias_computed(self):
         """get_negative_tone_bias should be computed (non-zero for high-N)."""
-        persona = Persona(**_make_persona_data(neuroticism=0.9))
+        persona = Persona(**make_persona_data(neuroticism=0.9))
         planner = TurnPlanner(persona, DeterminismManager(seed=42))
         ctx = TraceContext()
         guidance = planner._compute_trait_guidance(ctx, "test")
@@ -563,41 +486,41 @@ class TestZeroDeadMethods:
 
     def test_influences_proactivity_produces_directive(self):
         """influences_proactivity should produce follow-up directive for high-E."""
-        ir = _generate_ir(_make_persona_data(extraversion=0.85))
+        ir = _generate_ir(make_persona_data(extraversion=0.85))
         assert any("follow-up" in d.lower() for d in ir.behavioral_directives)
 
     def test_get_novelty_seeking_produces_directive(self):
         """get_novelty_seeking should produce novelty directive for high-O."""
-        ir = _generate_ir(_make_persona_data(openness=0.85))
+        ir = _generate_ir(make_persona_data(openness=0.85))
         assert any("unconventional" in d.lower() or "creative" in d.lower()
                     for d in ir.behavioral_directives)
 
     def test_influences_abstract_reasoning_produces_directive(self):
         """influences_abstract_reasoning should produce abstract directive for high-O."""
-        ir = _generate_ir(_make_persona_data(openness=0.85))
+        ir = _generate_ir(make_persona_data(openness=0.85))
         assert any("metaphor" in d.lower() or "abstract" in d.lower()
                     for d in ir.behavioral_directives)
 
     def test_get_reasoning_approach_influences_output(self):
         """get_reasoning_approach should influence cognitive directives."""
-        ir = _generate_ir(_make_persona_data(cog_analytical_intuitive=0.9))
+        ir = _generate_ir(make_persona_data(cog_analytical_intuitive=0.9))
         assert any("step" in d.lower() or "logical" in d.lower()
                     for d in ir.behavioral_directives)
 
     def test_should_acknowledge_tradeoffs_influences_output(self):
         """should_acknowledge_tradeoffs should produce tradeoff directive."""
-        ir = _generate_ir(_make_persona_data(cog_cognitive_complexity=0.85))
+        ir = _generate_ir(make_persona_data(cog_cognitive_complexity=0.85))
         assert any("tradeoff" in d.lower() for d in ir.behavioral_directives)
 
     def test_get_nuance_capacity_influences_output(self):
         """get_nuance_capacity should produce nuance directive for high complexity."""
-        ir = _generate_ir(_make_persona_data(cog_cognitive_complexity=0.85))
+        ir = _generate_ir(make_persona_data(cog_cognitive_complexity=0.85))
         assert any("nuance" in d.lower() or "multifaceted" in d.lower()
                     for d in ir.behavioral_directives)
 
     def test_value_conflict_resolution_called(self):
         """resolve_conflict_detailed should be called when values conflict."""
-        data = _make_persona_data(val_self_direction=0.85, val_conformity=0.8)
+        data = make_persona_data(val_self_direction=0.85, val_conformity=0.8)
         ir = _generate_ir(data)
         conflict_cites = [c for c in ir.citations
                          if "schwartz" in c.source_id.lower() or
@@ -607,7 +530,7 @@ class TestZeroDeadMethods:
 
     def test_decision_policy_checked(self):
         """check_decision_policy should be called during interpretation."""
-        data = _make_persona_data()
+        data = make_persona_data()
         data["decision_policies"] = [
             {"condition": "high_stakes", "approach": "systematic"},
         ]

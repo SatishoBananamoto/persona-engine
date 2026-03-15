@@ -5,13 +5,15 @@ Tests that the same event produces different emotional responses based
 on Big Five personality traits, following Scherer's Component Process Model.
 
 Covers:
-- User emotion detection (keyword-based)
+- User emotion detection (negation-aware keyword matching)
 - Personality-dependent appraisal (same event → different emotions)
 - Emotional contagion modulated by personality
 - Integration with IR pipeline (mood affects tone)
 """
 
 import pytest
+
+from conftest import make_persona_data
 
 from persona_engine.behavioral.emotional_appraisal import (
     EmotionalAppraisal,
@@ -35,77 +37,6 @@ from persona_engine.utils.determinism import DeterminismManager
 # ============================================================================
 # Helpers
 # ============================================================================
-
-def _make_persona_data(**overrides) -> dict:
-    base = {
-        "persona_id": "TEST",
-        "version": "1.0",
-        "label": "Test Persona",
-        "identity": {
-            "age": 30, "gender": "female", "location": "NYC",
-            "education": "BS", "occupation": "Engineer",
-            "background": "Test",
-        },
-        "psychology": {
-            "big_five": {
-                "openness": 0.5, "conscientiousness": 0.5,
-                "extraversion": 0.5, "agreeableness": 0.5,
-                "neuroticism": 0.5,
-            },
-            "values": {
-                "self_direction": 0.5, "stimulation": 0.5,
-                "hedonism": 0.5, "achievement": 0.5, "power": 0.5,
-                "security": 0.5, "conformity": 0.5, "tradition": 0.5,
-                "benevolence": 0.5, "universalism": 0.5,
-            },
-            "cognitive_style": {
-                "analytical_intuitive": 0.5, "systematic_heuristic": 0.5,
-                "risk_tolerance": 0.5, "need_for_closure": 0.5,
-                "cognitive_complexity": 0.5,
-            },
-            "communication": {
-                "verbosity": 0.5, "formality": 0.5,
-                "directness": 0.5, "emotional_expressiveness": 0.5,
-            },
-        },
-        "knowledge_domains": [
-            {"domain": "Engineering", "proficiency": 0.7, "subdomains": []},
-        ],
-        "social_roles": {
-            "default": {"formality": 0.5, "directness": 0.5, "emotional_expressiveness": 0.5},
-        },
-        "invariants": {
-            "identity_facts": ["Engineer"],
-            "cannot_claim": [],
-            "must_avoid": [],
-        },
-        "initial_state": {
-            "mood_valence": 0.2, "mood_arousal": 0.4,
-            "fatigue": 0.2, "stress": 0.2, "engagement": 0.5,
-        },
-        "uncertainty": {
-            "admission_threshold": 0.45, "hedging_frequency": 0.4,
-            "clarification_tendency": 0.5, "knowledge_boundary_strictness": 0.6,
-        },
-        "claim_policy": {
-            "allowed_claim_types": ["personal_experience", "domain_expert", "general_common_knowledge"],
-            "citation_required_when": {"proficiency_below": 0.5, "factual_or_time_sensitive": True},
-            "lookup_behavior": "hedge",
-        },
-        "time_scarcity": 0.45,
-        "privacy_sensitivity": 0.5,
-        "disclosure_policy": {
-            "base_openness": 0.55,
-            "factors": {"topic_sensitivity": -0.25, "trust_level": 0.3,
-                        "formal_context": -0.15, "positive_mood": 0.1},
-            "bounds": [0.1, 0.9],
-        },
-    }
-    for key, val in overrides.items():
-        if key in base["psychology"]["big_five"]:
-            base["psychology"]["big_five"][key] = val
-    return base
-
 
 def _make_context(user_input: str = "What do you think?") -> ConversationContext:
     return ConversationContext(
@@ -166,6 +97,75 @@ class TestUserEmotionDetection:
         calm = detect_user_emotion("This is great")
         excited = detect_user_emotion("This is great!!!")
         assert excited.get("joy", 0) >= calm.get("joy", 0)
+
+
+class TestNegationAwareEmotionDetection:
+    """Negated markers must not register as emotional signals."""
+
+    # --- Enthusiasm / joy ---
+    def test_not_excited_no_joy(self):
+        result = detect_user_emotion("I'm not excited about this")
+        assert result.get("joy", 0) == 0
+
+    def test_excited_has_joy(self):
+        result = detect_user_emotion("I'm excited about this")
+        assert result.get("joy", 0) > 0
+
+    def test_never_amazing_no_joy(self):
+        result = detect_user_emotion("It was never amazing")
+        assert result.get("joy", 0) == 0
+
+    # --- Frustration / anger ---
+    def test_not_frustrated_no_anger(self):
+        result = detect_user_emotion("I'm not frustrated at all")
+        assert result.get("anger", 0) == 0
+
+    def test_isnt_terrible_no_anger(self):
+        result = detect_user_emotion("This isn't terrible")
+        assert result.get("anger", 0) == 0
+
+    def test_terrible_has_anger(self):
+        result = detect_user_emotion("This is terrible")
+        assert result.get("anger", 0) > 0
+
+    # --- Worry / fear ---
+    def test_not_worried_no_fear(self):
+        result = detect_user_emotion("I'm not worried about this")
+        assert result.get("fear", 0) == 0
+
+    def test_dont_be_afraid_no_fear(self):
+        result = detect_user_emotion("Don't be afraid")
+        assert result.get("fear", 0) == 0
+
+    def test_worried_has_fear(self):
+        result = detect_user_emotion("I'm worried about this")
+        assert result.get("fear", 0) > 0
+
+    # --- Mixed: negated + real ---
+    def test_mixed_negated_and_real(self):
+        """'not excited but worried' → no joy, yes fear."""
+        result = detect_user_emotion("I'm not excited but I am worried")
+        assert result.get("joy", 0) == 0
+        assert result.get("fear", 0) > 0
+
+    # --- Challenge markers (negation should also work) ---
+    def test_not_wrong_no_challenge(self):
+        result = detect_user_emotion("You're not wrong about that")
+        assert result.get("challenge", 0) == 0
+
+    def test_wrong_has_challenge(self):
+        result = detect_user_emotion("You're wrong about that")
+        assert result.get("challenge", 0) > 0
+
+    # --- Edge cases ---
+    def test_empty_input(self):
+        result = detect_user_emotion("")
+        assert result == {} or sum(result.values()) == 0
+
+    def test_double_negation_restores(self):
+        """'not never' is beyond 3-token window, so 'terrible' is unnegated."""
+        result = detect_user_emotion("It's not that it was never terrible, it really was terrible")
+        assert result.get("anger", 0) > 0
 
 
 # ============================================================================
@@ -264,7 +264,7 @@ class TestEmotionalAppraisalPipeline:
 
     def test_enthusiastic_input_affects_ir(self):
         """Enthusiastic user input should shift tone for high-E persona."""
-        high_e = _make_persona_data(extraversion=0.9, agreeableness=0.8, neuroticism=0.2)
+        high_e = make_persona_data(extraversion=0.9, agreeableness=0.8, neuroticism=0.2)
         ir_enthusiastic = _generate_ir(high_e, "This is amazing! I'm so excited about this!")
         ir_neutral = _generate_ir(high_e, "Can you tell me about this topic")
 
@@ -277,8 +277,8 @@ class TestEmotionalAppraisalPipeline:
         """Same challenging input should produce different IR for high-N vs high-O."""
         challenge = "I think you're completely wrong about this"
 
-        high_n = _make_persona_data(neuroticism=0.9, openness=0.3)
-        high_o = _make_persona_data(neuroticism=0.2, openness=0.9)
+        high_n = make_persona_data(neuroticism=0.9, openness=0.3)
+        high_o = make_persona_data(neuroticism=0.2, openness=0.9)
 
         ir_n = _generate_ir(high_n, challenge)
         ir_o = _generate_ir(high_o, challenge)
@@ -288,7 +288,7 @@ class TestEmotionalAppraisalPipeline:
 
     def test_appraisal_citation_present(self):
         """Emotional appraisal should produce a citation when triggered."""
-        persona = _make_persona_data(extraversion=0.9)
+        persona = make_persona_data(extraversion=0.9)
         ir = _generate_ir(persona, "This is absolutely amazing and wonderful!")
 
         citation_effects = [c.effect for c in ir.citations]
@@ -297,7 +297,7 @@ class TestEmotionalAppraisalPipeline:
 
     def test_neutral_input_no_appraisal_citation(self):
         """Neutral input should not produce appraisal citation."""
-        persona = _make_persona_data()
+        persona = make_persona_data()
         ir = _generate_ir(persona, "Tell me about engineering")
 
         citation_effects = [c.effect for c in ir.citations]

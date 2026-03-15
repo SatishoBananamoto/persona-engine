@@ -93,29 +93,44 @@ class MemoryManager:
     # Write: process MemoryWriteIntents from IR
     # ========================================================================
 
+    # Minimum confidence for a write intent to be accepted in strict mode.
+    STRICT_CONFIDENCE_THRESHOLD: float = 0.7
+
     def process_write_intents(
         self,
         intents: list[MemoryWriteIntent],
         turn: int,
         conversation_id: str = "",
+        write_policy: str = "strict",
     ) -> list[MemoryRecord]:
         """
         Execute memory write intents from IR.
+
+        When *write_policy* is ``"strict"`` (the default), intents whose
+        confidence falls below ``STRICT_CONFIDENCE_THRESHOLD`` are silently
+        skipped.  ``"lenient"`` writes all intents regardless of confidence.
 
         Args:
             intents: Write intents from ir.memory_ops.write_intents
             turn: Current turn number
             conversation_id: Current conversation ID
+            write_policy: ``"strict"`` or ``"lenient"`` (from ``MemoryOps.write_policy``)
 
         Returns:
             List of created memory records
         """
         logger.debug(
             "Processing write intents",
-            extra={"intent_count": len(intents), "turn": turn},
+            extra={"intent_count": len(intents), "turn": turn, "write_policy": write_policy},
         )
         created: list[MemoryRecord] = []
         for intent in intents:
+            if write_policy == "strict" and intent.confidence < self.STRICT_CONFIDENCE_THRESHOLD:
+                logger.debug(
+                    "Skipping low-confidence intent (strict mode)",
+                    extra={"content": intent.content[:50], "confidence": intent.confidence},
+                )
+                continue
             record = self._create_record(intent, turn, conversation_id)
             if record:
                 self._store_record(record)

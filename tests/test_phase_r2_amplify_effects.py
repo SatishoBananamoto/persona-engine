@@ -19,6 +19,8 @@ import math
 import pytest
 import yaml
 
+from conftest import make_persona_data
+
 from persona_engine.behavioral.trait_interpreter import (
     TraitInterpreter,
     dunning_kruger_confidence,
@@ -49,84 +51,6 @@ from persona_engine.utils.determinism import DeterminismManager
 # ============================================================================
 # Helpers
 # ============================================================================
-
-def _make_persona_data(**overrides) -> dict:
-    """Create a persona data dict with overridable big_five traits."""
-    base = {
-        "persona_id": "TEST",
-        "version": "1.0",
-        "label": "Test Persona",
-        "identity": {
-            "age": 30, "gender": "female", "location": "NYC",
-            "education": "BS", "occupation": "Engineer",
-            "background": "Test",
-        },
-        "psychology": {
-            "big_five": {
-                "openness": 0.5, "conscientiousness": 0.5,
-                "extraversion": 0.5, "agreeableness": 0.5,
-                "neuroticism": 0.5,
-            },
-            "values": {
-                "self_direction": 0.5, "stimulation": 0.5,
-                "hedonism": 0.5, "achievement": 0.5, "power": 0.5,
-                "security": 0.5, "conformity": 0.5, "tradition": 0.5,
-                "benevolence": 0.5, "universalism": 0.5,
-            },
-            "cognitive_style": {
-                "analytical_intuitive": 0.5, "systematic_heuristic": 0.5,
-                "risk_tolerance": 0.5, "need_for_closure": 0.5,
-                "cognitive_complexity": 0.5,
-            },
-            "communication": {
-                "verbosity": 0.5, "formality": 0.5,
-                "directness": 0.5, "emotional_expressiveness": 0.5,
-            },
-        },
-        "knowledge_domains": [
-            {"domain": "Engineering", "proficiency": 0.7, "subdomains": []},
-        ],
-        "social_roles": {
-            "default": {"formality": 0.5, "directness": 0.5, "emotional_expressiveness": 0.5},
-        },
-        "invariants": {
-            "identity_facts": ["Engineer"],
-            "cannot_claim": [],
-            "must_avoid": [],
-        },
-        "initial_state": {
-            "mood_valence": 0.2, "mood_arousal": 0.4,
-            "fatigue": 0.2, "stress": 0.2, "engagement": 0.5,
-        },
-        "uncertainty": {
-            "admission_threshold": 0.45, "hedging_frequency": 0.4,
-            "clarification_tendency": 0.5, "knowledge_boundary_strictness": 0.6,
-        },
-        "claim_policy": {
-            "allowed_claim_types": ["personal_experience", "domain_expert", "general_common_knowledge"],
-            "citation_required_when": {"proficiency_below": 0.5, "factual_or_time_sensitive": True},
-            "lookup_behavior": "hedge",
-        },
-        "time_scarcity": 0.45,
-        "privacy_sensitivity": 0.5,
-        "disclosure_policy": {
-            "base_openness": 0.55,
-            "factors": {"topic_sensitivity": -0.25, "trust_level": 0.3,
-                        "formal_context": -0.15, "positive_mood": 0.1},
-            "bounds": [0.1, 0.9],
-        },
-    }
-    for key, val in overrides.items():
-        if key in base["psychology"]["big_five"]:
-            base["psychology"]["big_five"][key] = val
-        elif key.startswith("cog_"):
-            cog_key = key[4:]
-            base["psychology"]["cognitive_style"][cog_key] = val
-        elif key.startswith("val_"):
-            val_key = key[4:]
-            base["psychology"]["values"][val_key] = val
-    return base
-
 
 def _make_context(user_input: str = "What do you think?") -> ConversationContext:
     return ConversationContext(
@@ -435,7 +359,7 @@ class TestPersonalityFieldInertia:
 
     def test_personality_fields_use_lower_inertia_in_ir(self):
         """Multi-turn: personality-driven fields should converge faster than confidence."""
-        data = _make_persona_data(openness=0.9, agreeableness=0.2)
+        data = make_persona_data(openness=0.9, agreeableness=0.2)
         persona = Persona(**data)
         planner = TurnPlanner(persona, DeterminismManager(seed=42))
 
@@ -468,16 +392,16 @@ class TestTwinPerceptibilityAmplified:
 
     def test_agreeable_vs_disagreeable_directness(self):
         """High-A and low-A twins should differ noticeably in directness."""
-        ir_high_a = _generate_ir(_make_persona_data(agreeableness=0.9))
-        ir_low_a = _generate_ir(_make_persona_data(agreeableness=0.1))
+        ir_high_a = _generate_ir(make_persona_data(agreeableness=0.9))
+        ir_low_a = _generate_ir(make_persona_data(agreeableness=0.1))
         diff = abs(ir_high_a.communication_style.directness -
                    ir_low_a.communication_style.directness)
         assert diff > 0.05  # Amplified effect should be visible
 
     def test_conscientious_vs_not_verbosity(self):
         """High-C and low-C should differ in verbosity."""
-        ir_high_c = _generate_ir(_make_persona_data(conscientiousness=0.9))
-        ir_low_c = _generate_ir(_make_persona_data(conscientiousness=0.1))
+        ir_high_c = _generate_ir(make_persona_data(conscientiousness=0.9))
+        ir_low_c = _generate_ir(make_persona_data(conscientiousness=0.1))
         # High-C should trend toward DETAILED, low-C toward BRIEF
         verbosity_order = {Verbosity.BRIEF: 0, Verbosity.MEDIUM: 1, Verbosity.DETAILED: 2}
         assert verbosity_order[ir_high_c.communication_style.verbosity] >= \
@@ -485,22 +409,22 @@ class TestTwinPerceptibilityAmplified:
 
     def test_open_vs_closed_elasticity(self):
         """High-O and low-O should differ in elasticity."""
-        ir_high_o = _generate_ir(_make_persona_data(openness=0.9))
-        ir_low_o = _generate_ir(_make_persona_data(openness=0.1))
+        ir_high_o = _generate_ir(make_persona_data(openness=0.9))
+        ir_low_o = _generate_ir(make_persona_data(openness=0.1))
         assert ir_high_o.response_structure.elasticity > ir_low_o.response_structure.elasticity
 
     def test_neurotic_vs_stable_confidence(self):
         """High-N should have lower confidence than low-N."""
-        ir_high_n = _generate_ir(_make_persona_data(neuroticism=0.9))
-        ir_low_n = _generate_ir(_make_persona_data(neuroticism=0.1))
+        ir_high_n = _generate_ir(make_persona_data(neuroticism=0.9))
+        ir_low_n = _generate_ir(make_persona_data(neuroticism=0.1))
         assert ir_low_n.response_structure.confidence > ir_high_n.response_structure.confidence
 
     def test_extreme_personas_differ_on_multiple_axes(self):
         """An anxious introvert vs confident extrovert should differ on 3+ IR fields."""
-        anxious_introvert = _make_persona_data(
+        anxious_introvert = make_persona_data(
             extraversion=0.1, neuroticism=0.9, agreeableness=0.8, conscientiousness=0.3
         )
-        confident_extrovert = _make_persona_data(
+        confident_extrovert = make_persona_data(
             extraversion=0.9, neuroticism=0.1, agreeableness=0.2, conscientiousness=0.8
         )
         ir_ai = _generate_ir(anxious_introvert)

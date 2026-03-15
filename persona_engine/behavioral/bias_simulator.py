@@ -17,6 +17,11 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Literal, Optional
 
+from persona_engine.behavioral.negation import (
+    NEGATION_WORDS,
+    count_unnegated_markers,
+)
+
 if TYPE_CHECKING:
     from persona_engine.planner.trace_context import TraceContext
 
@@ -49,14 +54,8 @@ NEGATIVE_MARKERS = frozenset([
     "risk", "danger", "threat", "fear", "anxiety"
 ])
 
-# Negation words that reverse the sentiment of a following negative marker
-NEGATION_WORDS = frozenset([
-    "not", "no", "never", "nothing", "none",
-    "hardly", "barely", "neither",
-    # Contraction forms
-    "don't", "doesn't", "isn't", "wasn't", "weren't",
-    "won't", "can't", "couldn't", "shouldn't", "wouldn't",
-])
+# Re-exported for backward compatibility (canonical source: negation.py)
+# NEGATION_WORDS is imported from persona_engine.behavioral.negation
 
 # Change proposal markers (for status quo bias)
 CHANGE_MARKERS = frozenset([
@@ -101,57 +100,16 @@ class BiasModifier:
 
 
 # =============================================================================
-# Negation Detection
+# Negation Detection (delegates to shared negation.py utility)
 # =============================================================================
 
 def _count_unnegated_markers(text: str) -> int:
+    """Count NEGATIVE_MARKERS in *text* that are not negated.
+
+    Thin wrapper around the shared ``count_unnegated_markers`` utility,
+    hard-wired to the ``NEGATIVE_MARKERS`` set used by the bias simulator.
     """
-    Count negative markers that are NOT preceded by a negation word
-    within a 3-token window.
-
-    Examples:
-        "not bad" → 0 (negated)
-        "this is bad" → 1 (not negated)
-        "no problem at all" → 0 (negated)
-        "serious problem" → 1 (not negated)
-    """
-    import re as _re
-    # Normalize: lowercase, extract word tokens (preserves contractions like "don't")
-    tokens = _re.findall(r"\b\w+(?:'\w+)?\b", text.lower())
-    count = 0
-
-    for i, token in enumerate(tokens):
-        # Check if this token matches a negative marker
-        # Handle multi-word markers by checking token sequences
-        matched = False
-        for marker in NEGATIVE_MARKERS:
-            marker_tokens = marker.split()
-            if len(marker_tokens) == 1:
-                if token == marker:
-                    matched = True
-                    break
-            else:
-                # Multi-word marker: check if tokens[i:i+len] match
-                end = i + len(marker_tokens)
-                if end <= len(tokens) and tokens[i:end] == marker_tokens:
-                    matched = True
-                    break
-
-        if not matched:
-            continue
-
-        # Check preceding 1-3 tokens for negation
-        negated = False
-        window_start = max(0, i - 3)
-        for j in range(window_start, i):
-            if tokens[j] in NEGATION_WORDS:
-                negated = True
-                break
-
-        if not negated:
-            count += 1
-
-    return count
+    return count_unnegated_markers(text, NEGATIVE_MARKERS)
 
 
 # =============================================================================

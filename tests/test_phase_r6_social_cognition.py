@@ -12,6 +12,8 @@ Tests:
 
 import pytest
 
+from conftest import make_persona_data
+
 from persona_engine.behavioral.bias_simulator import (
     MAX_BIAS_IMPACT,
     BiasSimulator,
@@ -62,50 +64,6 @@ def _make_bias_sim(**trait_overrides) -> BiasSimulator:
               "self_direction": 0.5, "stimulation": 0.5,
               "hedonism": 0.5, "achievement": 0.5, "power": 0.5}
     return BiasSimulator(traits, values)
-
-
-def _make_persona_data(**overrides) -> dict:
-    base = {
-        "persona_id": "TEST", "version": "1.0", "label": "Test Persona",
-        "identity": {"age": 30, "gender": "female", "location": "NYC",
-                     "education": "BS", "occupation": "Engineer", "background": "Test"},
-        "psychology": {
-            "big_five": {"openness": 0.5, "conscientiousness": 0.5,
-                         "extraversion": 0.5, "agreeableness": 0.5, "neuroticism": 0.5},
-            "values": {"self_direction": 0.5, "stimulation": 0.5, "hedonism": 0.5,
-                       "achievement": 0.5, "power": 0.5, "security": 0.5,
-                       "conformity": 0.5, "tradition": 0.5, "benevolence": 0.5,
-                       "universalism": 0.5},
-            "cognitive_style": {"analytical_intuitive": 0.5, "systematic_heuristic": 0.5,
-                                "risk_tolerance": 0.5, "need_for_closure": 0.5,
-                                "cognitive_complexity": 0.5},
-            "communication": {"verbosity": 0.5, "formality": 0.5,
-                              "directness": 0.5, "emotional_expressiveness": 0.5},
-        },
-        "knowledge_domains": [{"domain": "Engineering", "proficiency": 0.7, "subdomains": []}],
-        "social_roles": {"default": {"formality": 0.5, "directness": 0.5, "emotional_expressiveness": 0.5}},
-        "invariants": {"identity_facts": ["Engineer"], "cannot_claim": [], "must_avoid": []},
-        "initial_state": {"mood_valence": 0.2, "mood_arousal": 0.4,
-                          "fatigue": 0.2, "stress": 0.2, "engagement": 0.5},
-        "uncertainty": {"admission_threshold": 0.45, "hedging_frequency": 0.4,
-                        "clarification_tendency": 0.5, "knowledge_boundary_strictness": 0.6},
-        "claim_policy": {
-            "allowed_claim_types": ["personal_experience", "domain_expert", "general_common_knowledge"],
-            "citation_required_when": {"proficiency_below": 0.5, "factual_or_time_sensitive": True},
-            "lookup_behavior": "hedge",
-        },
-        "time_scarcity": 0.45, "privacy_sensitivity": 0.5,
-        "disclosure_policy": {
-            "base_openness": 0.55,
-            "factors": {"topic_sensitivity": -0.25, "trust_level": 0.3,
-                        "formal_context": -0.15, "positive_mood": 0.1},
-            "bounds": [0.1, 0.9],
-        },
-    }
-    for key, val in overrides.items():
-        if key in base["psychology"]["big_five"]:
-            base["psychology"]["big_five"][key] = val
-    return base
 
 
 def _make_context(user_input: str = "What do you think?") -> ConversationContext:
@@ -434,23 +392,23 @@ class TestR6PipelineIntegration:
 
     def test_ir_generated_successfully(self):
         """Basic smoke test: IR generation still works with R6 features."""
-        data = _make_persona_data()
+        data = make_persona_data()
         ir = _generate_ir(data, "What do you think about engineering?")
         assert ir is not None
 
     def test_challenging_emotional_input_generates_ir(self):
-        data = _make_persona_data(neuroticism=0.85, agreeableness=0.2)
+        data = make_persona_data(neuroticism=0.85, agreeableness=0.2)
         ir = _generate_ir(data, "I'm feeling really hurt and overwhelmed by all these terrible problems")
         assert ir is not None
 
     def test_change_proposal_input(self):
-        data = _make_persona_data(openness=0.15, conscientiousness=0.85)
+        data = make_persona_data(openness=0.15, conscientiousness=0.85)
         ir = _generate_ir(data, "We should completely switch to a different approach and redesign everything")
         assert ir is not None
 
     def test_persona_with_self_schemas(self):
         """Persona with self_schemas should handle schema-relevant input."""
-        data = _make_persona_data()
+        data = make_persona_data()
         data["self_schemas"] = ["skilled_professional"]
         persona = Persona(**data)
         planner = TurnPlanner(persona, DeterminismManager(seed=42))
@@ -475,7 +433,7 @@ class TestR6PipelineIntegration:
 
     def test_adaptation_formality_shift_applied_to_ir(self):
         """High-A persona should shift formality toward formal user's register."""
-        data = _make_persona_data(agreeableness=0.9)
+        data = make_persona_data(agreeableness=0.9)
         # Formal user input (triggers formality mirroring)
         formal_input = "Furthermore, regarding the specification, I would like to discuss the methodology"
         ir = _generate_ir(data, formal_input)
@@ -486,7 +444,7 @@ class TestR6PipelineIntegration:
 
     def test_adaptation_depth_shift_applied_to_ir(self):
         """High-O persona should adjust verbosity for expert vs novice users."""
-        data = _make_persona_data(openness=0.85)
+        data = make_persona_data(openness=0.85)
         expert_input = "Can you explain the algorithm optimization for concurrent asynchronous deployment?"
         ir_expert = _generate_ir(data, expert_input)
         novice_input = "How does that thing work?"
@@ -496,7 +454,7 @@ class TestR6PipelineIntegration:
 
     def test_schema_validation_boosts_disclosure_in_ir(self):
         """Schema validation should increase disclosure_level in the IR."""
-        data = _make_persona_data()
+        data = make_persona_data()
         data["self_schemas"] = ["skilled_professional"]
         # Validating input (mentions schema keywords without challenge words)
         ir_validation = _generate_ir(data, "Your professional experience is really impressive")
@@ -506,7 +464,7 @@ class TestR6PipelineIntegration:
 
     def test_disclosure_reciprocity_applied_to_ir(self):
         """User self-disclosure should increase persona's disclosure."""
-        data = _make_persona_data(agreeableness=0.9, extraversion=0.9)
+        data = make_persona_data(agreeableness=0.9, extraversion=0.9)
         # User disclosing personal info
         ir_disclosure = _generate_ir(data, "I feel like I've been struggling with my partner and honestly I worry about it")
         # No disclosure
@@ -515,7 +473,7 @@ class TestR6PipelineIntegration:
 
     def test_dk_bias_suppressed_by_high_knowledge_boundary(self):
         """DK bias should not fire when knowledge_boundary_strictness is high."""
-        data = _make_persona_data(openness=0.15, conscientiousness=0.85)
+        data = make_persona_data(openness=0.15, conscientiousness=0.85)
         data["uncertainty"]["knowledge_boundary_strictness"] = 0.9
         # Low proficiency domain — would normally trigger DK
         data["knowledge_domains"] = [{"domain": "Quantum Physics", "proficiency": 0.1, "subdomains": []}]

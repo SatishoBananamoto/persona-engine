@@ -70,13 +70,13 @@ Expected output for the UX researcher on her home domain:
 Convert the IR to natural language text:
 
 ```python
-from persona_engine.response.generator import ResponseGenerator
+from persona_engine.generation import ResponseGenerator
 
 gen = ResponseGenerator(persona=persona)
 response = gen.generate(ir, user_input="What makes a good user interview?")
 
 print(response.text)
-print(f"Backend: {response.backend}")
+print(f"Model: {response.model}")
 ```
 
 ## Step 5: Try Different Personas

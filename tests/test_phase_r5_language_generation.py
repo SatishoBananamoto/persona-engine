@@ -15,6 +15,8 @@ Covers:
 
 import pytest
 
+from conftest import make_persona_data
+
 from persona_engine.behavioral.linguistic_markers import (
     LinguisticProfile,
     build_personality_language_directives,
@@ -50,77 +52,6 @@ def _make_traits(**overrides) -> BigFiveTraits:
     }
     defaults.update(overrides)
     return BigFiveTraits(**defaults)
-
-
-def _make_persona_data(**overrides) -> dict:
-    base = {
-        "persona_id": "TEST",
-        "version": "1.0",
-        "label": "Test Persona",
-        "identity": {
-            "age": 30, "gender": "female", "location": "NYC",
-            "education": "BS", "occupation": "Engineer",
-            "background": "Test",
-        },
-        "psychology": {
-            "big_five": {
-                "openness": 0.5, "conscientiousness": 0.5,
-                "extraversion": 0.5, "agreeableness": 0.5,
-                "neuroticism": 0.5,
-            },
-            "values": {
-                "self_direction": 0.5, "stimulation": 0.5,
-                "hedonism": 0.5, "achievement": 0.5, "power": 0.5,
-                "security": 0.5, "conformity": 0.5, "tradition": 0.5,
-                "benevolence": 0.5, "universalism": 0.5,
-            },
-            "cognitive_style": {
-                "analytical_intuitive": 0.5, "systematic_heuristic": 0.5,
-                "risk_tolerance": 0.5, "need_for_closure": 0.5,
-                "cognitive_complexity": 0.5,
-            },
-            "communication": {
-                "verbosity": 0.5, "formality": 0.5,
-                "directness": 0.5, "emotional_expressiveness": 0.5,
-            },
-        },
-        "knowledge_domains": [
-            {"domain": "Engineering", "proficiency": 0.7, "subdomains": []},
-        ],
-        "social_roles": {
-            "default": {"formality": 0.5, "directness": 0.5, "emotional_expressiveness": 0.5},
-        },
-        "invariants": {
-            "identity_facts": ["Engineer"],
-            "cannot_claim": [],
-            "must_avoid": [],
-        },
-        "initial_state": {
-            "mood_valence": 0.2, "mood_arousal": 0.4,
-            "fatigue": 0.2, "stress": 0.2, "engagement": 0.5,
-        },
-        "uncertainty": {
-            "admission_threshold": 0.45, "hedging_frequency": 0.4,
-            "clarification_tendency": 0.5, "knowledge_boundary_strictness": 0.6,
-        },
-        "claim_policy": {
-            "allowed_claim_types": ["personal_experience", "domain_expert", "general_common_knowledge"],
-            "citation_required_when": {"proficiency_below": 0.5, "factual_or_time_sensitive": True},
-            "lookup_behavior": "hedge",
-        },
-        "time_scarcity": 0.45,
-        "privacy_sensitivity": 0.5,
-        "disclosure_policy": {
-            "base_openness": 0.55,
-            "factors": {"topic_sensitivity": -0.25, "trust_level": 0.3,
-                        "formal_context": -0.15, "positive_mood": 0.1},
-            "bounds": [0.1, 0.9],
-        },
-    }
-    for key, val in overrides.items():
-        if key in base["psychology"]["big_five"]:
-            base["psychology"]["big_five"][key] = val
-    return base
 
 
 def _make_context(user_input: str = "What do you think?") -> ConversationContext:
@@ -448,22 +379,22 @@ class TestPipelineIntegration:
 
     def test_extreme_persona_has_personality_language(self):
         """Extreme traits should produce personality_language in IR."""
-        data = _make_persona_data(openness=0.9, extraversion=0.9, neuroticism=0.1)
+        data = make_persona_data(openness=0.9, extraversion=0.9, neuroticism=0.1)
         ir = _generate_ir(data, "Tell me about engineering practices")
         assert len(ir.personality_language) > 0
 
     def test_neutral_persona_fewer_language_directives(self):
         """Neutral persona should produce fewer personality_language directives."""
-        extreme = _make_persona_data(openness=0.9, extraversion=0.85, neuroticism=0.1)
-        neutral = _make_persona_data()
+        extreme = make_persona_data(openness=0.9, extraversion=0.85, neuroticism=0.1)
+        neutral = make_persona_data()
         ir_extreme = _generate_ir(extreme, "Tell me about engineering")
         ir_neutral = _generate_ir(neutral, "Tell me about engineering")
         assert len(ir_extreme.personality_language) >= len(ir_neutral.personality_language)
 
     def test_different_personas_different_language(self):
         """Two opposed personas should have different personality_language."""
-        high_o_e = _make_persona_data(openness=0.9, extraversion=0.85)
-        low_o_e = _make_persona_data(openness=0.15, extraversion=0.15)
+        high_o_e = make_persona_data(openness=0.9, extraversion=0.85)
+        low_o_e = make_persona_data(openness=0.15, extraversion=0.15)
         ir_a = _generate_ir(high_o_e, "What do you think about this?")
         ir_b = _generate_ir(low_o_e, "What do you think about this?")
         # They should have different directives
@@ -471,7 +402,7 @@ class TestPipelineIntegration:
 
     def test_linguistic_markers_citation_present(self):
         """Should produce a linguistic_markers citation when directives are generated."""
-        data = _make_persona_data(openness=0.9, extraversion=0.85)
+        data = make_persona_data(openness=0.9, extraversion=0.85)
         ir = _generate_ir(data, "Tell me about engineering")
         citation_effects = [c.effect for c in ir.citations]
         has_linguistic = any("linguistic" in e.lower() for e in citation_effects)
@@ -480,14 +411,14 @@ class TestPipelineIntegration:
 
     def test_personality_language_field_exists_in_ir(self):
         """IR should always have personality_language field (even if empty)."""
-        data = _make_persona_data()
+        data = make_persona_data()
         ir = _generate_ir(data)
         assert hasattr(ir, "personality_language")
         assert isinstance(ir.personality_language, list)
 
     def test_stance_modulated_by_personality(self):
         """High-N persona's stance should contain worry framing."""
-        data = _make_persona_data(neuroticism=0.85)
+        data = make_persona_data(neuroticism=0.85)
         ir = _generate_ir(data, "What do you think about this approach?")
         # The stance may or may not be modulated depending on value/proficiency
         # but the IR should be generated successfully
@@ -496,7 +427,7 @@ class TestPipelineIntegration:
     def test_prompt_builder_includes_language_section(self):
         """Prompt builder should include LANGUAGE STYLE section when directives exist."""
         from persona_engine.generation.prompt_builder import IRPromptBuilder
-        data = _make_persona_data(openness=0.9, extraversion=0.85, neuroticism=0.1)
+        data = make_persona_data(openness=0.9, extraversion=0.85, neuroticism=0.1)
         ir = _generate_ir(data, "Tell me about engineering")
         builder = IRPromptBuilder()
         prompt = builder.build_generation_prompt(ir, "Tell me about engineering")

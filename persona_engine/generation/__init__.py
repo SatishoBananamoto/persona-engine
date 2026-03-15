@@ -18,7 +18,21 @@ from persona_engine.generation.style_modulator import StyleModulator, Constraint
 from persona_engine.generation.response_generator import (
     ResponseGenerator,
     GeneratedResponse,
+    GenerationBackend,
+    ResponseConfig,
     create_response_generator,
+)
+from persona_engine.generation.prompt_builder import (
+    TONE_PROMPTS,
+    VERBOSITY_PROMPTS,
+    UNCERTAINTY_PROMPTS,
+    CLAIM_TYPE_PROMPTS,
+    formality_instruction,
+    directness_instruction,
+    confidence_instruction,
+    elasticity_instruction,
+    disclosure_instruction,
+    build_system_prompt,
 )
 
 __all__ = [
@@ -37,6 +51,19 @@ __all__ = [
     # Response generation
     "ResponseGenerator",
     "GeneratedResponse",
+    "GenerationBackend",
+    "ResponseConfig",
     "create_response_generator",
+    # Legacy prompt builder utilities
+    "TONE_PROMPTS",
+    "VERBOSITY_PROMPTS",
+    "UNCERTAINTY_PROMPTS",
+    "CLAIM_TYPE_PROMPTS",
+    "formality_instruction",
+    "directness_instruction",
+    "confidence_instruction",
+    "elasticity_instruction",
+    "disclosure_instruction",
+    "build_system_prompt",
 ]
 

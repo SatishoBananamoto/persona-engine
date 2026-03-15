@@ -102,12 +102,12 @@ print(f"Disclosure: {ir.knowledge_disclosure.disclosure_level}")
 Convert IR to natural language:
 
 ```python
-from persona_engine.response.generator import ResponseGenerator
+from persona_engine.generation import ResponseGenerator
 
 gen = ResponseGenerator(persona=persona)
 response = gen.generate(ir, user_input="What do you think about AI?")
 print(response.text)
-print(response.backend)  # "template", "mock", or "anthropic"
+print(response.model)  # "template-rule-based", "mock-llm", or model name
 ```
 
 ### Strict Mode (Deterministic Output)
@@ -115,10 +115,9 @@ print(response.backend)  # "template", "mock", or "anthropic"
 Force template-based responses for testing:
 
 ```python
-from persona_engine.response.schema import ResponseConfig
+from persona_engine.generation import ResponseGenerator
 
-config = ResponseConfig(strict_mode=True)
-gen = ResponseGenerator(config=config, persona=persona)
+gen = ResponseGenerator(persona=persona, strict_mode=True)
 # Always produces identical output for the same IR
 ```
 
@@ -150,17 +149,19 @@ planner = TurnPlanner(
 | `openai` | Production with GPT | Yes |
 
 ```python
+from persona_engine.generation import ResponseGenerator, create_response_generator
+
 # Template (default, no API key)
 gen = ResponseGenerator(persona=persona)
 
 # Mock (for testing)
-from persona_engine.response.schema import ResponseConfig, GenerationBackend
-config = ResponseConfig(backend=GenerationBackend.MOCK)
-gen = ResponseGenerator(config=config, persona=persona)
+gen = create_response_generator(persona=persona, provider="mock")
 
 # Anthropic (requires ANTHROPIC_API_KEY env var)
-config = ResponseConfig(backend=GenerationBackend.ANTHROPIC)
-gen = ResponseGenerator(config=config, persona=persona)
+gen = create_response_generator(persona=persona, provider="anthropic")
+
+# OpenAI (requires OPENAI_API_KEY env var)
+gen = create_response_generator(persona=persona, provider="openai")
 ```
 
 ## Error Handling

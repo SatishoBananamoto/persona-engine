@@ -15,6 +15,8 @@ import math
 import pytest
 import yaml
 
+from conftest import make_persona_data
+
 from persona_engine.behavioral.trait_interactions import (
     INTERACTION_PATTERNS,
     InteractionEffect,
@@ -38,77 +40,6 @@ from persona_engine.utils.determinism import DeterminismManager
 # ============================================================================
 # Helpers
 # ============================================================================
-
-def _make_persona_data(**overrides) -> dict:
-    base = {
-        "persona_id": "TEST",
-        "version": "1.0",
-        "label": "Test Persona",
-        "identity": {
-            "age": 30, "gender": "female", "location": "NYC",
-            "education": "BS", "occupation": "Engineer",
-            "background": "Test",
-        },
-        "psychology": {
-            "big_five": {
-                "openness": 0.5, "conscientiousness": 0.5,
-                "extraversion": 0.5, "agreeableness": 0.5,
-                "neuroticism": 0.5,
-            },
-            "values": {
-                "self_direction": 0.5, "stimulation": 0.5,
-                "hedonism": 0.5, "achievement": 0.5, "power": 0.5,
-                "security": 0.5, "conformity": 0.5, "tradition": 0.5,
-                "benevolence": 0.5, "universalism": 0.5,
-            },
-            "cognitive_style": {
-                "analytical_intuitive": 0.5, "systematic_heuristic": 0.5,
-                "risk_tolerance": 0.5, "need_for_closure": 0.5,
-                "cognitive_complexity": 0.5,
-            },
-            "communication": {
-                "verbosity": 0.5, "formality": 0.5,
-                "directness": 0.5, "emotional_expressiveness": 0.5,
-            },
-        },
-        "knowledge_domains": [
-            {"domain": "Engineering", "proficiency": 0.7, "subdomains": []},
-        ],
-        "social_roles": {
-            "default": {"formality": 0.5, "directness": 0.5, "emotional_expressiveness": 0.5},
-        },
-        "invariants": {
-            "identity_facts": ["Engineer"],
-            "cannot_claim": [],
-            "must_avoid": [],
-        },
-        "initial_state": {
-            "mood_valence": 0.2, "mood_arousal": 0.4,
-            "fatigue": 0.2, "stress": 0.2, "engagement": 0.5,
-        },
-        "uncertainty": {
-            "admission_threshold": 0.45, "hedging_frequency": 0.4,
-            "clarification_tendency": 0.5, "knowledge_boundary_strictness": 0.6,
-        },
-        "claim_policy": {
-            "allowed_claim_types": ["personal_experience", "domain_expert", "general_common_knowledge"],
-            "citation_required_when": {"proficiency_below": 0.5, "factual_or_time_sensitive": True},
-            "lookup_behavior": "hedge",
-        },
-        "time_scarcity": 0.45,
-        "privacy_sensitivity": 0.5,
-        "disclosure_policy": {
-            "base_openness": 0.55,
-            "factors": {"topic_sensitivity": -0.25, "trust_level": 0.3,
-                        "formal_context": -0.15, "positive_mood": 0.1},
-            "bounds": [0.1, 0.9],
-        },
-    }
-    for key, val in overrides.items():
-        if key in base["psychology"]["big_five"]:
-            base["psychology"]["big_five"][key] = val
-    return base
-
 
 def _make_context(user_input: str = "What do you think?") -> ConversationContext:
     return ConversationContext(
@@ -304,8 +235,8 @@ class TestInteractionPipelineIntegration:
 
     def test_intellectual_combatant_ir(self):
         """Intellectual combatant should have higher directness and elasticity."""
-        combatant = _make_persona_data(openness=0.9, agreeableness=0.15)
-        baseline = _make_persona_data(openness=0.9, agreeableness=0.5)
+        combatant = make_persona_data(openness=0.9, agreeableness=0.15)
+        baseline = make_persona_data(openness=0.9, agreeableness=0.5)
 
         ir_combatant = _generate_ir(combatant)
         ir_baseline = _generate_ir(baseline)
@@ -315,8 +246,8 @@ class TestInteractionPipelineIntegration:
 
     def test_anxious_perfectionist_ir(self):
         """Anxious perfectionist should have lower confidence than calm high-C."""
-        anxious = _make_persona_data(conscientiousness=0.9, neuroticism=0.85)
-        calm_c = _make_persona_data(conscientiousness=0.9, neuroticism=0.2)
+        anxious = make_persona_data(conscientiousness=0.9, neuroticism=0.85)
+        calm_c = make_persona_data(conscientiousness=0.9, neuroticism=0.2)
 
         ir_anxious = _generate_ir(anxious)
         ir_calm = _generate_ir(calm_c)
@@ -325,7 +256,7 @@ class TestInteractionPipelineIntegration:
 
     def test_interaction_citations_present(self):
         """Active trait interactions should produce citations."""
-        combatant = _make_persona_data(openness=0.9, agreeableness=0.15)
+        combatant = make_persona_data(openness=0.9, agreeableness=0.15)
         ir = _generate_ir(combatant)
 
         citation_effects = [c.effect for c in ir.citations]
@@ -336,7 +267,7 @@ class TestInteractionPipelineIntegration:
 
     def test_interaction_directives_in_ir(self):
         """Strongly active patterns should add prompt directives."""
-        combatant = _make_persona_data(openness=0.9, agreeableness=0.1)
+        combatant = make_persona_data(openness=0.9, agreeableness=0.1)
         ir = _generate_ir(combatant)
 
         has_interaction_directive = any(
@@ -349,7 +280,7 @@ class TestInteractionPipelineIntegration:
 
     def test_no_interactions_for_moderate_traits(self):
         """Moderate traits should not activate any interaction patterns."""
-        moderate = _make_persona_data()  # all 0.5
+        moderate = make_persona_data()  # all 0.5
         ir = _generate_ir(moderate)
 
         citation_effects = [c.effect for c in ir.citations]
@@ -358,8 +289,8 @@ class TestInteractionPipelineIntegration:
 
     def test_warm_leader_vs_hostile_critic(self):
         """Warm leader and hostile critic should produce qualitatively different IR."""
-        warm = _make_persona_data(extraversion=0.9, agreeableness=0.9, neuroticism=0.2)
-        hostile = _make_persona_data(extraversion=0.5, agreeableness=0.1, neuroticism=0.85)
+        warm = make_persona_data(extraversion=0.9, agreeableness=0.9, neuroticism=0.2)
+        hostile = make_persona_data(extraversion=0.5, agreeableness=0.1, neuroticism=0.85)
 
         ir_warm = _generate_ir(warm)
         ir_hostile = _generate_ir(hostile)

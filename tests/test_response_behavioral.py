@@ -21,9 +21,9 @@ from pathlib import Path
 
 from persona_engine.memory.stance_cache import StanceCache
 from persona_engine.planner.turn_planner import ConversationContext, TurnPlanner
-from persona_engine.response import ResponseGenerator, ResponseConfig, GenerationBackend
-from persona_engine.response.adapters import TemplateAdapter
-from persona_engine.response.prompt_builder import build_system_prompt
+from persona_engine.generation import ResponseGenerator
+from persona_engine.generation.llm_adapter import TemplateAdapter
+from persona_engine.generation.prompt_builder import build_system_prompt
 from persona_engine.schema.ir_schema import (
     CommunicationStyle,
     ConversationFrame,
@@ -105,9 +105,15 @@ def _make_ir(
 
 
 def _generate_template(ir, user_input="Tell me about this.", persona=None):
-    """Generate response using template adapter."""
+    """Generate response using template adapter.
+
+    Returns a SimpleNamespace with .text so call-sites can use resp.text
+    (the generation/ TemplateAdapter.generate_from_ir returns a plain str).
+    """
+    from types import SimpleNamespace
     adapter = TemplateAdapter()
-    return adapter.generate_from_ir(ir=ir, user_input=user_input, persona=persona)
+    text = adapter.generate_from_ir(ir=ir, user_input=user_input, persona=persona)
+    return SimpleNamespace(text=text)
 
 
 def _e2e_generate(persona, user_input, mode, goal, topic, turn=1, cache=None):
@@ -125,8 +131,7 @@ def _e2e_generate(persona, user_input, mode, goal, topic, turn=1, cache=None):
         stance_cache=cache,
     )
     ir = planner.generate_ir(context)
-    config = ResponseConfig(backend=GenerationBackend.TEMPLATE)
-    gen = ResponseGenerator(config=config, persona=persona)
+    gen = ResponseGenerator(persona=persona, provider="template")
     resp = gen.generate(ir, user_input)
     return resp, ir
 
@@ -660,7 +665,7 @@ class TestPromptBuilderBehavioralContracts:
 
     def test_all_tone_values_have_prompts(self):
         """Every Tone enum should have a corresponding prompt mapping."""
-        from persona_engine.response.prompt_builder import TONE_PROMPTS
+        from persona_engine.generation.prompt_builder import TONE_PROMPTS
         for tone in Tone:
             assert tone.value in TONE_PROMPTS, f"Missing prompt for tone: {tone.value}"
 
@@ -755,8 +760,7 @@ class TestMultiTurnLanguageConsistency:
         cache = StanceCache()
         determinism = DeterminismManager(seed=42)
         planner = TurnPlanner(persona, determinism)
-        config = ResponseConfig(backend=GenerationBackend.TEMPLATE)
-        gen = ResponseGenerator(config=config, persona=persona)
+        gen = ResponseGenerator(persona=persona, provider="template")
 
         # Turn 1
         ctx1 = ConversationContext(
@@ -794,8 +798,7 @@ class TestMultiTurnLanguageConsistency:
         cache = StanceCache()
         determinism = DeterminismManager(seed=42)
         planner = TurnPlanner(persona, determinism)
-        config = ResponseConfig(backend=GenerationBackend.TEMPLATE)
-        gen = ResponseGenerator(config=config, persona=persona)
+        gen = ResponseGenerator(persona=persona, provider="template")
 
         topics = [
             ("Tell me about UX research.", "ux_research"),
@@ -962,7 +965,7 @@ class TestEndToEndCoherence:
         prompt = build_system_prompt(ir, persona=persona)
         tone = ir.communication_style.tone.value
         # The prompt should contain text related to the tone
-        from persona_engine.response.prompt_builder import TONE_PROMPTS
+        from persona_engine.generation.prompt_builder import TONE_PROMPTS
         expected_instruction = TONE_PROMPTS.get(tone, "")
         if expected_instruction:
             # At least part of the tone instruction should be in the prompt
@@ -980,7 +983,7 @@ class TestEndToEndCoherence:
             "ux_research",
         )
         prompt = build_system_prompt(ir, persona=persona)
-        from persona_engine.response.prompt_builder import VERBOSITY_PROMPTS
+        from persona_engine.generation.prompt_builder import VERBOSITY_PROMPTS
         verb = ir.communication_style.verbosity.value
         expected = VERBOSITY_PROMPTS.get(verb, "")
         if expected:
@@ -996,13 +999,13 @@ class TestEndToEndCoherence:
             "design_thinking",
         )
         assert resp.text
-        assert resp.backend == GenerationBackend.TEMPLATE
-        assert resp.ir_turn_id is not None
-        assert ir.turn_id == resp.ir_turn_id
+        assert resp.model == "template-rule-based"
+        assert resp.ir is not None
+        assert ir.turn_id == resp.ir.turn_id
 
     def test_mock_backend_captures_prompt(self, persona):
         """Mock backend should capture the system prompt for inspection."""
-        from persona_engine.response.adapters import MockAdapter
+        from persona_engine.generation.llm_adapter import MockLLMAdapter
 
         determinism = DeterminismManager(seed=42)
         planner = TurnPlanner(persona, determinism)
@@ -1018,9 +1021,8 @@ class TestEndToEndCoherence:
         )
         ir = planner.generate_ir(ctx)
 
-        mock = MockAdapter()
+        mock = MockLLMAdapter()
         gen = ResponseGenerator(
-            config=ResponseConfig(backend=GenerationBackend.MOCK),
             persona=persona,
             adapter=mock,
         )

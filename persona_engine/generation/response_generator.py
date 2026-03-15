@@ -6,11 +6,36 @@ and post-processing into a complete response generation pipeline.
 """
 
 import logging
+from enum import StrEnum
 from typing import Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from pydantic import BaseModel, Field as PydanticField
+
 logger = logging.getLogger(__name__)
+
+
+class GenerationBackend(StrEnum):
+    """Which backend generated the response."""
+
+    MOCK = "mock"
+    TEMPLATE = "template"
+    ANTHROPIC = "anthropic"
+
+
+class ResponseConfig(BaseModel):
+    """Configuration for response generation."""
+
+    backend: GenerationBackend = GenerationBackend.TEMPLATE
+    model_id: str = "claude-haiku-4-5-20251001"
+    max_tokens: int = 300
+    temperature: float = 0.7
+    api_key: str | None = None
+    strict_mode: bool = PydanticField(
+        default=False,
+        description="When True, forces TemplateAdapter for deterministic output regardless of backend setting",
+    )
 
 from persona_engine.schema.ir_schema import IntermediateRepresentation
 from persona_engine.schema.persona_schema import Persona
