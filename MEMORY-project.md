@@ -122,14 +122,16 @@
 - [x] Code review round 1 — 5 bugs + 2 statistical issues found and fixed (106 tests passing)
 - [x] Product alignment review — on track, 3 items to address before Phase 9
 - [x] Code review round 1 bugs fixed (5 bugs + 2 statistical issues)
-- [ ] **Phase 5: Schwartz circumplex generator**
-- [ ] **Phase 6: Gap filler + residuals**
-- [ ] **Phase 7: Policy applier**
-- [ ] **Phase 8: Consistency validator**
-- [ ] **Phase 9: Persona assembler + provenance**
-- [ ] **Phase 10: Public API**
-- [ ] **Phase 11: CSV parser**
-- [ ] **Phase 12: Export**
+- [x] **Phase 5: Schwartz circumplex generator** — 17 tests
+- [x] **Phase 6: Gap filler + residuals** — cascade collapse prevented, 21 tests
+- [x] **Phase 7: Policy applier** — system-governed, invariant across personas, 13 tests
+- [x] **Phase 8: Consistency validator** — 11 rules, 3 modes, 19 tests
+- [x] **Phase 9: Persona assembler + provenance** — engine integration works, 12 tests
+- [x] **Phase 10: Public API** — mint() + from_description() end-to-end, 19 tests
+- [ ] **Phase 11: CSV parser** (deferred — not blocking)
+- [ ] **Phase 12: Export** (deferred — not blocking)
+
+**STATUS: Layer Zero v1 core is functional. 207 tests passing. End-to-end pipeline works.**
 
 ---
 
