@@ -78,8 +78,14 @@
 - [x] Wrote RESEARCH-persona-compiler.md (569 lines, 40+ sources)
 - [x] Pushed research doc to branch
 - [x] Set up project memory system
-- [ ] Design compiler architecture (next)
-- [ ] Build compiler (not started)
+- [x] Designed Layer Zero architecture (ARCHITECTURE-layer-zero.md)
+- [x] Defined complete Persona field inventory (50+ fields mapped)
+- [x] Researched tech stack (numpy + pydantic, ~25MB footprint)
+- [x] Defined 10 consistency validation rules
+- [x] Defined ethical guardrails
+- [x] Defined 4-tier input system
+- [x] Defined 7-stage pipeline
+- [ ] Build Layer Zero (not started — pending architecture review)
 
 ---
 
