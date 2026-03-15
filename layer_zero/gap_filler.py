@@ -97,33 +97,36 @@ def fill_gaps(
     else:
         result["education"] = _infer_education(request.occupation)
 
-    # --- Cognitive Style (derived from Big Five + residual SD=0.08) ---
+    # --- Cognitive Style (derived from Big Five + occupation + residual SD=0.08) ---
+    from layer_zero.priors.cognitive import get_occupation_cognitive_shifts
+    occ_cog_shifts = get_occupation_cognitive_shifts(request.occupation)
+
     # Shared latent for analytical ↔ systematic
     shared_cognitive = rng.normal(0, 0.04)
 
     cognitive = {}
     cognitive["analytical_intuitive"] = _derive_with_residual(
-        base=0.3 + O * 0.4,  # O drives analytical thinking
+        base=0.3 + O * 0.4 + occ_cog_shifts.get("analytical_intuitive", 0.0),
         override=request.cognitive_overrides.get("analytical_intuitive"),
         rng=rng, sd=0.08, shared=shared_cognitive,
     )
     cognitive["systematic_heuristic"] = _derive_with_residual(
-        base=0.3 + C * 0.4,  # C drives systematic approach
+        base=0.3 + C * 0.4 + occ_cog_shifts.get("systematic_heuristic", 0.0),
         override=request.cognitive_overrides.get("systematic_heuristic"),
         rng=rng, sd=0.08, shared=shared_cognitive,
     )
     cognitive["risk_tolerance"] = _derive_with_residual(
-        base=0.3 + O * 0.2 + E * 0.15 - N * 0.15,
+        base=0.3 + O * 0.2 + E * 0.15 - N * 0.15 + occ_cog_shifts.get("risk_tolerance", 0.0),
         override=request.cognitive_overrides.get("risk_tolerance"),
         rng=rng, sd=0.08,
     )
     cognitive["need_for_closure"] = _derive_with_residual(
-        base=0.3 + C * 0.3 - O * 0.15 + N * 0.1,
+        base=0.3 + C * 0.3 - O * 0.15 + N * 0.1 + occ_cog_shifts.get("need_for_closure", 0.0),
         override=request.cognitive_overrides.get("need_for_closure"),
         rng=rng, sd=0.08,
     )
     cognitive["cognitive_complexity"] = _derive_with_residual(
-        base=0.3 + O * 0.35 + C * 0.1,
+        base=0.3 + O * 0.35 + C * 0.1 + occ_cog_shifts.get("cognitive_complexity", 0.0),
         override=request.cognitive_overrides.get("cognitive_complexity"),
         rng=rng, sd=0.08,
     )

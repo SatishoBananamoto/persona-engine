@@ -241,8 +241,11 @@ def _run_pipeline(
     all_bf_for_diversity = bf_samples  # for batch diversity check
 
     for i in range(count):
-        # Convert numpy row to dict
+        # Convert numpy row to dict, pin overrides exactly
         bf_dict = {t: float(bf_samples[i, j]) for j, t in enumerate(BIG_FIVE_TRAITS)}
+        for trait, value in request.big_five_overrides.items():
+            if trait in bf_dict:
+                bf_dict[trait] = value  # exact pin, not approximate
         sv_dict = {v: float(sv_samples[i, j]) for j, v in enumerate(SCHWARTZ_VALUES)}
 
         # Fill gaps with residuals
