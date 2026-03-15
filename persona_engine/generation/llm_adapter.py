@@ -1,7 +1,10 @@
 """
 LLM Adapter Abstraction
 
-Provides a unified interface for different LLM providers (Anthropic, OpenAI, Mock).
+Provides a unified interface for different LLM providers.
+Supported providers: Anthropic, OpenAI, Google Gemini, Mistral, Groq,
+Ollama (local), and any OpenAI-compatible endpoint.
+
 This module handles all LLM API interactions for the Response Generator.
 """
 
@@ -432,18 +435,364 @@ class TemplateAdapter(BaseLLMAdapter):
         return text
 
 
+class OpenAICompatibleAdapter(BaseLLMAdapter):
+    """
+    Adapter for any OpenAI-compatible API endpoint.
+
+    Works with Groq, Together AI, vLLM, LM Studio, and any service
+    exposing the OpenAI chat completions interface.
+    Set the appropriate API key env var and base_url before use.
+    """
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = "default",
+        base_url: Optional[str] = None,
+        api_key_env_var: str = "OPENAI_API_KEY",
+    ):
+        """
+        Initialize OpenAI-compatible adapter.
+
+        Args:
+            api_key: API key (defaults to api_key_env_var env var)
+            model: Model to use
+            base_url: API base URL (e.g. "https://api.groq.com/openai/v1")
+            api_key_env_var: Environment variable name for API key
+        """
+        self.api_key = api_key or os.environ.get(api_key_env_var)
+        if not self.api_key:
+            raise LLMAPIKeyError(
+                f"API key required. Set {api_key_env_var} environment variable "
+                "or pass api_key parameter."
+            )
+        self.model = model
+        self.base_url = base_url
+        self._client = None
+
+    @property
+    def client(self) -> Any:
+        """Lazy-load the OpenAI-compatible client."""
+        if self._client is None:
+            try:
+                import openai
+                kwargs: dict[str, Any] = {"api_key": self.api_key}
+                if self.base_url:
+                    kwargs["base_url"] = self.base_url
+                self._client = openai.OpenAI(**kwargs)
+            except ImportError:
+                raise ConfigurationError(
+                    "openai package not installed. Run: pip install openai"
+                )
+        return self._client
+
+    def generate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int = 1024,
+        temperature: float = 0.7,
+        conversation_history: Optional[list[dict[str, str]]] = None,
+    ) -> str:
+        """Generate response using OpenAI-compatible API."""
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": system_prompt},
+        ]
+        if conversation_history:
+            messages.extend(conversation_history)
+        messages.append({"role": "user", "content": user_prompt})
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                messages=messages,
+            )
+        except Exception as e:
+            error_type = type(e).__name__
+            if any(keyword in error_type.lower() for keyword in ("connection", "timeout", "network")):
+                raise LLMConnectionError(f"API connection failed: {e}") from e
+            if "rate" in error_type.lower() or "rate" in str(e).lower():
+                raise LLMConnectionError(f"API rate limited: {e}") from e
+            raise LLMResponseError(f"API error ({error_type}): {e}") from e
+
+        if not response.choices:
+            raise LLMResponseError("API returned empty response (no choices)")
+
+        content = response.choices[0].message.content
+        return content if content is not None else ""
+
+    def get_model_name(self) -> str:
+        return self.model
+
+
+class GeminiAdapter(BaseLLMAdapter):
+    """
+    Google Gemini adapter.
+
+    Uses Gemini 2.0 Flash by default for speed and cost efficiency.
+    Set GOOGLE_API_KEY environment variable before use.
+    """
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = "gemini-2.0-flash",
+    ):
+        """
+        Initialize Gemini adapter.
+
+        Args:
+            api_key: Google API key (defaults to GOOGLE_API_KEY env var)
+            model: Model to use (default: gemini-2.0-flash)
+        """
+        self.api_key = api_key or os.environ.get("GOOGLE_API_KEY")
+        if not self.api_key:
+            raise LLMAPIKeyError(
+                "Google API key required. Set GOOGLE_API_KEY environment variable "
+                "or pass api_key parameter."
+            )
+        self.model = model
+        self._client: Any = None
+
+    @property
+    def client(self) -> Any:
+        """Lazy-load the Google GenAI client."""
+        if self._client is None:
+            try:
+                from google import genai
+                self._client = genai.Client(api_key=self.api_key)
+            except ImportError:
+                raise ConfigurationError(
+                    "google-genai package not installed. Run: pip install google-genai"
+                )
+        return self._client
+
+    def generate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int = 1024,
+        temperature: float = 0.7,
+        conversation_history: Optional[list[dict[str, str]]] = None,
+    ) -> str:
+        """Generate response using Gemini."""
+        from google.genai import types
+
+        contents: list[types.Content] = []
+        if conversation_history:
+            for msg in conversation_history:
+                role = "model" if msg["role"] == "assistant" else msg["role"]
+                contents.append(types.Content(
+                    role=role,
+                    parts=[types.Part(text=msg["content"])],
+                ))
+        contents.append(types.Content(
+            role="user",
+            parts=[types.Part(text=user_prompt)],
+        ))
+
+        config = types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            max_output_tokens=max_tokens,
+            temperature=temperature,
+        )
+        try:
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=contents,
+                config=config,
+            )
+        except Exception as e:
+            error_type = type(e).__name__
+            if any(keyword in error_type.lower() for keyword in ("connection", "timeout", "network", "transport")):
+                raise LLMConnectionError(f"Gemini API connection failed: {e}") from e
+            if "rate" in error_type.lower() or "rate" in str(e).lower() or "429" in str(e):
+                raise LLMConnectionError(f"Gemini API rate limited: {e}") from e
+            raise LLMResponseError(f"Gemini API error ({error_type}): {e}") from e
+
+        if not response.text:
+            raise LLMResponseError("Gemini returned empty response (no text)")
+
+        return response.text
+
+    def get_model_name(self) -> str:
+        return self.model
+
+
+class MistralAdapter(BaseLLMAdapter):
+    """
+    Mistral AI adapter.
+
+    Uses Mistral Small by default for cost efficiency.
+    Set MISTRAL_API_KEY environment variable before use.
+    """
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = "mistral-small-latest",
+    ):
+        """
+        Initialize Mistral adapter.
+
+        Args:
+            api_key: Mistral API key (defaults to MISTRAL_API_KEY env var)
+            model: Model to use (default: mistral-small-latest)
+        """
+        self.api_key = api_key or os.environ.get("MISTRAL_API_KEY")
+        if not self.api_key:
+            raise LLMAPIKeyError(
+                "Mistral API key required. Set MISTRAL_API_KEY environment variable "
+                "or pass api_key parameter."
+            )
+        self.model = model
+        self._client: Any = None
+
+    @property
+    def client(self) -> Any:
+        """Lazy-load the Mistral client."""
+        if self._client is None:
+            try:
+                from mistralai import Mistral
+                self._client = Mistral(api_key=self.api_key)
+            except ImportError:
+                raise ConfigurationError(
+                    "mistralai package not installed. Run: pip install mistralai"
+                )
+        return self._client
+
+    def generate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int = 1024,
+        temperature: float = 0.7,
+        conversation_history: Optional[list[dict[str, str]]] = None,
+    ) -> str:
+        """Generate response using Mistral."""
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": system_prompt},
+        ]
+        if conversation_history:
+            messages.extend(conversation_history)
+        messages.append({"role": "user", "content": user_prompt})
+        try:
+            response = self.client.chat.complete(
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                messages=messages,
+            )
+        except Exception as e:
+            error_type = type(e).__name__
+            if any(keyword in error_type.lower() for keyword in ("connection", "timeout", "network")):
+                raise LLMConnectionError(f"Mistral API connection failed: {e}") from e
+            if "rate" in error_type.lower() or "rate" in str(e).lower() or "429" in str(e):
+                raise LLMConnectionError(f"Mistral API rate limited: {e}") from e
+            raise LLMResponseError(f"Mistral API error ({error_type}): {e}") from e
+
+        if not response.choices:
+            raise LLMResponseError("Mistral returned empty response (no choices)")
+
+        content = response.choices[0].message.content
+        return content if content is not None else ""
+
+    def get_model_name(self) -> str:
+        return self.model
+
+
+class OllamaAdapter(BaseLLMAdapter):
+    """
+    Ollama adapter for local models.
+
+    No API key required. Requires Ollama running locally.
+    Default host: http://localhost:11434
+    """
+
+    def __init__(
+        self,
+        model: str = "llama3.2",
+        host: Optional[str] = None,
+    ):
+        """
+        Initialize Ollama adapter.
+
+        Args:
+            model: Model to use (default: llama3.2)
+            host: Ollama host URL (defaults to OLLAMA_HOST env var or http://localhost:11434)
+        """
+        self.model = model
+        self.host = host or os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+        self._client: Any = None
+
+    @property
+    def client(self) -> Any:
+        """Lazy-load the Ollama client."""
+        if self._client is None:
+            try:
+                import ollama
+                self._client = ollama.Client(host=self.host)
+            except ImportError:
+                raise ConfigurationError(
+                    "ollama package not installed. Run: pip install ollama"
+                )
+        return self._client
+
+    def generate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int = 1024,
+        temperature: float = 0.7,
+        conversation_history: Optional[list[dict[str, str]]] = None,
+    ) -> str:
+        """Generate response using Ollama."""
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": system_prompt},
+        ]
+        if conversation_history:
+            messages.extend(conversation_history)
+        messages.append({"role": "user", "content": user_prompt})
+        try:
+            response = self.client.chat(
+                model=self.model,
+                messages=messages,
+                options={"temperature": temperature, "num_predict": max_tokens},
+            )
+        except Exception as e:
+            error_type = type(e).__name__
+            if any(keyword in error_type.lower() for keyword in ("connection", "timeout", "network", "refused")):
+                raise LLMConnectionError(
+                    f"Ollama connection failed (is Ollama running at {self.host}?): {e}"
+                ) from e
+            raise LLMResponseError(f"Ollama error ({error_type}): {e}") from e
+
+        content = response.get("message", {}).get("content", "")
+        if not content:
+            raise LLMResponseError("Ollama returned empty response")
+
+        return content
+
+    def get_model_name(self) -> str:
+        return f"ollama/{self.model}"
+
+
 def create_adapter(
     provider: str = "anthropic",
     api_key: Optional[str] = None,
     model: Optional[str] = None,
+    base_url: Optional[str] = None,
 ) -> BaseLLMAdapter:
     """
     Factory function to create an LLM adapter.
 
     Args:
-        provider: "anthropic", "openai", "mock", or "template"
-        api_key: Optional API key (defaults to env var)
+        provider: Provider name — "anthropic", "openai", "gemini", "mistral",
+            "ollama", "groq", "openai_compatible", "mock", or "template"
+        api_key: Optional API key (defaults to provider-specific env var)
         model: Optional model override
+        base_url: Optional base URL (for openai_compatible/groq providers)
 
     Returns:
         Configured LLM adapter
@@ -462,6 +811,46 @@ def create_adapter(
             kwargs["model"] = model
         return OpenAIAdapter(**kwargs)
 
+    elif provider == "gemini":
+        kwargs = {"api_key": api_key}
+        if model:
+            kwargs["model"] = model
+        return GeminiAdapter(**kwargs)
+
+    elif provider == "mistral":
+        kwargs = {"api_key": api_key}
+        if model:
+            kwargs["model"] = model
+        return MistralAdapter(**kwargs)
+
+    elif provider == "ollama":
+        kwargs = {}
+        if model:
+            kwargs["model"] = model
+        if base_url:
+            kwargs["host"] = base_url
+        return OllamaAdapter(**kwargs)
+
+    elif provider == "groq":
+        kwargs = {
+            "api_key": api_key,
+            "api_key_env_var": "GROQ_API_KEY",
+            "base_url": base_url or "https://api.groq.com/openai/v1",
+        }
+        if model:
+            kwargs["model"] = model
+        else:
+            kwargs["model"] = "llama-3.3-70b-versatile"
+        return OpenAICompatibleAdapter(**kwargs)
+
+    elif provider == "openai_compatible":
+        kwargs = {"api_key": api_key}
+        if model:
+            kwargs["model"] = model
+        if base_url:
+            kwargs["base_url"] = base_url
+        return OpenAICompatibleAdapter(**kwargs)
+
     elif provider == "mock":
         return MockLLMAdapter()
 
@@ -469,6 +858,10 @@ def create_adapter(
         return TemplateAdapter()
 
     else:
+        supported = (
+            "'anthropic', 'openai', 'gemini', 'mistral', 'ollama', "
+            "'groq', 'openai_compatible', 'mock', 'template'"
+        )
         raise ConfigurationError(
-            f"Unknown provider: {provider}. Use 'anthropic', 'openai', 'mock', or 'template'"
+            f"Unknown provider: {provider}. Supported: {supported}"
         )
