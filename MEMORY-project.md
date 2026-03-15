@@ -2,7 +2,21 @@
 
 > This file is the single source of truth for project state across sessions.
 > Every session must READ this at start and UPDATE it at end.
-> Every entry must have a timestamp. No undated entries.
+> Every entry must have a timestamp and a tag. No undated or untagged entries.
+
+## Tag Registry
+
+> Same tags used in main memory. Immutable once defined. New tags added here before first use.
+
+| Tag | Meaning | When to use |
+|-----|---------|-------------|
+| `[LEARNING]` | Something I got wrong and corrected | After mistakes, failed approaches |
+| `[REMEMBER]` | Fact or preference to retain | User requests, environment details |
+| `[DECISION]` | Architecture/approach choice made | At decision points |
+| `[PROCESS]` | How we work, methodology rules | When Satish gives process feedback |
+| `[CONTEXT]` | Background info for future sessions | Project state, who/what/where |
+| `[BLOCKER]` | Something preventing progress | When stuck |
+| `[RESOLVED]` | A blocker that was fixed | When unblocked |
 
 ---
 
@@ -19,21 +33,26 @@
 
 > Architecture choices, approach selections, trade-offs made. Each with reasoning and timestamp.
 
-### [DEC-001] Work on separate branch
+### `[DECISION]` [DEC-001] Work on separate branch
 - **Date:** 2026-03-15
 - **Decision:** All compiler work goes on `claude/external-review`, never touching `claude/general-session-VUY6r`
 - **Reasoning:** Another Claude session is actively refining the engine. We don't interfere.
 
-### [DEC-002] Research before building
+### `[DECISION]` [DEC-002] Research before building
 - **Date:** 2026-03-15
 - **Decision:** Conducted full research across 11 topic areas before writing any code
 - **Reasoning:** Satish's principle — research first, understand the landscape, then build. Prevents building the wrong thing.
 
-### [DEC-003] Compiler architecture — hybrid approach
+### `[DECISION]` [DEC-003] Compiler architecture — hybrid approach
 - **Date:** 2026-03-15
 - **Decision:** Use research-backed demographic-to-psychology mappings for core parameters, LLM only for narrative enrichment after parameters are locked
 - **Reasoning:** NeurIPS 2025 research shows LLM-generated persona detail actually hurts accuracy. Data-grounded parameters + minimal LLM involvement = best results.
 - **Source:** RESEARCH-persona-compiler.md, Section 7
+
+### `[PROCESS]` [DEC-004] Tagging system for memory entries
+- **Date:** 2026-03-15
+- **Decision:** All memory entries (both project and main) must carry a tag from a fixed registry. Tags are immutable. New tags require registry update first.
+- **Reasoning:** Satish identified that untagged entries make it hard to scan, filter, and understand entry purpose at a glance. Tags prevent drift by making intent explicit.
 
 ---
 
@@ -83,15 +102,17 @@
 
 > Things we discovered during this project that affect future work.
 
-### [L-001] Don't trust grep-based code analysis
+### `[LEARNING]` [L-001] Don't trust grep-based code analysis
 - **Date:** 2026-03-15
 - **Context:** First review fabricated 3 "dead code" claims because the exploration agent searched for imports instead of tracing data flow through the orchestrator (TurnPlanner)
 - **Lesson:** Always trace the full consumption path. Data flows through intermediate objects (IR, metrics dicts, modifier lists), not just direct imports.
+- **Also saved to:** main memory (`feedback_code_review_discipline.md`)
 
-### [L-002] Verify subagent output before presenting
+### `[LEARNING]` [L-002] Verify subagent output before presenting
 - **Date:** 2026-03-15
 - **Context:** Presented exploration agent's findings as facts without checking. Repo handler caught 4 errors.
 - **Lesson:** Never present subagent findings without spot-checking the critical claims yourself. Read the actual code at the cited lines.
+- **Also saved to:** main memory (`feedback_verify_subagent_output.md`)
 
 ---
 
