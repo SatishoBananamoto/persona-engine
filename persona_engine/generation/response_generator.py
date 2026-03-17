@@ -6,6 +6,7 @@ and post-processing into a complete response generation pipeline.
 """
 
 import logging
+import time
 from enum import StrEnum
 from typing import Optional
 from dataclasses import dataclass, field
@@ -69,7 +70,10 @@ class GeneratedResponse:
     
     # Token usage estimate
     estimated_tokens: int = 0
-    
+
+    # LLM call latency in milliseconds (None if not measured, e.g. template)
+    latency_ms: float | None = None
+
     def is_valid(self) -> bool:
         """Check if response passes all constraints."""
         return not any(v.severity == "error" for v in self.violations)
@@ -193,7 +197,8 @@ class ResponseGenerator:
             confidence = ir.response_structure.confidence
             temperature = max(0.3, 1.0 - (confidence * 0.5))
 
-        # Generate response
+        # Generate response (with latency tracking)
+        t0 = time.perf_counter()
         raw_text = self.adapter.generate(
             system_prompt=self._system_prompt,
             user_prompt=generation_prompt,
@@ -201,6 +206,7 @@ class ResponseGenerator:
             temperature=temperature,
             conversation_history=conversation_history,
         )
+        latency_ms = (time.perf_counter() - t0) * 1000
 
         # Post-process
         processed_text = self.style_modulator.enforce_verbosity(
@@ -227,6 +233,7 @@ class ResponseGenerator:
             model=model_name,
             violations=violations,
             estimated_tokens=estimated_tokens,
+            latency_ms=latency_ms,
         )
     
     def get_system_prompt(self) -> str:

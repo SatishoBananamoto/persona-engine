@@ -192,6 +192,64 @@ def cmd_chat(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_benchmark(args: argparse.Namespace) -> int:
+    """Run provider benchmark comparison."""
+    from persona_engine.benchmark import run_benchmark
+
+    providers = args.providers if args.providers else None
+
+    report = run_benchmark(
+        persona_path=args.persona,
+        providers=providers,
+        seed=args.seed,
+        dry_run=args.dry_run,
+    )
+
+    print(report.summary_table())
+
+    if args.json:
+        import json
+
+        data = {
+            "persona": report.persona_name,
+            "seed": report.seed,
+            "turn_count": report.turn_count,
+            "ir_consistent": report.ir_consistent,
+            "providers": [
+                {
+                    "provider": p.provider,
+                    "model": p.model,
+                    "avg_latency_ms": round(p.avg_latency_ms, 2),
+                    "total_tokens": p.total_tokens,
+                    "estimated_cost_usd": round(p.estimated_cost_usd, 6),
+                    "validation_pass_rate": round(p.validation_pass_rate, 3),
+                    "total_violations": p.total_violations,
+                    "error": p.error,
+                    "turns": [
+                        {
+                            "label": t.label,
+                            "latency_ms": round(t.latency_ms, 2) if t.latency_ms else None,
+                            "tokens": t.estimated_tokens,
+                            "passed": t.validation_passed,
+                            "confidence": round(t.confidence, 3),
+                            "competence": round(t.competence, 3),
+                        }
+                        for t in p.turns
+                    ],
+                }
+                for p in report.providers
+            ],
+        }
+        if args.output:
+            with open(args.output, "w") as f:
+                json.dump(data, f, indent=2)
+            print(f"  JSON saved to {args.output}")
+        else:
+            print(json.dumps(data, indent=2))
+
+    return 0
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     """List persona YAML files in a directory."""
     directory = Path(args.directory)
@@ -246,6 +304,18 @@ def main() -> int:
                         choices=["mock", "template", "anthropic", "openai"],
                         help="LLM backend (default: mock)")
 
+    # benchmark
+    p_bench = sub.add_parser("benchmark", help="Compare LLM providers on the same conversation")
+    p_bench.add_argument("--persona", default="personas/chef.yaml",
+                         help="Path to persona YAML (default: personas/chef.yaml)")
+    p_bench.add_argument("--providers", nargs="+",
+                         help="Provider names to compare (default: auto-detect)")
+    p_bench.add_argument("--seed", type=int, default=42, help="Determinism seed")
+    p_bench.add_argument("--dry-run", action="store_true",
+                         help="Use mock adapters (no API keys needed)")
+    p_bench.add_argument("--json", action="store_true", help="Output as JSON")
+    p_bench.add_argument("--output", help="Save JSON to file")
+
     # list
     p_list = sub.add_parser("list", help="List personas in a directory")
     p_list.add_argument("directory", nargs="?", default="personas",
@@ -262,6 +332,7 @@ def main() -> int:
         "info": cmd_info,
         "plan": cmd_plan,
         "chat": cmd_chat,
+        "benchmark": cmd_benchmark,
         "list": cmd_list,
     }
     return commands[args.command](args)
