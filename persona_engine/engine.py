@@ -106,14 +106,16 @@ def _validate_user_input(
     if not stripped:
         raise InputValidationError("user_input must not be empty or whitespace-only")
 
-    if len(stripped) > max_length:
+    # Sanitise BEFORE length check so control chars don't count toward limit
+    sanitized = _sanitize_text(stripped)
+
+    if len(sanitized) > max_length:
         raise InputValidationError(
             f"user_input exceeds maximum length of {max_length:,} characters "
-            f"(got {len(stripped):,})"
+            f"(got {len(sanitized):,})"
         )
 
-    # Sanitise after length check (sanitisation can only shrink text)
-    return _sanitize_text(stripped)
+    return sanitized
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +177,17 @@ class PersonaEngine:
 
     Manages the full lifecycle: persona loading, IR planning, LLM generation,
     validation, and memory — so callers only need ``chat()`` or ``plan()``.
+
+    **Thread safety**: PersonaEngine instances are NOT thread-safe. Each instance
+    mutates internal state (turn counter, memory stores, stance cache, state manager)
+    on every ``chat()`` / ``plan()`` call. For concurrent use:
+
+    - Create one PersonaEngine per thread/request, OR
+    - Use external locking (e.g. ``threading.Lock``) around ``chat()``/``plan()``, OR
+    - Use ``plan()`` for read-heavy workloads (still mutates turn counter and state)
+
+    Sharing a single instance across threads without synchronization will corrupt
+    conversation state and produce inconsistent behavior.
     """
 
     def __init__(

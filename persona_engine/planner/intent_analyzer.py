@@ -81,6 +81,11 @@ def analyze_intent(
                 "confess", "confession", "admit", "guilty",
                 "i did something", "i need to tell you",
             ],
+            InteractionMode.SMALL_TALK: [
+                "weather", "how's it going", "how are you",
+                "nice day", "what's up", "weekend",
+                "good morning", "good evening",
+            ],
         }
 
         # Check in deterministic order (enum definition order)

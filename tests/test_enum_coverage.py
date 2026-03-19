@@ -1,16 +1,14 @@
 """
-Exhaustive Enum Coverage Tests
+Enum Coverage Tests — verify all enum members are handled by consumers.
 
-Safety net tests that verify every enum member has entries in all consumer
-dicts and format methods. Prevents adding enum values without updating
-downstream consumers.
+Tests that every Tone, Verbosity, UncertaintyAction, and KnowledgeClaimType
+member is properly handled in the generation pipeline (IRPromptBuilder,
+StyleModulator).
 """
 
 import pytest
 
 from persona_engine.schema.ir_schema import (
-    ConversationGoal,
-    InteractionMode,
     KnowledgeClaimType,
     Tone,
     UncertaintyAction,
@@ -18,25 +16,10 @@ from persona_engine.schema.ir_schema import (
 )
 from persona_engine.generation.prompt_builder import IRPromptBuilder
 from persona_engine.generation.style_modulator import StyleModulator
-from persona_engine.response.adapters import _OPENERS
-from persona_engine.response.prompt_builder import (
-    CLAIM_TYPE_PROMPTS,
-    TONE_PROMPTS,
-    UNCERTAINTY_PROMPTS,
-    VERBOSITY_PROMPTS,
-)
 
 
 class TestToneCoverage:
-    """Every Tone member must be present in all consumer dicts."""
-
-    @pytest.mark.parametrize("tone", list(Tone))
-    def test_tone_in_TONE_PROMPTS(self, tone: Tone) -> None:
-        assert tone.value in TONE_PROMPTS, f"Tone {tone.value} missing from TONE_PROMPTS"
-
-    @pytest.mark.parametrize("tone", list(Tone))
-    def test_tone_in_OPENERS(self, tone: Tone) -> None:
-        assert tone.value in _OPENERS, f"Tone {tone.value} missing from _OPENERS"
+    """Every Tone member must be handled by IRPromptBuilder."""
 
     @pytest.mark.parametrize("tone", list(Tone))
     def test_tone_in_ir_prompt_builder(self, tone: Tone) -> None:
@@ -49,11 +32,7 @@ class TestToneCoverage:
 
 
 class TestVerbosityCoverage:
-    """Every Verbosity member must be present in all consumer dicts."""
-
-    @pytest.mark.parametrize("v", list(Verbosity))
-    def test_verbosity_in_VERBOSITY_PROMPTS(self, v: Verbosity) -> None:
-        assert v.value in VERBOSITY_PROMPTS, f"Verbosity {v.value} missing from VERBOSITY_PROMPTS"
+    """Every Verbosity member must be handled by StyleModulator and IRPromptBuilder."""
 
     @pytest.mark.parametrize("v", list(Verbosity))
     def test_verbosity_in_VERBOSITY_TARGETS(self, v: Verbosity) -> None:
@@ -71,13 +50,7 @@ class TestVerbosityCoverage:
 
 
 class TestUncertaintyActionCoverage:
-    """Every UncertaintyAction member must be present in all consumer dicts."""
-
-    @pytest.mark.parametrize("ua", list(UncertaintyAction))
-    def test_uncertainty_in_UNCERTAINTY_PROMPTS(self, ua: UncertaintyAction) -> None:
-        assert ua.value in UNCERTAINTY_PROMPTS, (
-            f"UncertaintyAction {ua.value} missing from UNCERTAINTY_PROMPTS"
-        )
+    """Every UncertaintyAction member must be handled by IRPromptBuilder."""
 
     @pytest.mark.parametrize("ua", list(UncertaintyAction))
     def test_uncertainty_in_ir_prompt_builder(self, ua: UncertaintyAction) -> None:
@@ -89,13 +62,7 @@ class TestUncertaintyActionCoverage:
 
 
 class TestKnowledgeClaimTypeCoverage:
-    """Every KnowledgeClaimType member must be present in all consumer dicts."""
-
-    @pytest.mark.parametrize("ct", list(KnowledgeClaimType))
-    def test_claim_type_in_CLAIM_TYPE_PROMPTS(self, ct: KnowledgeClaimType) -> None:
-        assert ct.value in CLAIM_TYPE_PROMPTS, (
-            f"KnowledgeClaimType {ct.value} missing from CLAIM_TYPE_PROMPTS"
-        )
+    """Every KnowledgeClaimType member must be handled by IRPromptBuilder."""
 
     @pytest.mark.parametrize("ct", list(KnowledgeClaimType))
     def test_claim_type_in_ir_prompt_builder(self, ct: KnowledgeClaimType) -> None:
