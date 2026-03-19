@@ -22,6 +22,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from persona_engine import __version__
 from persona_engine.engine import PersonaEngine, ChatResult
 from persona_engine.schema.ir_schema import ConversationGoal, InteractionMode
 from persona_engine.schema.persona_schema import Persona
@@ -37,7 +38,7 @@ app = FastAPI(
         "Create psychologically-grounded synthetic personas and interact "
         "with them through structured, traceable conversations."
     ),
-    version="0.3.0",
+    version=__version__,
 )
 
 # In-memory session store (reference implementation — use Redis/DB in production)
@@ -190,7 +191,7 @@ def health_check():
     """Health check endpoint."""
     return HealthResponse(
         status="ok",
-        version="0.3.0",
+        version=__version__,
         active_sessions=len(_sessions),
     )
 
@@ -212,8 +213,18 @@ def create_session(req: CreateSessionRequest):
 
     try:
         if req.persona_id:
+            # Validate persona path to prevent path traversal attacks.
+            # Resolve against the personas directory and verify the result
+            # stays within it.
+            personas_dir = Path("personas").resolve()
+            requested = (personas_dir / req.persona_id).resolve()
+            if not str(requested).startswith(str(personas_dir) + "/"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid persona_id: path traversal not allowed",
+                )
             engine = PersonaEngine.from_yaml(
-                req.persona_id,
+                str(requested),
                 llm_provider=req.llm_provider,
                 seed=req.seed,
                 strict_mode=req.strict_mode,

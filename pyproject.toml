@@ -26,6 +26,7 @@ classifiers = [
 dependencies = [
     "pydantic>=2.5.0",
     "pyyaml>=6.0",
+    "numpy>=1.24.0",
 ]
 
 [project.optional-dependencies]
@@ -75,13 +76,13 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/persona-engine"
+Homepage = "https://github.com/SatishoBananamoto/persona-engine"
 Documentation = "https://persona-engine.readthedocs.io"
-Repository = "https://github.com/yourusername/persona-engine"
+Repository = "https://github.com/SatishoBananamoto/persona-engine"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["persona_engine*"]
+include = ["persona_engine*", "layer_zero*"]
 
 [tool.setuptools.package-data]
 persona_engine = ["py.typed"]
