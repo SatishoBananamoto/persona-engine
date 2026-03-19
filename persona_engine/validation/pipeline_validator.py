@@ -28,6 +28,7 @@ from persona_engine.schema.ir_schema import (
     ValidationViolation,
 )
 from persona_engine.schema.persona_schema import Persona
+from persona_engine.validation.caricature_detection import validate_caricature
 from persona_engine.validation.cross_turn import CrossTurnTracker
 from persona_engine.validation.ir_coherence import validate_ir_coherence
 from persona_engine.validation.persona_compliance import validate_persona_compliance
@@ -110,6 +111,15 @@ class PipelineValidator:
             "parameter_swing",
             "expertise_consistency",
             "stance_consistency",
+        ])
+
+        # Layer 4: Caricature Detection
+        caricature_violations = validate_caricature(ir, self.persona)
+        all_violations.extend(caricature_violations)
+        checked.extend([
+            "caricature_accumulation",
+            "anxiety_directness_contradiction",
+            "confidence_disclosure_coherence",
         ])
 
         # Determine pass/fail
