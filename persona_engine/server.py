@@ -11,21 +11,39 @@ Usage:
 
     # Or run directly:
     python -m persona_engine.server
+
+Configuration via environment variables:
+    PERSONA_API_KEY     — Required API key for authenticated endpoints.
+                          If unset, auth is disabled (development mode).
+    PERSONA_MAX_SESSIONS — Maximum concurrent sessions (default: 100).
+    PERSONA_SESSION_TTL  — Session TTL in seconds (default: 3600).
 """
 
 from __future__ import annotations
 
+import os
+import threading
+import time
 import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request, Security
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 
 from persona_engine import __version__
 from persona_engine.engine import PersonaEngine, ChatResult
 from persona_engine.schema.ir_schema import ConversationGoal, InteractionMode
 from persona_engine.schema.persona_schema import Persona
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+_API_KEY: str | None = os.environ.get("PERSONA_API_KEY")
+_MAX_SESSIONS: int = int(os.environ.get("PERSONA_MAX_SESSIONS", "100"))
+_SESSION_TTL: int = int(os.environ.get("PERSONA_SESSION_TTL", "3600"))
 
 # ---------------------------------------------------------------------------
 # App
@@ -41,8 +59,101 @@ app = FastAPI(
     version=__version__,
 )
 
-# In-memory session store (reference implementation — use Redis/DB in production)
+# ---------------------------------------------------------------------------
+# Authentication
+# ---------------------------------------------------------------------------
+
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+def _require_api_key(
+    api_key: str | None = Security(_api_key_header),
+) -> str | None:
+    """Validate API key if PERSONA_API_KEY is configured.
+
+    When the env var is unset, auth is disabled (development mode).
+    When set, all mutating endpoints require a matching X-API-Key header.
+    """
+    if _API_KEY is None:
+        return None  # Auth disabled
+    if not api_key or api_key != _API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+    return api_key
+
+
+# ---------------------------------------------------------------------------
+# Rate Limiting (simple in-process, per-IP)
+# ---------------------------------------------------------------------------
+
+_RATE_LIMIT_WINDOW = 60  # seconds
+_RATE_LIMIT_MAX = 60  # requests per window per IP
+
+_rate_limit_lock = threading.Lock()
+_rate_limit_store: dict[str, list[float]] = {}
+
+
+def _check_rate_limit(request: Request) -> None:
+    """Simple sliding-window rate limiter. No external dependencies."""
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.monotonic()
+    cutoff = now - _RATE_LIMIT_WINDOW
+
+    with _rate_limit_lock:
+        timestamps = _rate_limit_store.get(client_ip, [])
+        # Trim expired entries
+        timestamps = [t for t in timestamps if t > cutoff]
+        if len(timestamps) >= _RATE_LIMIT_MAX:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded ({_RATE_LIMIT_MAX} requests per {_RATE_LIMIT_WINDOW}s)",
+            )
+        timestamps.append(now)
+        _rate_limit_store[client_ip] = timestamps
+
+
+# ---------------------------------------------------------------------------
+# Thread-safe Session Store
+# ---------------------------------------------------------------------------
+
+_sessions_lock = threading.Lock()
 _sessions: dict[str, PersonaEngine] = {}
+_session_timestamps: dict[str, float] = {}  # session_id → last access time
+
+
+def _evict_expired_sessions() -> None:
+    """Remove sessions older than TTL. Must be called under _sessions_lock."""
+    now = time.monotonic()
+    expired = [
+        sid for sid, ts in _session_timestamps.items()
+        if now - ts > _SESSION_TTL
+    ]
+    for sid in expired:
+        _sessions.pop(sid, None)
+        _session_timestamps.pop(sid, None)
+
+
+def _get_session(session_id: str) -> PersonaEngine:
+    with _sessions_lock:
+        _evict_expired_sessions()
+        if session_id not in _sessions:
+            raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+        _session_timestamps[session_id] = time.monotonic()  # refresh TTL
+        return _sessions[session_id]
+
+
+def _store_session(engine: PersonaEngine) -> str:
+    """Store a new session with cap enforcement. Returns session_id."""
+    with _sessions_lock:
+        _evict_expired_sessions()
+        if len(_sessions) >= _MAX_SESSIONS:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Maximum sessions ({_MAX_SESSIONS}) reached. Delete unused sessions.",
+            )
+        session_id = str(uuid.uuid4())[:8]
+        _sessions[session_id] = engine
+        _session_timestamps[session_id] = time.monotonic()
+        return session_id
 
 
 # ---------------------------------------------------------------------------
@@ -175,12 +286,6 @@ def _validation_to_summary(validation) -> ValidationSummary:
     )
 
 
-def _get_session(session_id: str) -> PersonaEngine:
-    if session_id not in _sessions:
-        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
-    return _sessions[session_id]
-
-
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -188,7 +293,7 @@ def _get_session(session_id: str) -> PersonaEngine:
 
 @app.get("/health", response_model=HealthResponse)
 def health_check():
-    """Health check endpoint."""
+    """Health check endpoint (no auth required)."""
     return HealthResponse(
         status="ok",
         version=__version__,
@@ -196,8 +301,12 @@ def health_check():
     )
 
 
-@app.post("/sessions", response_model=CreateSessionResponse, status_code=201)
-def create_session(req: CreateSessionRequest):
+@app.post("/sessions", response_model=CreateSessionResponse, status_code=201,
+          dependencies=[Depends(_check_rate_limit)])
+def create_session(
+    req: CreateSessionRequest,
+    _key: str | None = Depends(_require_api_key),
+):
     """Create a new conversation session with a persona."""
     if req.persona_id and req.persona_data:
         raise HTTPException(
@@ -239,11 +348,12 @@ def create_session(req: CreateSessionRequest):
             )
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Persona file not found: {req.persona_id}")
+    except HTTPException:
+        raise  # Re-raise HTTPExceptions (path traversal, session cap)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    session_id = str(uuid.uuid4())[:8]
-    _sessions[session_id] = engine
+    session_id = _store_session(engine)
 
     return CreateSessionResponse(
         session_id=session_id,
@@ -252,8 +362,13 @@ def create_session(req: CreateSessionRequest):
     )
 
 
-@app.post("/sessions/{session_id}/chat", response_model=ChatResponse)
-def chat(session_id: str, req: ChatRequest):
+@app.post("/sessions/{session_id}/chat", response_model=ChatResponse,
+          dependencies=[Depends(_check_rate_limit)])
+def chat(
+    session_id: str,
+    req: ChatRequest,
+    _key: str | None = Depends(_require_api_key),
+):
     """Send a message and get a full response (IR + text + validation)."""
     engine = _get_session(session_id)
 
@@ -287,8 +402,13 @@ def chat(session_id: str, req: ChatRequest):
     )
 
 
-@app.post("/sessions/{session_id}/plan", response_model=PlanResponse)
-def plan(session_id: str, req: ChatRequest):
+@app.post("/sessions/{session_id}/plan", response_model=PlanResponse,
+          dependencies=[Depends(_check_rate_limit)])
+def plan(
+    session_id: str,
+    req: ChatRequest,
+    _key: str | None = Depends(_require_api_key),
+):
     """Generate IR only (no LLM call). Useful for debugging and testing."""
     engine = _get_session(session_id)
 
@@ -321,7 +441,10 @@ def plan(session_id: str, req: ChatRequest):
 
 
 @app.get("/sessions/{session_id}", response_model=SessionInfoResponse)
-def get_session_info(session_id: str):
+def get_session_info(
+    session_id: str,
+    _key: str | None = Depends(_require_api_key),
+):
     """Get information about an active session."""
     engine = _get_session(session_id)
     return SessionInfoResponse(
@@ -333,7 +456,10 @@ def get_session_info(session_id: str):
 
 
 @app.post("/sessions/{session_id}/reset")
-def reset_session(session_id: str):
+def reset_session(
+    session_id: str,
+    _key: str | None = Depends(_require_api_key),
+):
     """Reset session state (clears memory, resets turn counter)."""
     engine = _get_session(session_id)
     engine.reset()
@@ -341,31 +467,38 @@ def reset_session(session_id: str):
 
 
 @app.delete("/sessions/{session_id}")
-def delete_session(session_id: str):
+def delete_session(
+    session_id: str,
+    _key: str | None = Depends(_require_api_key),
+):
     """Delete a session."""
-    if session_id not in _sessions:
-        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
-    del _sessions[session_id]
+    with _sessions_lock:
+        if session_id not in _sessions:
+            raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+        del _sessions[session_id]
+        _session_timestamps.pop(session_id, None)
     return {"status": "ok", "message": "Session deleted"}
 
 
 @app.get("/sessions", response_model=list[SessionInfoResponse])
-def list_sessions():
+def list_sessions(_key: str | None = Depends(_require_api_key)):
     """List all active sessions."""
-    return [
-        SessionInfoResponse(
-            session_id=sid,
-            persona_label=engine.persona.label,
-            persona_id=engine.persona.persona_id,
-            turn_count=engine.turn_count,
-        )
-        for sid, engine in _sessions.items()
-    ]
+    with _sessions_lock:
+        _evict_expired_sessions()
+        return [
+            SessionInfoResponse(
+                session_id=sid,
+                persona_label=engine.persona.label,
+                persona_id=engine.persona.persona_id,
+                turn_count=engine.turn_count,
+            )
+            for sid, engine in _sessions.items()
+        ]
 
 
 @app.get("/personas", response_model=list[PersonaListItem])
 def list_personas():
-    """List available persona YAML files."""
+    """List available persona YAML files (no auth required)."""
     personas_dir = Path("personas")
     if not personas_dir.exists():
         return []

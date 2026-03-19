@@ -7,15 +7,19 @@ Uses FastAPI's TestClient for synchronous testing without starting a server.
 import pytest
 from fastapi.testclient import TestClient
 
-from persona_engine.server import app, _sessions
+from persona_engine.server import app, _sessions, _session_timestamps, _rate_limit_store
 
 
 @pytest.fixture(autouse=True)
 def clear_sessions():
-    """Clear session store before each test."""
+    """Clear session store and rate limiter before each test."""
     _sessions.clear()
+    _session_timestamps.clear()
+    _rate_limit_store.clear()
     yield
     _sessions.clear()
+    _session_timestamps.clear()
+    _rate_limit_store.clear()
 
 
 @pytest.fixture
@@ -306,3 +310,75 @@ class TestStrictModeServer:
         })
         assert resp.status_code == 200
         assert resp.json()["text"]
+
+
+# ---------------------------------------------------------------------------
+# Authentication
+# ---------------------------------------------------------------------------
+
+
+class TestAuthentication:
+    def test_no_auth_by_default(self, client):
+        """When PERSONA_API_KEY is unset, requests work without auth."""
+        resp = client.post("/sessions", json={
+            "persona_id": "chef.yaml",
+            "llm_provider": "mock",
+        })
+        assert resp.status_code == 201
+
+    def test_auth_rejects_bad_key(self, client, monkeypatch):
+        """When PERSONA_API_KEY is set, bad keys are rejected."""
+        import persona_engine.server as srv
+        monkeypatch.setattr(srv, "_API_KEY", "secret-key-123")
+        resp = client.post(
+            "/sessions",
+            json={"persona_id": "chef.yaml", "llm_provider": "mock"},
+            headers={"X-API-Key": "wrong-key"},
+        )
+        assert resp.status_code == 401
+
+    def test_auth_accepts_correct_key(self, client, monkeypatch):
+        """When PERSONA_API_KEY is set, correct key works."""
+        import persona_engine.server as srv
+        monkeypatch.setattr(srv, "_API_KEY", "secret-key-123")
+        resp = client.post(
+            "/sessions",
+            json={"persona_id": "chef.yaml", "llm_provider": "mock"},
+            headers={"X-API-Key": "secret-key-123"},
+        )
+        assert resp.status_code == 201
+
+    def test_health_no_auth_needed(self, client, monkeypatch):
+        """Health endpoint works even with auth enabled."""
+        import persona_engine.server as srv
+        monkeypatch.setattr(srv, "_API_KEY", "secret-key-123")
+        resp = client.get("/health")
+        assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Session Management (cap + TTL)
+# ---------------------------------------------------------------------------
+
+
+class TestSessionManagement:
+    def test_session_cap_enforced(self, client, monkeypatch):
+        """Exceeding max sessions returns 503."""
+        import persona_engine.server as srv
+        monkeypatch.setattr(srv, "_MAX_SESSIONS", 2)
+
+        # Create 2 sessions (should work)
+        for _ in range(2):
+            resp = client.post("/sessions", json={
+                "persona_id": "chef.yaml",
+                "llm_provider": "mock",
+            })
+            assert resp.status_code == 201
+
+        # Third should fail
+        resp = client.post("/sessions", json={
+            "persona_id": "chef.yaml",
+            "llm_provider": "mock",
+        })
+        assert resp.status_code == 503
+        assert "Maximum sessions" in resp.json()["detail"]
