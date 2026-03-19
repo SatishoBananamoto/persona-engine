@@ -33,7 +33,7 @@ import uuid
 logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import yaml  # type: ignore[import-untyped]
 

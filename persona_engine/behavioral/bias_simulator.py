@@ -13,9 +13,11 @@ Design Principles:
 - Biases never override safety constraints or expertise boundaries
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Literal
 
 from persona_engine.behavioral.negation import (
     NEGATION_WORDS,
@@ -181,7 +183,7 @@ class BiasSimulator:
         self,
         user_input: str,
         value_alignment: float = 0.0,
-        ctx: Optional["TraceContext"] = None,
+        ctx: TraceContext | None = None,
         proficiency: float = 0.5,
     ) -> list[BiasModifier]:
         """
@@ -244,7 +246,7 @@ class BiasSimulator:
     def _compute_confirmation_bias(
         self,
         value_alignment: float,
-        ctx: Optional["TraceContext"] = None,
+        ctx: TraceContext | None = None,
     ) -> BiasModifier | None:
         """
         Confirmation Bias: Reduced elasticity when input aligns with existing beliefs.
@@ -288,7 +290,7 @@ class BiasSimulator:
     def _compute_negativity_bias(
         self,
         input_lower: str,
-        ctx: Optional["TraceContext"] = None,
+        ctx: TraceContext | None = None,
     ) -> BiasModifier | None:
         """
         Negativity Bias: Increased attention/arousal to negative input.
@@ -339,7 +341,7 @@ class BiasSimulator:
     def _compute_authority_bias(
         self,
         input_lower: str,
-        ctx: Optional["TraceContext"] = None,
+        ctx: TraceContext | None = None,
     ) -> BiasModifier | None:
         """
         Authority Bias: Increased confidence when input cites authorities.
@@ -395,7 +397,7 @@ class BiasSimulator:
 
     def _compute_anchoring_bias(
         self,
-        ctx: Optional["TraceContext"] = None,
+        ctx: TraceContext | None = None,
     ) -> BiasModifier | None:
         """Anchoring Bias: Once a stance is set, resist changing it.
 
@@ -435,7 +437,7 @@ class BiasSimulator:
     def _compute_status_quo_bias(
         self,
         input_lower: str,
-        ctx: Optional["TraceContext"] = None,
+        ctx: TraceContext | None = None,
     ) -> BiasModifier | None:
         """Status Quo Bias: Resist proposed changes.
 
@@ -481,7 +483,7 @@ class BiasSimulator:
     def _compute_availability_bias(
         self,
         input_lower: str,
-        ctx: Optional["TraceContext"] = None,
+        ctx: TraceContext | None = None,
     ) -> BiasModifier | None:
         """Availability Bias: Overweight negative examples (availability heuristic).
 
@@ -526,7 +528,7 @@ class BiasSimulator:
     def _compute_empathy_gap(
         self,
         input_lower: str,
-        ctx: Optional["TraceContext"] = None,
+        ctx: TraceContext | None = None,
     ) -> BiasModifier | None:
         """Empathy Gap: Underestimates others' emotional reactions.
 
@@ -575,7 +577,7 @@ class BiasSimulator:
     def _compute_dunning_kruger_bias(
         self,
         proficiency: float,
-        ctx: Optional["TraceContext"] = None,
+        ctx: TraceContext | None = None,
     ) -> BiasModifier | None:
         """Dunning-Kruger Bias: Overconfident when unknowledgeable.
 

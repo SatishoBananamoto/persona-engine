@@ -27,7 +27,7 @@ def client():
 def session_id(client):
     """Create a session and return its ID."""
     resp = client.post("/sessions", json={
-        "persona_id": "personas/chef.yaml",
+        "persona_id": "chef.yaml",
         "llm_provider": "mock",
     })
     assert resp.status_code == 201
@@ -45,7 +45,7 @@ class TestHealth:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ok"
-        assert data["version"] == "0.3.0"
+        assert data["version"] == "0.4.0"
         assert data["active_sessions"] == 0
 
 
@@ -57,7 +57,7 @@ class TestHealth:
 class TestSessions:
     def test_create_session_from_yaml(self, client):
         resp = client.post("/sessions", json={
-            "persona_id": "personas/chef.yaml",
+            "persona_id": "chef.yaml",
             "llm_provider": "mock",
         })
         assert resp.status_code == 201
@@ -84,7 +84,7 @@ class TestSessions:
 
     def test_create_session_both_persona_types_fails(self, client):
         resp = client.post("/sessions", json={
-            "persona_id": "personas/chef.yaml",
+            "persona_id": "chef.yaml",
             "persona_data": {"some": "data"},
             "llm_provider": "mock",
         })
@@ -92,7 +92,7 @@ class TestSessions:
 
     def test_create_session_nonexistent_file(self, client):
         resp = client.post("/sessions", json={
-            "persona_id": "personas/nonexistent.yaml",
+            "persona_id": "nonexistent.yaml",
             "llm_provider": "mock",
         })
         assert resp.status_code == 404
@@ -251,10 +251,50 @@ class TestPersonaLibrary:
 # ---------------------------------------------------------------------------
 
 
+class TestPathTraversalSecurity:
+    """Verify that persona_id cannot be used to read arbitrary files."""
+
+    def test_traversal_with_dotdot(self, client):
+        resp = client.post("/sessions", json={
+            "persona_id": "../../../etc/passwd",
+            "llm_provider": "mock",
+        })
+        assert resp.status_code == 400
+        assert "path traversal" in resp.json()["detail"].lower()
+
+    def test_traversal_with_absolute_path(self, client):
+        resp = client.post("/sessions", json={
+            "persona_id": "/etc/passwd",
+            "llm_provider": "mock",
+        })
+        assert resp.status_code == 400
+        assert "path traversal" in resp.json()["detail"].lower()
+
+    def test_traversal_with_nested_escape(self, client):
+        resp = client.post("/sessions", json={
+            "persona_id": "subdir/../../etc/passwd",
+            "llm_provider": "mock",
+        })
+        assert resp.status_code == 400
+        assert "path traversal" in resp.json()["detail"].lower()
+
+    def test_valid_persona_id_still_works(self, client):
+        resp = client.post("/sessions", json={
+            "persona_id": "chef.yaml",
+            "llm_provider": "mock",
+        })
+        assert resp.status_code == 201
+
+
+# ---------------------------------------------------------------------------
+# Strict Mode
+# ---------------------------------------------------------------------------
+
+
 class TestStrictModeServer:
     def test_strict_mode_session(self, client):
         resp = client.post("/sessions", json={
-            "persona_id": "personas/chef.yaml",
+            "persona_id": "chef.yaml",
             "llm_provider": "template",
             "strict_mode": True,
         })

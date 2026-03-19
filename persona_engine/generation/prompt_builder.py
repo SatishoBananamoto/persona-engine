@@ -5,7 +5,7 @@ Transforms Intermediate Representation (IR) into structured prompts
 that guide LLM generation to match persona constraints.
 """
 
-from typing import Optional
+from __future__ import annotations
 from persona_engine.schema.ir_schema import (
     IntermediateRepresentation,
     Tone,
@@ -85,9 +85,9 @@ Do NOT break character or acknowledge that you are an AI.
         self,
         ir: IntermediateRepresentation,
         user_input: str,
-        persona: Optional[Persona] = None,
-        memory_context: Optional[dict] = None,
-        behavioral_directives: Optional[list[str]] = None,
+        persona: Persona | None = None,
+        memory_context: dict | None = None,
+        behavioral_directives: list[str] | None = None,
     ) -> str:
         """
         Build the generation prompt with IR constraints.

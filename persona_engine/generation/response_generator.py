@@ -5,10 +5,11 @@ Main orchestrator that combines IR processing, LLM generation,
 and post-processing into a complete response generation pipeline.
 """
 
+from __future__ import annotations
+
 import logging
 import time
 from enum import StrEnum
-from typing import Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -103,7 +104,7 @@ class ResponseGenerator:
     def __init__(
         self,
         persona: Persona,
-        adapter: Optional[BaseLLMAdapter] = None,
+        adapter: BaseLLMAdapter | None = None,
         provider: str = "anthropic",
         strict_mode: bool = False
     ):
@@ -136,9 +137,9 @@ class ResponseGenerator:
         ir: IntermediateRepresentation,
         user_input: str,
         max_tokens: int = 1024,
-        temperature: Optional[float] = None,
-        memory_context: Optional[dict] = None,
-        conversation_history: Optional[list[dict[str, str]]] = None,
+        temperature: float | None = None,
+        memory_context: dict | None = None,
+        conversation_history: list[dict[str, str]] | None = None,
     ) -> GeneratedResponse:
         """
         Generate a response based on IR constraints.
@@ -264,7 +265,7 @@ class ResponseGenerator:
 def create_response_generator(
     persona: Persona,
     provider: str = "anthropic",
-    api_key: Optional[str] = None,
+    api_key: str | None = None,
     strict_mode: bool = False
 ) -> ResponseGenerator:
     """

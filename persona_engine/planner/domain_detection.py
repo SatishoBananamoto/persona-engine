@@ -10,9 +10,11 @@ Production-grade domain detection that:
 - prevents double-counting of phrases and unigrams
 """
 
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from persona_engine.planner.trace_context import TraceContext
@@ -174,7 +176,7 @@ _PRIORITY_PERSONA = 1  # persona wins ties
 def detect_domain(
     user_input: str,
     persona_domains: list[dict] | None = None,
-    ctx: Optional["TraceContext"] = None,
+    ctx: TraceContext | None = None,
 ) -> tuple[str, float]:
     """
     Detect domain from user input using keyword scoring.
@@ -308,7 +310,7 @@ ADJACENCY_DECAY = 0.4
 def compute_domain_adjacency(
     detected_domain: str,
     persona_domains: list[dict] | None = None,
-    ctx: Optional["TraceContext"] = None,
+    ctx: TraceContext | None = None,
 ) -> tuple[float, str | None]:
     """
     Compute how close the detected domain is to the persona's known domains.
@@ -412,7 +414,7 @@ def compute_topic_relevance(
     user_input: str,
     persona_domains: list[Any] | None = None,
     persona_goals: list[Any] | None = None,
-    ctx: Optional["TraceContext"] = None,
+    ctx: TraceContext | None = None,
     default_relevance: float = DEFAULT_TOPIC_RELEVANCE,
 ) -> float:
     """
@@ -586,7 +588,7 @@ def _is_sentence_start(text: str, phrase: str) -> bool:
 
 def detect_evidence_strength(
     user_input: str,
-    ctx: Optional["TraceContext"] = None,
+    ctx: TraceContext | None = None,
 ) -> float:
     """
     Detect if user input contains evidence of disagreement/challenge.
@@ -715,7 +717,7 @@ def generate_intent_string(
     conversation_goal: str,
     uncertainty_action: str,
     needs_clarification: bool = False,
-    ctx: Optional["TraceContext"] = None,
+    ctx: TraceContext | None = None,
 ) -> str:
     """
     Generate meaningful intent string for IR.

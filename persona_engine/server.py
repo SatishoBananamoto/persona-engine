@@ -54,7 +54,7 @@ class CreateSessionRequest(BaseModel):
     """Request to create a new conversation session."""
     persona_id: str | None = Field(
         None,
-        description="Path to a YAML persona file (e.g. 'personas/chef.yaml')",
+        description="Persona filename relative to the personas/ directory (e.g. 'chef.yaml')",
     )
     persona_data: dict[str, Any] | None = Field(
         None,
