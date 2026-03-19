@@ -174,12 +174,14 @@ class TestUncertaintyResolverDynamicState:
     def test_high_stress_lowers_effective_confidence(self):
         """Stressed persona with moderate confidence should hedge instead of answer."""
         citations = []
-        # Without stress: confidence=0.65, risk_tolerance=0.7 → ANSWER
+        # Without stress: confidence=0.65, risk_tolerance=0.7, competence=0.8 → ANSWER
+        # (competence must match proficiency to avoid moderate-competence SPECULATE path)
         result_calm = resolve_uncertainty_action(
             proficiency=0.8, confidence=0.65,
             risk_tolerance=0.7, need_for_closure=0.5,
             time_pressure=0.3, claim_policy_lookup_behavior="hedge",
             citations=citations, stress=0.0, fatigue=0.0,
+            competence=0.8,
         )
         assert result_calm == UncertaintyAction.ANSWER
 
@@ -191,6 +193,7 @@ class TestUncertaintyResolverDynamicState:
             risk_tolerance=0.4, need_for_closure=0.5,
             time_pressure=0.3, claim_policy_lookup_behavior="hedge",
             citations=citations2, stress=0.9, fatigue=0.0,
+            competence=0.8,
         )
         # With stress penalty, effective confidence drops → should hedge
         assert result_stressed == UncertaintyAction.HEDGE

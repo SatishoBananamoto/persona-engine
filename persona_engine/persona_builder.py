@@ -1251,7 +1251,7 @@ def _infer_culture(location: str) -> str:
     """Guess primary culture from location."""
     loc_lower = location.lower()
     culture_map = {
-        "american": ["us", "usa", "united states", "america", "new york", "chicago",
+        "American": ["us", "usa", "united states", "america", "new york", "chicago",
                       "los angeles", "san francisco", "seattle", "boston", "miami",
                       "texas", "california"],
         "British": ["uk", "united kingdom", "britain", "london", "england", "scotland", "wales"],
