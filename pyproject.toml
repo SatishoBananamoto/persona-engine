@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "persona-engine"
-version = "0.1.0"
+version = "0.2.0"
 description = "Universal conversational persona system with full psychological framework"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
-    {name = "Persona Engine Team"}
+    {name = "Satish Patil"}
 ]
 keywords = ["persona", "ai", "psychology", "simulation", "testing", "llm"]
 classifiers = [
@@ -50,12 +50,13 @@ dev = [
     "black>=23.0.0",
     "ruff>=0.1.0",
     "mypy>=1.7.0",
+    "hypothesis>=6.0.0",
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/persona-engine"
+Homepage = "https://github.com/SatishoBananamoto/persona-engine"
 Documentation = "https://persona-engine.readthedocs.io"
-Repository = "https://github.com/yourusername/persona-engine"
+Repository = "https://github.com/SatishoBananamoto/persona-engine"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -84,4 +85,4 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=persona_engine --cov-report=html --cov-report=term"
+addopts = "-v"

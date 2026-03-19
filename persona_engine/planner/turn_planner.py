@@ -255,11 +255,7 @@ class TurnPlanner:
             ctx=ctx,
         )
 
-        # State evolution
-        self.state.evolve_state_post_turn(
-            conversation_length=context.turn_number,
-            topic_relevance=topic_relevance,
-        )
+        # NOTE: State evolution moved to _stage_finalization (post-turn, not pre-turn)
 
         # Intent analysis
         inferred_mode, inferred_goal, user_intent, needs_clarification = analyze_intent(
@@ -666,6 +662,12 @@ class TurnPlanner:
         # Store snapshot for cross-turn dynamics
         self._prior_snapshot = TurnSnapshot.from_ir(
             ir, context.turn_number, context.topic_signature
+        )
+
+        # State evolution — applied AFTER IR is finalized (post-turn, not pre-turn)
+        self.state.evolve_state_post_turn(
+            conversation_length=context.turn_number,
+            topic_relevance=foundation["topic_relevance"],
         )
 
         return ir

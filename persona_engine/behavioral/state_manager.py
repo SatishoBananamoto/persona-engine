@@ -260,14 +260,14 @@ class StateManager:
         """Add small random variations to state (human unpredictability)"""
         noise_budget = 0.03
 
-        self.state.mood_valence = self.determinism.add_noise(
+        self.state.mood_valence = max(-1.0, min(1.0, self.determinism.add_noise(
             self.state.mood_valence,
             noise_budget
-        )
-        self.state.mood_arousal = self.determinism.add_noise(
+        )))
+        self.state.mood_arousal = max(0.0, min(1.0, self.determinism.add_noise(
             self.state.mood_arousal,
             noise_budget
-        )
+        )))
 
     # ========================================================================
     # State Influence on Behavior

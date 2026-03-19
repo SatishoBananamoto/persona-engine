@@ -122,9 +122,21 @@ class StyleModulator:
         target: Verbosity
     ) -> Optional[ConstraintViolation]:
         """Check if text matches target verbosity."""
+        # MINIMAL is word-based, not sentence-based (matches enforce_verbosity logic)
+        if target == Verbosity.MINIMAL:
+            words = text.strip().split()
+            if len(words) > 10:
+                return ConstraintViolation(
+                    constraint="verbosity",
+                    expected="minimal (≤10 words)",
+                    actual=f"{len(words)} words",
+                    severity="warning"
+                )
+            return None
+
         sentences = self._split_sentences(text)
         min_s, max_s = self.VERBOSITY_TARGETS[target]
-        
+
         if len(sentences) < min_s:
             return ConstraintViolation(
                 constraint="verbosity",
@@ -200,7 +212,14 @@ class StyleModulator:
         from persona_engine.schema.ir_schema import KnowledgeClaimType
         
         claim_type = ir.knowledge_disclosure.knowledge_claim_type
-        
+
+        # Pre-compute strong assertion detection (used by multiple branches)
+        strong_assertions = [
+            "definitely", "certainly", "always", "never",
+            "the fact is", "studies show", "research proves"
+        ]
+        has_strong = any(phrase in text_lower for phrase in strong_assertions)
+
         # If speculative, should have hedging
         if claim_type in (KnowledgeClaimType.SPECULATIVE, KnowledgeClaimType.NONE):
             hedging_phrases = [
@@ -208,14 +227,7 @@ class StyleModulator:
                 "could be", "not sure", "uncertain", "my guess"
             ]
             has_hedging = any(phrase in text_lower for phrase in hedging_phrases)
-            
-            # Only flag if making strong assertions without hedging
-            strong_assertions = [
-                "definitely", "certainly", "always", "never",
-                "the fact is", "studies show", "research proves"
-            ]
-            has_strong = any(phrase in text_lower for phrase in strong_assertions)
-            
+
             if has_strong and not has_hedging:
                 violations.append(ConstraintViolation(
                     constraint="knowledge_claim",

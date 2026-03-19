@@ -144,7 +144,9 @@ class TestConstructor:
 
     def test_copies_social_roles(self, persona):
         engine = BehavioralRulesEngine(persona)
-        assert engine.social_roles is persona.social_roles
+        # Defensive copy — must not share reference with persona to prevent mutation
+        assert engine.social_roles is not persona.social_roles
+        assert engine.social_roles == persona.social_roles
 
     def test_copies_decision_policies(self, persona):
         engine = BehavioralRulesEngine(persona)

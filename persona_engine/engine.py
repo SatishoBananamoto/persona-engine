@@ -627,16 +627,39 @@ class PersonaEngine:
         topic: str | None,
     ) -> IntermediateRepresentation:
         """Build ConversationContext and delegate to TurnPlanner."""
+        topic_sig = topic or self._derive_topic_signature(user_input)
         context = ConversationContext(
             conversation_id=self._conversation_id,
             turn_number=self._turn_number,
             interaction_mode=mode,
             goal=goal,
-            topic_signature=topic or "",
+            topic_signature=topic_sig,
             user_input=user_input,
             stance_cache=self._stance_cache,
         )
         return self._planner.generate_ir(context)
+
+    @staticmethod
+    def _derive_topic_signature(user_input: str) -> str:
+        """Derive a topic signature from user input to avoid stance cache collisions.
+
+        Extracts content words (3+ chars, lowered, sorted) to create a
+        stable signature that groups semantically similar inputs together.
+        """
+        stop_words = {
+            "the", "and", "for", "are", "but", "not", "you", "all",
+            "can", "had", "her", "was", "one", "our", "out", "has",
+            "have", "been", "will", "with", "this", "that", "from",
+            "they", "what", "about", "would", "there", "their", "which",
+            "could", "other", "into", "more", "some", "than", "them",
+            "very", "when", "come", "make", "like", "just", "know",
+            "take", "does", "how", "your", "also",
+        }
+        words = sorted(set(
+            w for w in user_input.lower().split()
+            if len(w) >= 3 and w not in stop_words
+        ))
+        return "_".join(words[:6]) if words else "general"
 
     def _run_validation(
         self,

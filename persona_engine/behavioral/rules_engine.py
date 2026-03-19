@@ -23,7 +23,8 @@ class BehavioralRulesEngine:
 
     def __init__(self, persona: Persona):
         self.persona = persona
-        self.social_roles = persona.social_roles
+        # Copy social_roles to avoid mutating the persona's original dict
+        self.social_roles = dict(persona.social_roles)
         self.decision_policies = persona.decision_policies
         self.response_patterns = persona.response_patterns
         self.base_communication = persona.psychology.communication

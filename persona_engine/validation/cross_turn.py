@@ -56,7 +56,7 @@ class TurnSnapshot:
             claim_type=ir.knowledge_disclosure.knowledge_claim_type.value,
             stance=ir.response_structure.stance,
             topic=topic,
-            elasticity=ir.response_structure.elasticity,
+            elasticity=ir.response_structure.elasticity if ir.response_structure.elasticity is not None else 0.5,
             competence=ir.response_structure.competence,
         )
 
