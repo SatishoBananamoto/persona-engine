@@ -106,20 +106,22 @@ class TraitInterpreter:
         """
         High E: Proactively engages, initiates conversation
         Low E: More reactive, waits for prompts
+        Floor/ceiling added: even introverts sometimes initiate.
 
-        Returns: Proactivity score (0-1)
+        Returns: Proactivity score (0.2-0.8)
         """
-        return self.traits.extraversion
+        return 0.2 + self.traits.extraversion * 0.6
 
     def get_self_disclosure_modifier(self) -> float:
         """
         High E: More willing to share personal info
+        High N: Discloses more negative personal content (rumination/venting)
         Low E: More reserved
 
-        Returns: Modifier to apply to disclosure_level (-0.2 to +0.2)
+        Returns: Modifier to apply to disclosure_level (-0.2 to +0.3)
         """
-        # Center at 0.5, map to -0.2 to +0.2
-        return (self.traits.extraversion - 0.5) * 0.4
+        # E drives social disclosure, N drives emotional disclosure (Tackman et al. 2023)
+        return (self.traits.extraversion - 0.5) * 0.4 + self.traits.neuroticism * 0.1
 
     def influences_response_length_social(self) -> float:
         """
@@ -129,8 +131,9 @@ class TraitInterpreter:
         return self.traits.extraversion
 
     def get_enthusiasm_baseline(self) -> float:
-        """Baseline enthusiasm level (influences tone selection)"""
-        return self.traits.extraversion
+        """Baseline enthusiasm level (influences tone selection).
+        Floor/ceiling: low-E still has some enthusiasm, high-E not maximal."""
+        return 0.2 + self.traits.extraversion * 0.5
 
     # ========================================================================
     # AGREEABLENESS → Behavior Mappings
@@ -164,8 +167,9 @@ class TraitInterpreter:
         return self.traits.agreeableness
 
     def influences_hedging_frequency(self) -> float:
-        """High A: Uses more hedging language"""
-        return self.traits.agreeableness * 0.6
+        """High A + High N: Uses more hedging language.
+        A drives politeness-hedging, N drives self-doubt-hedging (Pennebaker & King 1999)."""
+        return min(0.8, self.traits.agreeableness * 0.6 + self.traits.neuroticism * 0.2)
 
     # ========================================================================
     # NEUROTICISM → Behavior Mappings
@@ -293,8 +297,9 @@ class TraitInterpreter:
         Returns:
             Modified confidence
         """
-        c_boost = (self.traits.conscientiousness - 0.5) * 0.1
-        n_penalty = self.traits.neuroticism * 0.15
+        # Calibrated: N→self-efficacy r=-.35, C→self-efficacy r~.30 (meta-analyses)
+        c_boost = (self.traits.conscientiousness - 0.5) * 0.15  # was 0.1
+        n_penalty = self.traits.neuroticism * 0.20  # was 0.15
 
         adjusted = domain_proficiency + c_boost - n_penalty
         return max(0.1, min(0.95, adjusted))

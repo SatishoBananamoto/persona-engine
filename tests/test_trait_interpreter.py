@@ -293,14 +293,19 @@ class TestGetFollowThroughLikelihood:
 # ============================================================================
 
 class TestInfluencesProactivity:
-    def test_returns_extraversion(self):
-        assert make_interpreter(extraversion=0.77).influences_proactivity() == pytest.approx(0.77)
+    """Formula: 0.2 + E * 0.6, range [0.2, 0.8]"""
+
+    def test_returns_proactivity(self):
+        # 0.2 + 0.77 * 0.6 = 0.2 + 0.462 = 0.662
+        assert make_interpreter(extraversion=0.77).influences_proactivity() == pytest.approx(0.662)
 
     def test_zero(self):
-        assert make_interpreter(extraversion=0.0).influences_proactivity() == pytest.approx(0.0)
+        # 0.2 + 0.0 * 0.6 = 0.2
+        assert make_interpreter(extraversion=0.0).influences_proactivity() == pytest.approx(0.2)
 
     def test_one(self):
-        assert make_interpreter(extraversion=1.0).influences_proactivity() == pytest.approx(1.0)
+        # 0.2 + 1.0 * 0.6 = 0.8
+        assert make_interpreter(extraversion=1.0).influences_proactivity() == pytest.approx(0.8)
 
 
 # ============================================================================
@@ -308,35 +313,38 @@ class TestInfluencesProactivity:
 # ============================================================================
 
 class TestGetSelfDisclosureModifier:
-    """Formula: (extraversion - 0.5) * 0.4,  range [-0.2, +0.2]"""
+    """Formula: (E - 0.5) * 0.4 + N * 0.1,  range [-0.2, +0.3]
+    Note: make_interpreter defaults N=0.5, so N*0.1 = 0.05 unless overridden."""
 
     def test_high_extraversion(self):
-        # (1.0 - 0.5) * 0.4 = 0.2
-        assert make_interpreter(extraversion=1.0).get_self_disclosure_modifier() == pytest.approx(0.2)
+        # (1.0 - 0.5) * 0.4 + 0.5 * 0.1 = 0.2 + 0.05 = 0.25
+        assert make_interpreter(extraversion=1.0).get_self_disclosure_modifier() == pytest.approx(0.25)
 
     def test_low_extraversion(self):
-        # (0.0 - 0.5) * 0.4 = -0.2
-        assert make_interpreter(extraversion=0.0).get_self_disclosure_modifier() == pytest.approx(-0.2)
+        # (0.0 - 0.5) * 0.4 + 0.5 * 0.1 = -0.2 + 0.05 = -0.15
+        assert make_interpreter(extraversion=0.0).get_self_disclosure_modifier() == pytest.approx(-0.15)
 
     def test_midpoint_extraversion(self):
-        # (0.5 - 0.5) * 0.4 = 0.0
-        assert make_interpreter(extraversion=0.5).get_self_disclosure_modifier() == pytest.approx(0.0)
+        # (0.5 - 0.5) * 0.4 + 0.5 * 0.1 = 0.0 + 0.05 = 0.05
+        assert make_interpreter(extraversion=0.5).get_self_disclosure_modifier() == pytest.approx(0.05)
 
     def test_slightly_above_mid(self):
-        # (0.75 - 0.5) * 0.4 = 0.1
-        assert make_interpreter(extraversion=0.75).get_self_disclosure_modifier() == pytest.approx(0.1)
+        # (0.75 - 0.5) * 0.4 + 0.5 * 0.1 = 0.1 + 0.05 = 0.15
+        assert make_interpreter(extraversion=0.75).get_self_disclosure_modifier() == pytest.approx(0.15)
 
     def test_slightly_below_mid(self):
-        # (0.25 - 0.5) * 0.4 = -0.1
-        assert make_interpreter(extraversion=0.25).get_self_disclosure_modifier() == pytest.approx(-0.1)
+        # (0.25 - 0.5) * 0.4 + 0.5 * 0.1 = -0.1 + 0.05 = -0.05
+        assert make_interpreter(extraversion=0.25).get_self_disclosure_modifier() == pytest.approx(-0.05)
 
     def test_range_lower_bound(self):
-        result = make_interpreter(extraversion=0.0).get_self_disclosure_modifier()
+        # (0.0 - 0.5) * 0.4 + 0.0 * 0.1 = -0.2
+        result = make_interpreter(extraversion=0.0, neuroticism=0.0).get_self_disclosure_modifier()
         assert result >= -0.2
 
     def test_range_upper_bound(self):
-        result = make_interpreter(extraversion=1.0).get_self_disclosure_modifier()
-        assert result <= 0.2
+        # (1.0 - 0.5) * 0.4 + 1.0 * 0.1 = 0.2 + 0.1 = 0.3
+        result = make_interpreter(extraversion=1.0, neuroticism=1.0).get_self_disclosure_modifier()
+        assert result == pytest.approx(0.3)
 
 
 # ============================================================================
@@ -356,11 +364,15 @@ class TestInfluencesResponseLengthSocial:
 # ============================================================================
 
 class TestGetEnthusiasmBaseline:
-    def test_returns_extraversion(self):
-        assert make_interpreter(extraversion=0.88).get_enthusiasm_baseline() == pytest.approx(0.88)
+    """Formula: 0.2 + E * 0.5, range [0.2, 0.7]"""
+
+    def test_returns_enthusiasm(self):
+        # 0.2 + 0.88 * 0.5 = 0.2 + 0.44 = 0.64
+        assert make_interpreter(extraversion=0.88).get_enthusiasm_baseline() == pytest.approx(0.64)
 
     def test_zero(self):
-        assert make_interpreter(extraversion=0.0).get_enthusiasm_baseline() == pytest.approx(0.0)
+        # 0.2 + 0.0 * 0.5 = 0.2
+        assert make_interpreter(extraversion=0.0).get_enthusiasm_baseline() == pytest.approx(0.2)
 
 
 # ============================================================================
@@ -450,20 +462,24 @@ class TestGetConflictAvoidance:
 # ============================================================================
 
 class TestInfluencesHedgingFrequency:
-    """Formula: agreeableness * 0.6"""
+    """Formula: min(0.8, A * 0.6 + N * 0.2)
+    Note: make_interpreter defaults N=0.5, so N*0.2 = 0.1 unless overridden."""
 
     def test_high_agreeableness(self):
-        assert make_interpreter(agreeableness=1.0).influences_hedging_frequency() == pytest.approx(0.6)
+        # min(0.8, 1.0 * 0.6 + 0.5 * 0.2) = min(0.8, 0.6 + 0.1) = 0.7
+        assert make_interpreter(agreeableness=1.0).influences_hedging_frequency() == pytest.approx(0.7)
 
     def test_low_agreeableness(self):
-        assert make_interpreter(agreeableness=0.0).influences_hedging_frequency() == pytest.approx(0.0)
+        # min(0.8, 0.0 * 0.6 + 0.5 * 0.2) = min(0.8, 0.0 + 0.1) = 0.1
+        assert make_interpreter(agreeableness=0.0).influences_hedging_frequency() == pytest.approx(0.1)
 
     def test_mid_agreeableness(self):
-        assert make_interpreter(agreeableness=0.5).influences_hedging_frequency() == pytest.approx(0.3)
+        # min(0.8, 0.5 * 0.6 + 0.5 * 0.2) = min(0.8, 0.3 + 0.1) = 0.4
+        assert make_interpreter(agreeableness=0.5).influences_hedging_frequency() == pytest.approx(0.4)
 
     def test_arbitrary_value(self):
-        # 0.8 * 0.6 = 0.48
-        assert make_interpreter(agreeableness=0.8).influences_hedging_frequency() == pytest.approx(0.48)
+        # min(0.8, 0.8 * 0.6 + 0.5 * 0.2) = min(0.8, 0.48 + 0.1) = 0.58
+        assert make_interpreter(agreeableness=0.8).influences_hedging_frequency() == pytest.approx(0.58)
 
 
 # ============================================================================
@@ -800,53 +816,53 @@ class TestGetToneFromMood:
 
 class TestGetConfidenceModifier:
     """
-    c_boost = (conscientiousness - 0.5) * 0.1
-    n_penalty = neuroticism * 0.15
+    c_boost = (conscientiousness - 0.5) * 0.15
+    n_penalty = neuroticism * 0.20
     adjusted = domain_proficiency + c_boost - n_penalty
     clamped [0.1, 0.95]
     """
 
     def test_mid_traits_mid_proficiency(self):
-        # C=0.5 -> c_boost=0, N=0.5 -> n_penalty=0.075
-        # adjusted = 0.5 + 0 - 0.075 = 0.425
+        # C=0.5 -> c_boost=0, N=0.5 -> n_penalty=0.1
+        # adjusted = 0.5 + 0 - 0.1 = 0.4
         interp = make_interpreter(conscientiousness=0.5, neuroticism=0.5)
-        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.425)
+        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.4)
 
     def test_high_c_boost(self):
-        # C=1.0 -> c_boost=0.05, N=0 -> n_penalty=0
-        # adjusted = 0.5 + 0.05 = 0.55
+        # C=1.0 -> c_boost=(1.0-0.5)*0.15=0.075, N=0 -> n_penalty=0
+        # adjusted = 0.5 + 0.075 = 0.575
         interp = make_interpreter(conscientiousness=1.0, neuroticism=0.0)
-        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.55)
+        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.575)
 
     def test_low_c_penalty(self):
-        # C=0.0 -> c_boost=(0-0.5)*0.1=-0.05, N=0 -> n_penalty=0
-        # adjusted = 0.5 - 0.05 = 0.45
+        # C=0.0 -> c_boost=(0-0.5)*0.15=-0.075, N=0 -> n_penalty=0
+        # adjusted = 0.5 - 0.075 = 0.425
         interp = make_interpreter(conscientiousness=0.0, neuroticism=0.0)
-        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.45)
+        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.425)
 
     def test_high_n_penalty(self):
-        # C=0.5 -> c_boost=0, N=1.0 -> n_penalty=0.15
-        # adjusted = 0.5 - 0.15 = 0.35
+        # C=0.5 -> c_boost=0, N=1.0 -> n_penalty=0.20
+        # adjusted = 0.5 - 0.20 = 0.3
         interp = make_interpreter(conscientiousness=0.5, neuroticism=1.0)
-        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.35)
+        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.3)
 
     def test_combined_boost_and_penalty(self):
-        # C=0.8 -> c_boost=0.03, N=0.4 -> n_penalty=0.06
-        # adjusted = 0.7 + 0.03 - 0.06 = 0.67
+        # C=0.8 -> c_boost=(0.8-0.5)*0.15=0.045, N=0.4 -> n_penalty=0.4*0.20=0.08
+        # adjusted = 0.7 + 0.045 - 0.08 = 0.665
         interp = make_interpreter(conscientiousness=0.8, neuroticism=0.4)
-        assert interp.get_confidence_modifier(0.7) == pytest.approx(0.67)
+        assert interp.get_confidence_modifier(0.7) == pytest.approx(0.665)
 
     # --- Clamping ---
 
     def test_clamped_to_min(self):
-        # C=0.0 -> c_boost=-0.05, N=1.0 -> n_penalty=0.15
-        # adjusted = 0.0 - 0.05 - 0.15 = -0.2 -> clamped to 0.1
+        # C=0.0 -> c_boost=-0.075, N=1.0 -> n_penalty=0.20
+        # adjusted = 0.0 - 0.075 - 0.20 = -0.275 -> clamped to 0.1
         interp = make_interpreter(conscientiousness=0.0, neuroticism=1.0)
         assert interp.get_confidence_modifier(0.0) == pytest.approx(0.1)
 
     def test_clamped_to_max(self):
-        # C=1.0 -> c_boost=0.05, N=0.0 -> n_penalty=0
-        # adjusted = 1.0 + 0.05 = 1.05 -> clamped to 0.95
+        # C=1.0 -> c_boost=0.075, N=0.0 -> n_penalty=0
+        # adjusted = 1.0 + 0.075 = 1.075 -> clamped to 0.95
         interp = make_interpreter(conscientiousness=1.0, neuroticism=0.0)
         assert interp.get_confidence_modifier(1.0) == pytest.approx(0.95)
 
@@ -988,8 +1004,8 @@ class TestGetTraitMarkersForValidation:
         assert e["level"] == "high"
         assert e["expect_proactive_engagement"] is True
         assert e["response_length_modifier"] == "longer"
-        # disclosure_modifier = (0.9 - 0.5) * 0.4 = 0.16
-        assert e["disclosure_modifier"] == pytest.approx(0.16)
+        # disclosure_modifier = (0.9 - 0.5) * 0.4 + 0.5 * 0.1 = 0.16 + 0.05 = 0.21
+        assert e["disclosure_modifier"] == pytest.approx(0.21)
 
     def test_extraversion_moderate(self):
         result = make_interpreter(extraversion=0.5).get_trait_markers_for_validation()
@@ -997,7 +1013,8 @@ class TestGetTraitMarkersForValidation:
         assert e["level"] == "moderate"
         assert e["expect_proactive_engagement"] is False
         assert e["response_length_modifier"] == "shorter"
-        assert e["disclosure_modifier"] == pytest.approx(0.0)
+        # disclosure_modifier = (0.5 - 0.5) * 0.4 + 0.5 * 0.1 = 0.0 + 0.05 = 0.05
+        assert e["disclosure_modifier"] == pytest.approx(0.05)
 
     def test_extraversion_low(self):
         result = make_interpreter(extraversion=0.2).get_trait_markers_for_validation()
@@ -1229,7 +1246,8 @@ class TestCreateTraitInterpreter:
         interp = create_trait_interpreter(persona)
         assert interp.influences_abstract_reasoning() is True
         assert interp.get_novelty_seeking() == pytest.approx(0.9)
-        assert interp.influences_proactivity() == pytest.approx(0.2)
+        # 0.2 + 0.2 * 0.6 = 0.32
+        assert interp.influences_proactivity() == pytest.approx(0.32)
         assert interp.get_conflict_avoidance() == pytest.approx(0.7)
         assert interp.get_stress_sensitivity() == pytest.approx(0.4)
 
@@ -1259,9 +1277,9 @@ class TestEdgeCases:
         assert interp.influences_abstract_reasoning() is False
         assert interp.get_planning_language_tendency() == pytest.approx(0.0)
         assert interp.get_follow_through_likelihood() == pytest.approx(0.0)
-        assert interp.influences_proactivity() == pytest.approx(0.0)
+        assert interp.influences_proactivity() == pytest.approx(0.2)
         assert interp.get_self_disclosure_modifier() == pytest.approx(-0.2)
-        assert interp.get_enthusiasm_baseline() == pytest.approx(0.0)
+        assert interp.get_enthusiasm_baseline() == pytest.approx(0.2)
         assert interp.get_validation_tendency() == pytest.approx(0.0)
         assert interp.get_conflict_avoidance() == pytest.approx(0.0)
         assert interp.influences_hedging_frequency() == pytest.approx(0.0)
@@ -1283,12 +1301,12 @@ class TestEdgeCases:
         assert interp.influences_abstract_reasoning() is True
         assert interp.get_planning_language_tendency() == pytest.approx(1.0)
         assert interp.get_follow_through_likelihood() == pytest.approx(1.0)
-        assert interp.influences_proactivity() == pytest.approx(1.0)
-        assert interp.get_self_disclosure_modifier() == pytest.approx(0.2)
-        assert interp.get_enthusiasm_baseline() == pytest.approx(1.0)
+        assert interp.influences_proactivity() == pytest.approx(0.8)
+        assert interp.get_self_disclosure_modifier() == pytest.approx(0.3)
+        assert interp.get_enthusiasm_baseline() == pytest.approx(0.7)
         assert interp.get_validation_tendency() == pytest.approx(1.0)
         assert interp.get_conflict_avoidance() == pytest.approx(1.0)
-        assert interp.influences_hedging_frequency() == pytest.approx(0.6)
+        assert interp.influences_hedging_frequency() == pytest.approx(0.8)
         assert interp.get_stress_sensitivity() == pytest.approx(1.0)
         assert interp.influences_mood_stability() == pytest.approx(0.0)
         assert interp.get_anxiety_baseline() == pytest.approx(1.0)
@@ -1305,8 +1323,8 @@ class TestEdgeCases:
             neuroticism=0.5,
         )
         assert interp.get_novelty_seeking() == pytest.approx(0.5)
-        assert interp.get_self_disclosure_modifier() == pytest.approx(0.0)
-        assert interp.influences_hedging_frequency() == pytest.approx(0.3)
+        assert interp.get_self_disclosure_modifier() == pytest.approx(0.05)
+        assert interp.influences_hedging_frequency() == pytest.approx(0.4)
         assert interp.influences_mood_stability() == pytest.approx(0.5)
         # calibrated per psych literature: 0.5 * 0.5 = 0.25
         assert interp.get_negative_tone_bias() == pytest.approx(0.25)
