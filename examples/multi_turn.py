@@ -7,7 +7,7 @@ multiple turns, with memory and cross-turn validation active.
 
 from persona_engine import PersonaEngine
 
-engine = PersonaEngine.from_yaml("personas/physicist.yaml", llm_provider="mock")
+engine = PersonaEngine.from_yaml("personas/physicist.yaml", llm_provider="template")
 
 messages = [
     "What's your area of research?",

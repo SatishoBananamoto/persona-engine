@@ -18,7 +18,7 @@ persona_files = [
 ]
 
 for path in persona_files:
-    engine = PersonaEngine.from_yaml(path, llm_provider="mock")
+    engine = PersonaEngine.from_yaml(path, llm_provider="template")
     ir = engine.plan(prompt)
     rs = ir.response_structure
     cs = ir.communication_style

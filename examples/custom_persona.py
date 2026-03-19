@@ -27,7 +27,7 @@ print(f"  Claim policy: {persona.claim_policy.lookup_behavior}")
 print()
 
 # Use it in a conversation
-engine = PersonaEngine(persona, llm_provider="mock")
+engine = PersonaEngine(persona, llm_provider="template")
 result = engine.chat("What are the latest advances in neuroplasticity?")
 print(f"Response: {result.text[:150]}...")
 print(f"Competence: {result.competence:.2f}")

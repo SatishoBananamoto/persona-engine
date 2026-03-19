@@ -8,7 +8,7 @@ persona and have a multi-turn chat using the mock adapter (no API key).
 from persona_engine import PersonaEngine
 
 # Load persona from YAML, use mock adapter (no API key needed)
-engine = PersonaEngine.from_yaml("personas/chef.yaml", llm_provider="mock")
+engine = PersonaEngine.from_yaml("personas/chef.yaml", llm_provider="template")
 
 # 3-turn conversation
 for message in [

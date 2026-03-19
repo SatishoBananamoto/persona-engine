@@ -7,7 +7,7 @@ Shows the high-level Conversation API with iteration, summary, and export.
 from persona_engine import PersonaEngine, Conversation
 
 # Create engine and wrap in Conversation
-engine = PersonaEngine.from_yaml("personas/physicist.yaml", llm_provider="mock")
+engine = PersonaEngine.from_yaml("personas/physicist.yaml", llm_provider="template")
 convo = Conversation(engine, metadata={"purpose": "demo", "topic": "physics"})
 
 # Send messages using say()

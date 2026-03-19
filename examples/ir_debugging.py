@@ -7,7 +7,7 @@ then inspecting the structured plan for debugging.
 
 from persona_engine import PersonaEngine
 
-engine = PersonaEngine.from_yaml("personas/ux_researcher.yaml", llm_provider="mock")
+engine = PersonaEngine.from_yaml("personas/ux_researcher.yaml", llm_provider="template")
 
 # plan() generates IR without calling the LLM
 ir = engine.plan("What do you think about dark patterns in UX?")
