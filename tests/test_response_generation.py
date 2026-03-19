@@ -31,7 +31,7 @@ from persona_engine.generation.prompt_builder import (
     TONE_PROMPTS,
     UNCERTAINTY_PROMPTS,
     VERBOSITY_PROMPTS,
-    build_system_prompt,
+    build_ir_prompt as build_system_prompt,
     confidence_instruction,
     directness_instruction,
     disclosure_instruction,

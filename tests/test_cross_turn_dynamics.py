@@ -23,14 +23,16 @@ from persona_engine.planner.stance_generator import (
     _generate_expert_stance,
 )
 from persona_engine.planner.trace_context import TraceContext
+from persona_engine.planner.engine_config import DEFAULT_CONFIG
+from persona_engine.planner.stages.behavioral import _smooth
 from persona_engine.planner.turn_planner import (
-    CROSS_TURN_INERTIA,
-    FAMILIARITY_BOOST_CAP,
-    FAMILIARITY_BOOST_PER_EPISODE,
     ConversationContext,
     TurnPlanner,
-    _smooth,
 )
+
+CROSS_TURN_INERTIA = DEFAULT_CONFIG.cross_turn_inertia
+FAMILIARITY_BOOST_CAP = DEFAULT_CONFIG.familiarity_boost_cap
+FAMILIARITY_BOOST_PER_EPISODE = DEFAULT_CONFIG.familiarity_boost_per_episode
 from persona_engine.schema.ir_schema import InteractionMode, ConversationGoal
 from persona_engine.schema.persona_schema import Persona
 from persona_engine.validation.cross_turn import CrossTurnTracker, TurnSnapshot
@@ -384,7 +386,7 @@ class TestDynamicTimePressure:
         """Debate mode should reduce time pressure vs base."""
         planner = chef_engine._planner
         ctx = TraceContext()
-        tp_debate = planner._compute_time_pressure(
+        tp_debate = planner._knowledge.compute_time_pressure(
             InteractionMode.DEBATE, 1, ctx
         )
         tp_base = chef_engine._persona.time_scarcity
@@ -397,11 +399,11 @@ class TestDynamicTimePressure:
         """Time pressure should build after turn 5."""
         planner = chef_engine._planner
         ctx = TraceContext()
-        tp_early = planner._compute_time_pressure(
+        tp_early = planner._knowledge.compute_time_pressure(
             InteractionMode.CASUAL_CHAT, 2, ctx
         )
         ctx2 = TraceContext()
-        tp_late = planner._compute_time_pressure(
+        tp_late = planner._knowledge.compute_time_pressure(
             InteractionMode.CASUAL_CHAT, 10, ctx2
         )
         assert tp_late > tp_early, (
@@ -413,7 +415,7 @@ class TestDynamicTimePressure:
         """Time pressure should stay in [0, 1]."""
         planner = chef_engine._planner
         ctx = TraceContext()
-        tp = planner._compute_time_pressure(InteractionMode.SURVEY, 100, ctx)
+        tp = planner._knowledge.compute_time_pressure(InteractionMode.SURVEY, 100, ctx)
         assert 0.0 <= tp <= 1.0
 
 

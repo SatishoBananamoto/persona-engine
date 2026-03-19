@@ -23,7 +23,7 @@ from persona_engine.memory.stance_cache import StanceCache
 from persona_engine.planner.turn_planner import ConversationContext, TurnPlanner
 from persona_engine.generation import ResponseGenerator
 from persona_engine.generation.llm_adapter import TemplateAdapter
-from persona_engine.generation.prompt_builder import build_system_prompt
+from persona_engine.generation.prompt_builder import build_ir_prompt as build_system_prompt
 from persona_engine.schema.ir_schema import (
     CommunicationStyle,
     ConversationFrame,

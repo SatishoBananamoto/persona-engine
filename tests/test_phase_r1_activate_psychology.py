@@ -481,7 +481,7 @@ class TestZeroDeadMethods:
         persona = Persona(**make_persona_data(neuroticism=0.9))
         planner = TurnPlanner(persona, DeterminismManager(seed=42))
         ctx = TraceContext()
-        guidance = planner._compute_trait_guidance(ctx, "test")
+        guidance = planner._behavioral.compute_trait_guidance(ctx, "test")
         assert guidance.negative_tone_weight > 0.5
 
     def test_influences_proactivity_produces_directive(self):

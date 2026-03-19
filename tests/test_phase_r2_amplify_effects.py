@@ -28,13 +28,14 @@ from persona_engine.behavioral.trait_interpreter import (
 )
 from persona_engine.memory import StanceCache
 from persona_engine.planner.engine_config import DEFAULT_CONFIG, EngineConfig
+from persona_engine.planner.stages.behavioral import _smooth
 from persona_engine.planner.turn_planner import (
     ConversationContext,
     TurnPlanner,
-    CROSS_TURN_INERTIA,
-    PERSONALITY_FIELD_INERTIA,
-    _smooth,
 )
+
+CROSS_TURN_INERTIA = DEFAULT_CONFIG.cross_turn_inertia
+PERSONALITY_FIELD_INERTIA = DEFAULT_CONFIG.personality_field_inertia
 from persona_engine.schema.ir_schema import (
     ConversationGoal,
     InteractionMode,

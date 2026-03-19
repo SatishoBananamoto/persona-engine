@@ -32,7 +32,7 @@ from persona_engine.generation.prompt_builder import (
     confidence_instruction,
     elasticity_instruction,
     disclosure_instruction,
-    build_system_prompt,
+    build_ir_prompt,
 )
 
 __all__ = [
@@ -64,6 +64,6 @@ __all__ = [
     "confidence_instruction",
     "elasticity_instruction",
     "disclosure_instruction",
-    "build_system_prompt",
+    "build_ir_prompt",
 ]
 

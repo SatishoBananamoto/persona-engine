@@ -585,11 +585,11 @@ def _safety_instructions(ir: IntermediateRepresentation) -> str:
     return "\n".join(lines)
 
 
-def build_system_prompt(
+def build_ir_prompt(
     ir: IntermediateRepresentation,
     persona: "_Persona | None" = None,
 ) -> str:
-    """Convert an IR into a complete LLM system prompt.
+    """Convert an IR into an LLM behavioral prompt.
 
     Each IR field maps to a specific behavioral instruction so the LLM
     generates text that matches the persona's computed behavior.
@@ -599,7 +599,7 @@ def build_system_prompt(
         persona: Optional persona for identity context (name, background)
 
     Returns:
-        Complete system prompt string
+        Complete behavioral prompt string
     """
     sections: list[str] = []
 
