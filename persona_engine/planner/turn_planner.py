@@ -765,7 +765,8 @@ class TurnPlanner:
             topic_signature=context.topic_signature,
             proficiency=proficiency,
             expert_allowed=expert_allowed,
-            ctx=ctx
+            ctx=ctx,
+            domain=context.domain or "general",
         )
 
         return stance, rationale

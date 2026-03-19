@@ -19,8 +19,8 @@ from persona_engine.memory import MemoryManager
 from persona_engine.memory.relationship_store import RelationshipStore
 from persona_engine.planner.intent_analyzer import analyze_intent
 from persona_engine.planner.stance_generator import (
-    _extract_topic_hint,
-    _generate_expert_stance,
+    _extract_topic,
+    generate_stance_safe,
 )
 from persona_engine.planner.trace_context import TraceContext
 from persona_engine.planner.turn_planner import (
@@ -247,41 +247,68 @@ class TestCrossTurnSmoothing:
 class TestInputAwareStance:
     """Verify that stances use topic hints from user input."""
 
-    def test_extract_topic_hint_about(self):
-        hint = _extract_topic_hint("What do you think about French cooking techniques?")
-        assert hint is not None
-        assert "french" in hint.lower() or "cooking" in hint.lower()
+    def test_extract_topic_about(self):
+        topic = _extract_topic("What do you think about French cooking techniques?", "food")
+        assert topic.topic_hint is not None
+        assert "french" in topic.topic_hint.lower() or "cooking" in topic.topic_hint.lower()
 
-    def test_extract_topic_hint_how_to(self):
-        hint = _extract_topic_hint("How do you make a proper bechamel sauce?")
-        assert hint is not None
-        assert "bechamel" in hint.lower() or "sauce" in hint.lower()
+    def test_extract_topic_how_to(self):
+        topic = _extract_topic("How do you make a proper bechamel sauce?", "food")
+        assert topic.topic_hint is not None
+        assert "bechamel" in topic.topic_hint.lower() or "sauce" in topic.topic_hint.lower()
 
-    def test_extract_topic_hint_short(self):
-        """Very short input may not yield a hint."""
-        hint = _extract_topic_hint("Hi")
-        assert hint is None
+    def test_extract_topic_short(self):
+        """Very short input may not yield a topic hint."""
+        topic = _extract_topic("Hi", "general")
+        assert topic.topic_hint is None
 
-    def test_expert_stance_uses_topic(self):
-        """Expert stance with topic_hint should differ from generic."""
-        stance_specific = _generate_expert_stance(
-            "achievement", 0.9, 0.8, "What do you think about French cuisine?"
+    def test_stance_varies_by_domain(self):
+        """Stances on different domains should differ for the same persona."""
+        from persona_engine.behavioral.values_interpreter import ValuesInterpreter
+        from persona_engine.behavioral.cognitive_interpreter import CognitiveStyleInterpreter
+        from persona_engine.schema.persona_schema import SchwartzValues, CognitiveStyle
+        from persona_engine.planner.trace_context import TraceContext
+        persona = Persona(**yaml.safe_load(open("personas/chef.yaml")))
+        vals = ValuesInterpreter(persona.psychology.values)
+        cog = CognitiveStyleInterpreter(persona.psychology.cognitive_style)
+        ctx1 = TraceContext()
+        ctx2 = TraceContext()
+
+        stance_food, _ = generate_stance_safe(
+            persona=persona, values=vals, cognitive=cog,
+            user_input="What do you think about French cuisine?",
+            topic_signature="french_cuisine", proficiency=0.8,
+            expert_allowed=True, ctx=ctx1, domain="food",
         )
-        stance_generic = _generate_expert_stance(
-            "achievement", 0.9, 0.8, "hello"
+        stance_tech, _ = generate_stance_safe(
+            persona=persona, values=vals, cognitive=cog,
+            user_input="What do you think about microservices?",
+            topic_signature="microservices", proficiency=0.3,
+            expert_allowed=False, ctx=ctx2, domain="technology",
         )
-        # They should be different strings
-        assert stance_specific != stance_generic
+        assert stance_food != stance_tech
 
     def test_different_topics_produce_different_stances(self):
-        """Two different topics should produce different expert stances."""
-        stance1 = _generate_expert_stance(
-            "achievement", 0.9, 0.5,
-            "What do you think about molecular gastronomy?"
+        """Two different domains should produce different stances."""
+        from persona_engine.behavioral.values_interpreter import ValuesInterpreter
+        from persona_engine.behavioral.cognitive_interpreter import CognitiveStyleInterpreter
+        from persona_engine.planner.trace_context import TraceContext
+
+        persona = Persona(**yaml.safe_load(open("personas/chef.yaml")))
+        vals = ValuesInterpreter(persona.psychology.values)
+        cog = CognitiveStyleInterpreter(persona.psychology.cognitive_style)
+
+        stance1, _ = generate_stance_safe(
+            persona=persona, values=vals, cognitive=cog,
+            user_input="What do you think about molecular gastronomy?",
+            topic_signature="molecular_gastronomy", proficiency=0.8,
+            expert_allowed=True, ctx=TraceContext(), domain="food",
         )
-        stance2 = _generate_expert_stance(
-            "achievement", 0.9, 0.5,
-            "What do you think about traditional baking?"
+        stance2, _ = generate_stance_safe(
+            persona=persona, values=vals, cognitive=cog,
+            user_input="What do you think about microservice architecture?",
+            topic_signature="microservices", proficiency=0.2,
+            expert_allowed=False, ctx=TraceContext(), domain="technology",
         )
         assert stance1 != stance2
 
