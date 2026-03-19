@@ -27,12 +27,15 @@ Usage::
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
 import yaml  # type: ignore[import-untyped]
+
+logger = logging.getLogger(__name__)
 
 from persona_engine.generation.llm_adapter import BaseLLMAdapter, create_adapter
 from persona_engine.generation.response_generator import GeneratedResponse, ResponseGenerator
@@ -313,12 +316,22 @@ class PersonaEngine:
 
         self._turn_number += 1
         turn = self._turn_number
+        logger.info("chat turn=%d persona=%s input_len=%d", turn, self._persona.label, len(user_input))
 
         # 1. Plan (generate IR)
         ir = self._generate_ir(user_input, mode=mode, goal=goal, topic=topic)
+        logger.debug(
+            "IR generated: mode=%s confidence=%.2f competence=%.2f tone=%s",
+            ir.conversation_frame.interaction_mode.value,
+            ir.response_structure.confidence,
+            ir.response_structure.competence,
+            ir.communication_style.tone.value,
+        )
 
         # 2. Validate
         validation = self._run_validation(ir, turn, topic or ir.conversation_frame.goal.value)
+        if not validation.passed:
+            logger.warning("Validation failed turn=%d violations=%d", turn, len(validation.violations))
 
         # 3. Generate response
         memory_ctx = self._memory.get_context_for_turn(
@@ -343,6 +356,7 @@ class PersonaEngine:
             _user_input=user_input,
         )
         self._history.append(result)
+        logger.info("chat complete turn=%d response_len=%d valid=%s", turn, len(result.text), result.passed)
         return result
 
     def plan(

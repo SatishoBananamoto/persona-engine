@@ -12,8 +12,11 @@ This ensures:
 - Constraint enforcement
 """
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 from persona_engine.behavioral import (
     BehavioralRulesEngine,

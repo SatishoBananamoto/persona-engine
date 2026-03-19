@@ -7,6 +7,7 @@ This module handles all LLM API interactions for the Response Generator.
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Optional
 import os
@@ -14,7 +15,11 @@ import os
 from persona_engine.exceptions import (
     ConfigurationError,
     LLMAPIKeyError,
+    LLMConnectionError,
+    LLMResponseError,
 )
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from persona_engine.schema.ir_schema import IntermediateRepresentation
@@ -110,15 +115,22 @@ class AnthropicAdapter(BaseLLMAdapter):
         if conversation_history:
             messages.extend(conversation_history)
         messages.append({"role": "user", "content": user_prompt})
-        message = self.client.messages.create(
-            model=self.model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=system_prompt,
-            messages=messages,
-        )
+        logger.debug("Anthropic request model=%s max_tokens=%d temperature=%.2f messages=%d",
+                      self.model, max_tokens, temperature, len(messages))
+        try:
+            message = self.client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system=system_prompt,
+                messages=messages,
+            )
+        except Exception as exc:
+            _handle_llm_exception(exc, "Anthropic")
         text_block = message.content[0]
-        return text_block.text if hasattr(text_block, "text") else str(text_block)
+        text = text_block.text if hasattr(text_block, "text") else str(text_block)
+        logger.debug("Anthropic response len=%d", len(text))
+        return text
 
     def get_model_name(self) -> str:
         return self.model
@@ -127,11 +139,11 @@ class AnthropicAdapter(BaseLLMAdapter):
 class OpenAIAdapter(BaseLLMAdapter):
     """
     OpenAI adapter.
-    
+
     Uses GPT-4o-mini by default for cost efficiency.
     Set OPENAI_API_KEY environment variable before use.
     """
-    
+
     def __init__(
         self,
         api_key: Optional[str] = None,
@@ -139,7 +151,7 @@ class OpenAIAdapter(BaseLLMAdapter):
     ):
         """
         Initialize OpenAI adapter.
-        
+
         Args:
             api_key: OpenAI API key (defaults to OPENAI_API_KEY env var)
             model: Model to use (default: gpt-4o-mini)
@@ -152,7 +164,7 @@ class OpenAIAdapter(BaseLLMAdapter):
             )
         self.model = model
         self._client = None
-    
+
     @property
     def client(self) -> Any:
         """Lazy-load the OpenAI client."""
@@ -181,17 +193,46 @@ class OpenAIAdapter(BaseLLMAdapter):
         if conversation_history:
             messages.extend(conversation_history)
         messages.append({"role": "user", "content": user_prompt})
-        response = self.client.chat.completions.create(
-            model=self.model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            messages=messages,
-        )
+        logger.debug("OpenAI request model=%s max_tokens=%d temperature=%.2f messages=%d",
+                      self.model, max_tokens, temperature, len(messages))
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                messages=messages,
+            )
+        except Exception as exc:
+            _handle_llm_exception(exc, "OpenAI")
         content = response.choices[0].message.content
-        return content if content is not None else ""
+        text = content if content is not None else ""
+        logger.debug("OpenAI response len=%d", len(text))
+        return text
 
     def get_model_name(self) -> str:
         return self.model
+
+
+def _handle_llm_exception(exc: Exception, provider: str) -> None:
+    """Map third-party LLM exceptions to PersonaEngine exception types."""
+    exc_type = type(exc).__name__
+    exc_module = type(exc).__module__ or ""
+    logger.error("LLM %s error: %s: %s", provider, exc_type, exc)
+
+    # Network / timeout / rate-limit errors
+    if any(keyword in exc_type for keyword in ("Timeout", "Connection", "RateLimit", "APIConnection")):
+        raise LLMConnectionError(f"{provider} connection error: {exc}") from exc
+    # Auth errors
+    if any(keyword in exc_type for keyword in ("Authentication", "Permission", "AuthenticationError")):
+        raise LLMAPIKeyError(f"{provider} authentication failed: {exc}") from exc
+    # Response / content errors
+    if any(keyword in exc_type for keyword in ("BadRequest", "InvalidRequest", "ContentFilter")):
+        raise LLMResponseError(f"{provider} rejected request: {exc}") from exc
+    # API status errors (catch-all for provider SDK errors)
+    if "anthropic" in exc_module or "openai" in exc_module:
+        raise LLMConnectionError(f"{provider} API error: {exc}") from exc
+    # Unknown — re-raise as LLMResponseError
+    raise LLMResponseError(f"{provider} unexpected error: {exc}") from exc
 
 
 class MockLLMAdapter(BaseLLMAdapter):

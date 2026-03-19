@@ -5,9 +5,12 @@ Main orchestrator that combines IR processing, LLM generation,
 and post-processing into a complete response generation pipeline.
 """
 
+import logging
 from typing import Optional
 from dataclasses import dataclass, field
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 from persona_engine.schema.ir_schema import IntermediateRepresentation
 from persona_engine.schema.persona_schema import Persona
