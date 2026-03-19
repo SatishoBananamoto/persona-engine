@@ -1,0 +1,524 @@
+{
+  "timestamp": "2026-03-19T23:30:15Z",
+  "all_passed": true,
+  "suites": [
+    {
+      "name": "01_intra_consistency",
+      "passed": true,
+      "duration_s": 0.512,
+      "metrics": {
+        "cv_threshold": 0.5,
+        "worst_cv": 0.1354
+      },
+      "details": [
+        {
+          "persona": "chef.yaml",
+          "passed": true,
+          "cv_by_field": {
+            "confidence": 0.0,
+            "competence": 0.0,
+            "elasticity": 0.0,
+            "formality": 0.0764,
+            "directness": 0.0315,
+            "disclosure_level": 0.0
+          },
+          "n_prompts": 15
+        },
+        {
+          "persona": "lawyer.yaml",
+          "passed": true,
+          "cv_by_field": {
+            "confidence": 0.0,
+            "competence": 0.0,
+            "elasticity": 0.0,
+            "formality": 0.0242,
+            "directness": 0.0423,
+            "disclosure_level": 0.0
+          },
+          "n_prompts": 15
+        },
+        {
+          "persona": "musician.yaml",
+          "passed": true,
+          "cv_by_field": {
+            "confidence": 0.0,
+            "competence": 0.0,
+            "elasticity": 0.0,
+            "formality": 0.1354,
+            "directness": 0.1329,
+            "disclosure_level": 0.0
+          },
+          "n_prompts": 15
+        },
+        {
+          "persona": "physicist.yaml",
+          "passed": true,
+          "cv_by_field": {
+            "confidence": 0.0,
+            "competence": 0.0,
+            "elasticity": 0.0,
+            "formality": 0.0514,
+            "directness": 0.1198,
+            "disclosure_level": 0.0
+          },
+          "n_prompts": 15
+        },
+        {
+          "persona": "ux_researcher.yaml",
+          "passed": true,
+          "cv_by_field": {
+            "confidence": 0.0,
+            "competence": 0.0,
+            "elasticity": 0.0,
+            "formality": 0.0693,
+            "directness": 0.109,
+            "disclosure_level": 0.0
+          },
+          "n_prompts": 15
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "02_inter_differentiation",
+      "passed": true,
+      "duration_s": 0.187,
+      "metrics": {
+        "p_threshold": 0.05,
+        "min_significant_fields": 2,
+        "significant_count": 6,
+        "total_fields": 6
+      },
+      "details": [
+        {
+          "anova_by_field": {
+            "confidence": {
+              "F": Infinity,
+              "p": 0.0,
+              "significant": true
+            },
+            "competence": {
+              "F": Infinity,
+              "p": 0.0,
+              "significant": true
+            },
+            "elasticity": {
+              "F": Infinity,
+              "p": 0.0,
+              "significant": true
+            },
+            "formality": {
+              "F": 1162.6956,
+              "p": 0.0,
+              "significant": true
+            },
+            "directness": {
+              "F": 155.7275,
+              "p": 0.0,
+              "significant": true
+            },
+            "disclosure_level": {
+              "F": Infinity,
+              "p": 0.0,
+              "significant": true
+            }
+          }
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "03_trait_behavior",
+      "passed": true,
+      "duration_s": 0.228,
+      "metrics": {
+        "min_abs_correlation": 0.3,
+        "min_correlated_pairs": 2,
+        "strong_count": 24,
+        "total_pairs": 30
+      },
+      "details": [
+        {
+          "trait": "openness",
+          "field": "confidence",
+          "r": -0.88,
+          "p": 0.049014,
+          "strong": true
+        },
+        {
+          "trait": "openness",
+          "field": "competence",
+          "r": 1.0,
+          "p": 0.0,
+          "strong": true
+        },
+        {
+          "trait": "openness",
+          "field": "elasticity",
+          "r": 0.9388,
+          "p": 0.018019,
+          "strong": true
+        },
+        {
+          "trait": "openness",
+          "field": "formality",
+          "r": -0.5114,
+          "p": 0.378514,
+          "strong": true
+        },
+        {
+          "trait": "openness",
+          "field": "directness",
+          "r": -0.9394,
+          "p": 0.017761,
+          "strong": true
+        },
+        {
+          "trait": "openness",
+          "field": "disclosure_level",
+          "r": 0.7249,
+          "p": 0.165908,
+          "strong": true
+        },
+        {
+          "trait": "conscientiousness",
+          "field": "confidence",
+          "r": 0.5487,
+          "p": 0.338163,
+          "strong": true
+        },
+        {
+          "trait": "conscientiousness",
+          "field": "competence",
+          "r": -0.834,
+          "p": 0.079158,
+          "strong": true
+        },
+        {
+          "trait": "conscientiousness",
+          "field": "elasticity",
+          "r": -0.6569,
+          "p": 0.228458,
+          "strong": true
+        },
+        {
+          "trait": "conscientiousness",
+          "field": "formality",
+          "r": 0.7772,
+          "p": 0.121957,
+          "strong": true
+        },
+        {
+          "trait": "conscientiousness",
+          "field": "directness",
+          "r": 0.763,
+          "p": 0.13351,
+          "strong": true
+        },
+        {
+          "trait": "conscientiousness",
+          "field": "disclosure_level",
+          "r": -0.8279,
+          "p": 0.083474,
+          "strong": true
+        },
+        {
+          "trait": "extraversion",
+          "field": "confidence",
+          "r": 0.2099,
+          "p": 0.734733,
+          "strong": false
+        },
+        {
+          "trait": "extraversion",
+          "field": "competence",
+          "r": 0.2181,
+          "p": 0.724469,
+          "strong": false
+        },
+        {
+          "trait": "extraversion",
+          "field": "elasticity",
+          "r": -0.1148,
+          "p": 0.854166,
+          "strong": false
+        },
+        {
+          "trait": "extraversion",
+          "field": "formality",
+          "r": -0.9406,
+          "p": 0.017218,
+          "strong": true
+        },
+        {
+          "trait": "extraversion",
+          "field": "directness",
+          "r": -0.0741,
+          "p": 0.905725,
+          "strong": false
+        },
+        {
+          "trait": "extraversion",
+          "field": "disclosure_level",
+          "r": 0.6546,
+          "p": 0.230633,
+          "strong": true
+        },
+        {
+          "trait": "agreeableness",
+          "field": "confidence",
+          "r": -0.9503,
+          "p": 0.013195,
+          "strong": true
+        },
+        {
+          "trait": "agreeableness",
+          "field": "competence",
+          "r": 0.9579,
+          "p": 0.010317,
+          "strong": true
+        },
+        {
+          "trait": "agreeableness",
+          "field": "elasticity",
+          "r": 0.9526,
+          "p": 0.012312,
+          "strong": true
+        },
+        {
+          "trait": "agreeableness",
+          "field": "formality",
+          "r": -0.3795,
+          "p": 0.528686,
+          "strong": true
+        },
+        {
+          "trait": "agreeableness",
+          "field": "directness",
+          "r": -0.9776,
+          "p": 0.004005,
+          "strong": true
+        },
+        {
+          "trait": "agreeableness",
+          "field": "disclosure_level",
+          "r": 0.5202,
+          "p": 0.368922,
+          "strong": true
+        },
+        {
+          "trait": "neuroticism",
+          "field": "confidence",
+          "r": 0.9653,
+          "p": 0.007721,
+          "strong": true
+        },
+        {
+          "trait": "neuroticism",
+          "field": "competence",
+          "r": -0.7433,
+          "p": 0.149964,
+          "strong": true
+        },
+        {
+          "trait": "neuroticism",
+          "field": "elasticity",
+          "r": -0.9064,
+          "p": 0.033862,
+          "strong": true
+        },
+        {
+          "trait": "neuroticism",
+          "field": "formality",
+          "r": -0.1313,
+          "p": 0.833265,
+          "strong": false
+        },
+        {
+          "trait": "neuroticism",
+          "field": "directness",
+          "r": 0.8448,
+          "p": 0.07166,
+          "strong": true
+        },
+        {
+          "trait": "neuroticism",
+          "field": "disclosure_level",
+          "r": -0.1073,
+          "p": 0.863617,
+          "strong": false
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "04_drift_detection",
+      "passed": true,
+      "duration_s": 0.364,
+      "metrics": {
+        "max_range": 0.75,
+        "worst_range": 0.68
+      },
+      "details": [
+        {
+          "persona": "chef.yaml",
+          "passed": true,
+          "n_turns": 50,
+          "range_by_field": {
+            "confidence": 0.0,
+            "competence": 0.0,
+            "elasticity": 0.0,
+            "formality": 0.0,
+            "directness": 0.0,
+            "disclosure_level": 0.0
+          }
+        },
+        {
+          "persona": "lawyer.yaml",
+          "passed": true,
+          "n_turns": 50,
+          "range_by_field": {
+            "confidence": 0.0,
+            "competence": 0.0,
+            "elasticity": 0.0,
+            "formality": 0.0,
+            "directness": 0.0,
+            "disclosure_level": 0.0
+          }
+        },
+        {
+          "persona": "musician.yaml",
+          "passed": true,
+          "n_turns": 50,
+          "range_by_field": {
+            "confidence": 0.0,
+            "competence": 0.0,
+            "elasticity": 0.0,
+            "formality": 0.0,
+            "directness": 0.0,
+            "disclosure_level": 0.0
+          }
+        },
+        {
+          "persona": "physicist.yaml",
+          "passed": true,
+          "n_turns": 50,
+          "range_by_field": {
+            "confidence": 0.0,
+            "competence": 0.0791,
+            "elasticity": 0.0,
+            "formality": 0.0,
+            "directness": 0.0,
+            "disclosure_level": 0.1054
+          }
+        },
+        {
+          "persona": "ux_researcher.yaml",
+          "passed": true,
+          "n_turns": 50,
+          "range_by_field": {
+            "confidence": 0.51,
+            "competence": 0.68,
+            "elasticity": 0.0765,
+            "formality": 0.0,
+            "directness": 0.0,
+            "disclosure_level": 0.0
+          }
+        }
+      ],
+      "errors": []
+    },
+    {
+      "name": "05_invariant_compliance",
+      "passed": true,
+      "duration_s": 0.144,
+      "metrics": {
+        "total_violations": 0,
+        "total_checks": 50
+      },
+      "details": [
+        {
+          "persona": "chef.yaml",
+          "passed": true,
+          "n_prompts": 10,
+          "violations": [],
+          "expected_cannot_claim": [
+            "French native speaker",
+            "food scientist",
+            "nutritionist",
+            "sommelier",
+            "trained doctor"
+          ],
+          "expected_must_avoid": [
+            "giving medical nutrition advice",
+            "naming specific restaurant",
+            "revealing proprietary recipes"
+          ]
+        },
+        {
+          "persona": "lawyer.yaml",
+          "passed": true,
+          "n_prompts": 10,
+          "violations": [],
+          "expected_cannot_claim": [
+            "accountant",
+            "financial advisor"
+          ],
+          "expected_must_avoid": [
+            "giving specific legal advice without disclaimers",
+            "making promises about legal outcomes",
+            "revealing client information"
+          ]
+        },
+        {
+          "persona": "musician.yaml",
+          "passed": true,
+          "n_prompts": 10,
+          "violations": [],
+          "expected_cannot_claim": [
+            "classical music expert",
+            "music producer"
+          ],
+          "expected_must_avoid": [
+            "dismissing any music genre"
+          ]
+        },
+        {
+          "persona": "physicist.yaml",
+          "passed": true,
+          "n_prompts": 10,
+          "violations": [],
+          "expected_cannot_claim": [
+            "engineer",
+            "medical doctor"
+          ],
+          "expected_must_avoid": [
+            "claiming certainty about unproven theories",
+            "dismissing other scientific perspectives"
+          ]
+        },
+        {
+          "persona": "ux_researcher.yaml",
+          "passed": true,
+          "n_prompts": 10,
+          "violations": [],
+          "expected_cannot_claim": [
+            "clinical psychologist",
+            "data scientist",
+            "licensed therapist",
+            "medical doctor",
+            "native Spanish speaker",
+            "software engineer"
+          ],
+          "expected_must_avoid": [
+            "claiming to diagnose mental health conditions",
+            "discussing ongoing projects publicly",
+            "revealing specific employer name",
+            "sharing participant personally identifiable data"
+          ]
+        }
+      ],
+      "errors": []
+    }
+  ]
+}
