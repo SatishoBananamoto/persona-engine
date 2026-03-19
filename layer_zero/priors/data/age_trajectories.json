@@ -1,0 +1,19 @@
+{
+  "_meta": {
+    "description": "Age → Big Five trait shift curves. Values are deltas from population mean (0.5).",
+    "sources": [
+      "Srivastava et al. (2003) - Development of personality in early and middle adulthood",
+      "Terracciano et al. (2005) - Cross-sectional personality trajectories",
+      "PMC7869960 - Coordinated analysis of 16 longitudinal samples"
+    ],
+    "notes": "Linear interpolation between brackets. Shifts are small — age explains modest variance."
+  },
+  "brackets": [
+    {"age_min": 18, "age_max": 25, "shifts": {"openness": 0.03, "conscientiousness": -0.05, "extraversion": 0.03, "agreeableness": -0.05, "neuroticism": 0.05}},
+    {"age_min": 26, "age_max": 35, "shifts": {"openness": 0.02, "conscientiousness": 0.0, "extraversion": 0.01, "agreeableness": -0.02, "neuroticism": 0.02}},
+    {"age_min": 36, "age_max": 45, "shifts": {"openness": 0.0, "conscientiousness": 0.03, "extraversion": 0.0, "agreeableness": 0.02, "neuroticism": 0.0}},
+    {"age_min": 46, "age_max": 55, "shifts": {"openness": -0.02, "conscientiousness": 0.05, "extraversion": -0.02, "agreeableness": 0.05, "neuroticism": -0.03}},
+    {"age_min": 56, "age_max": 65, "shifts": {"openness": -0.03, "conscientiousness": 0.05, "extraversion": -0.03, "agreeableness": 0.07, "neuroticism": -0.05}},
+    {"age_min": 66, "age_max": 100, "shifts": {"openness": -0.05, "conscientiousness": 0.03, "extraversion": -0.05, "agreeableness": 0.08, "neuroticism": -0.03}}
+  ]
+}
