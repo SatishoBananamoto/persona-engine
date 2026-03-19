@@ -511,8 +511,42 @@ class PersonaEngine:
                 result.append(d)
             return result
 
+        # Serialize dynamic state for round-trip fidelity
+        planner_state = self._planner.state.get_current_state()
+        state_dict = planner_state.model_dump()
+
+        # Serialize stance cache
+        stance_data = {}
+        for key, cached in self._stance_cache.cache.items():
+            stance_data[key] = {
+                "stance": cached.stance,
+                "rationale_seeds": cached.rationale_seeds,
+                "elasticity": cached.elasticity,
+                "confidence": cached.confidence,
+                "created_turn": cached.created_turn,
+                "decay_rate": cached.decay_rate,
+            }
+
+        # Serialize prior snapshot for cross-turn inertia
+        prior = self._planner._prior_snapshot
+        prior_dict = None
+        if prior is not None:
+            prior_dict = {
+                "turn_number": prior.turn_number,
+                "confidence": prior.confidence,
+                "formality": prior.formality,
+                "directness": prior.directness,
+                "disclosure": prior.disclosure,
+                "tone": prior.tone,
+                "claim_type": prior.claim_type,
+                "stance": prior.stance,
+                "topic": prior.topic,
+                "elasticity": prior.elasticity,
+                "competence": prior.competence,
+            }
+
         data = {
-            "version": 2,
+            "version": 3,
             "conversation_id": self._conversation_id,
             "turn_number": self._turn_number,
             "persona_id": self._persona.persona_id,
@@ -536,9 +570,13 @@ class PersonaEngine:
                     self._memory.episodes._episodes
                 ),
             },
+            "dynamic_state": state_dict,
+            "stance_cache": stance_data,
+            "prior_snapshot": prior_dict,
             "memory_stats": self._memory.stats(),
         }
         Path(path).write_text(json.dumps(data, indent=2, default=str))
+        logger.info("State saved to %s (turn=%d)", path, self._turn_number)
 
     @classmethod
     def load(
@@ -563,6 +601,9 @@ class PersonaEngine:
             Episode, Fact, Preference, RelationshipMemory,
             MemoryType, MemorySource,
         )
+        from persona_engine.memory.stance_cache import CachedStance
+        from persona_engine.schema.persona_schema import DynamicState
+        from persona_engine.validation.cross_turn import TurnSnapshot
 
         state = json.loads(Path(state_path).read_text())
         engine = cls.from_yaml(persona_path, **kwargs)
@@ -606,6 +647,24 @@ class PersonaEngine:
                     ed["tags"] = tuple(ed["tags"])
                 engine._memory.episodes.store(Episode(**ed))
 
+        # Restore dynamic state (version 3+)
+        ds = state.get("dynamic_state")
+        if ds:
+            restored_state = DynamicState(**ds)
+            engine._planner.state.state = DynamicState(**restored_state.model_dump())
+
+        # Restore stance cache (version 3+)
+        sc = state.get("stance_cache")
+        if sc:
+            for key, cd in sc.items():
+                engine._stance_cache.cache[key] = CachedStance(**cd)
+
+        # Restore prior snapshot for cross-turn inertia (version 3+)
+        ps = state.get("prior_snapshot")
+        if ps:
+            engine._planner._prior_snapshot = TurnSnapshot(**ps)
+
+        logger.info("State loaded from %s (turn=%d)", state_path, engine._turn_number)
         return engine
 
     # ------------------------------------------------------------------
