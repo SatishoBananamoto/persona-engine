@@ -36,10 +36,13 @@ class StateManager:
         self.traits = traits
         self.determinism = determinism or DeterminismManager()
 
-        # State evolution rates (influenced by neuroticism)
-        self.mood_drift_rate = 0.05 + (traits.neuroticism * 0.1)
+        # State evolution rates (calibrated per personality psychology literature)
+        # High N = mood LINGERS (slower drift back to baseline), not faster
+        # Fix: inverted formula. Was 0.05 + N*0.1 (higher N = faster drift = WRONG)
+        self.mood_drift_rate = 0.12 - (traits.neuroticism * 0.08)
         self.fatigue_accumulation_rate = 0.02
-        self.stress_decay_rate = 0.08
+        # Stress recovery modulated by traits: low N recovers faster, high E recovers faster
+        self.stress_decay_rate = 0.06 + (traits.extraversion * 0.04) - (traits.neuroticism * 0.03)
 
     # ========================================================================
     # State Getters
@@ -96,8 +99,9 @@ class StateManager:
         High neuroticism: Slower drift (mood lingers)
         Low neuroticism: Faster drift (mood stabilizes quickly)
         """
-        # Baseline mood (neutral-slightly positive for most people)
-        baseline_valence = 0.1 - (self.traits.neuroticism * 0.2)
+        # Baseline mood: E drives positive affect, N drives negative affect
+        # (well-established in affective neuroscience literature)
+        baseline_valence = 0.1 + (self.traits.extraversion * 0.15) - (self.traits.neuroticism * 0.2)
         baseline_arousal = 0.5
 
         # Drift toward baseline

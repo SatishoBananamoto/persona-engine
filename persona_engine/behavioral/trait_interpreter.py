@@ -40,12 +40,13 @@ class TraitInterpreter:
             Elasticity score (0-1)
         """
         # High openness increases elasticity, confidence reduces it.
-        # openness=0,conf=0 → ~0.2 (rigid); openness=1,conf=0 → ~0.7 (flexible)
-        openness_factor = self.traits.openness * 0.7
+        # Calibrated: O weight 0.6 (was 0.7) per Tackman et al. 2023 meta-analysis
+        # showing individual trait-behavior correlations cap at r~.40
+        openness_factor = self.traits.openness * 0.6
         confidence_penalty = base_confidence * 0.3
 
         elasticity = openness_factor - confidence_penalty
-        return max(0.1, min(0.9, elasticity + 0.2))  # Shift up, clamp to 0.1-0.9
+        return max(0.1, min(0.9, elasticity + 0.25))  # Shift up, clamp to 0.1-0.9
 
     def influences_abstract_reasoning(self) -> bool:
         """High openness (>0.7) → more abstract/metaphorical thinking"""
@@ -70,8 +71,11 @@ class TraitInterpreter:
         Returns:
             Verbosity enum
         """
-        # Conscientiousness increases detail orientation
-        adjusted = base_verbosity + (self.traits.conscientiousness - 0.5) * 0.2
+        # Conscientiousness increases detail orientation (C: structure, E: word count)
+        # Extraversion added per Pennebaker & King 1999, Tackman et al. 2020: r~.10-.15
+        adjusted = (base_verbosity
+                    + (self.traits.conscientiousness - 0.5) * 0.2
+                    + (self.traits.extraversion - 0.5) * 0.15)
         adjusted = max(0.0, min(1.0, adjusted))
 
         if adjusted < 0.15:
@@ -191,8 +195,10 @@ class TraitInterpreter:
         """
         High N: More likely to use negative/anxious tones
         Returns bias toward negative tones (0-1)
+        Calibrated: 0.5 multiplier (was 0.7) per Tackman et al. 2023 showing
+        individual trait-language correlations cap at rho=.08-.14 (self-report)
         """
-        return self.traits.neuroticism * 0.7
+        return self.traits.neuroticism * 0.5
 
     # ========================================================================
     # Multi-Trait Interactions
