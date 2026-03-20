@@ -440,13 +440,35 @@ then counts those exact words → of course they're present. We told the LLM to 
 
 **Action items:**
 
-- [ ] **PA-1: Audit prompt_builder.py** — list every place where specific words/phrases are prescribed to the LLM
-- [ ] **PA-2: Rewrite linguistic_markers.py** — convert all 5 trait marker functions from prescriptive ("use words X, Y, Z") to descriptive ("express quality Q naturally")
-- [ ] **PA-3: Fix contradictory signals** — when confidence and stance contradict, resolve before sending to LLM
-- [ ] **PA-4: Fix competence phrasing** — "Do NOT use domain-specific terminology correctly" is confusing. Rewrite as positive instruction.
-- [ ] **PA-5: Review verbosity for off-topic** — DETAILED may be wrong when persona has low competence on the topic
-- [ ] **PA-6: Re-run BV-2 after fix** — validate that text still shows personality markers WITHOUT prescriptive word lists. This is the real test — does the LLM produce differentiated text from descriptive directives alone?
-- [ ] **PA-7: Consider A→directness over-expression** — chef at 98% directness for an off-topic question. The directness pipeline may need topic-sensitivity modulation.
+**Design decision:** Prompt builder becomes a swappable strategy with toggle.
+
+```python
+engine = PersonaEngine.from_yaml("chef.yaml", prompt_strategy="descriptive")  # default
+engine = PersonaEngine.from_yaml("chef.yaml", prompt_strategy="llm")          # haiku-generated
+engine = PersonaEngine.from_yaml("chef.yaml", prompt_strategy="prescriptive") # current
+```
+
+| Strategy | How | Cost | Quality |
+|----------|-----|------|---------|
+| `prescriptive` | Current hardcoded word lists | Free | Low vocab, repetitive, but max control |
+| `descriptive` | Rewritten Python templates, no word lists | Free | Natural, good default |
+| `llm` | Small fast model (Haiku) converts IR → character direction | ~$0.001/turn | Best quality, infinite vocabulary |
+
+**Action items:**
+
+- [ ] **PA-1: Create PromptStrategy interface** — abstract base with `build_system_prompt()` and `build_generation_prompt()`. Three implementations: PrescriptiveStrategy, DescriptiveStrategy, LLMStrategy.
+- [ ] **PA-2: Wire toggle into PersonaEngine** — `prompt_strategy` param in constructor and `from_yaml()`. Default: `descriptive`.
+- [ ] **PA-3: Implement DescriptiveStrategy** — rewrite all templates. No word lists. Frame IR as character state, not acting instructions. Key rewrites:
+  - `linguistic_markers.py` → 5 trait functions: prescriptive → descriptive
+  - `prompt_builder.py` → confidence/competence/directness descriptions: remove specific words
+  - Fix contradictory signals (confidence vs stance)
+  - Fix competence phrasing ("Do NOT use terminology correctly" → positive instruction)
+  - Review verbosity for low-competence topics
+- [ ] **PA-4: Implement LLMStrategy** — use Haiku/small model to convert IR dataclass into natural character direction. Input: IR fields as JSON. Output: 3-5 sentence character brief.
+- [ ] **PA-5: Rename current prompt_builder to PrescriptiveStrategy** — preserve for backward compat.
+- [ ] **PA-6: A/B test** — same persona, same prompt, all 3 strategies. Compare text quality.
+- [ ] **PA-7: Re-run BV-2 with DescriptiveStrategy** — the real test: personality markers without word lists.
+- [ ] **PA-8: Consider A→directness topic sensitivity** — chef at 98% directness for off-topic. Directness may need modulation when competence is low.
 
 ### Other Pending
 
