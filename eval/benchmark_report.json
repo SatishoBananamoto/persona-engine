@@ -1,0 +1,245 @@
+{
+  "profiles": {
+    "prototypical_extravert": {
+      "traits": {
+        "O": 0.5,
+        "C": 0.5,
+        "E": 0.9,
+        "A": 0.5,
+        "N": 0.3
+      },
+      "confidence": 0.2913,
+      "elasticity": 0.4214,
+      "directness": 0.5,
+      "formality": 0.36,
+      "disclosure": 0.5231,
+      "hedging": 0.36,
+      "negative_tone_weight": 0.15,
+      "proactivity": 0.74,
+      "verbosity_numeric": 0.5
+    },
+    "prototypical_introvert": {
+      "traits": {
+        "O": 0.6,
+        "C": 0.5,
+        "E": 0.1,
+        "A": 0.5,
+        "N": 0.5
+      },
+      "confidence": 0.1956,
+      "elasticity": 0.4966,
+      "directness": 0.5,
+      "formality": 0.36,
+      "disclosure": 0.2865,
+      "hedging": 0.4,
+      "negative_tone_weight": 0.25,
+      "proactivity": 0.26,
+      "verbosity_numeric": 0.5
+    },
+    "prototypical_agreeable": {
+      "traits": {
+        "O": 0.5,
+        "C": 0.5,
+        "E": 0.6,
+        "A": 0.9,
+        "N": 0.3
+      },
+      "confidence": 0.2913,
+      "elasticity": 0.4214,
+      "directness": 0.2696,
+      "formality": 0.3005,
+      "disclosure": 0.6041,
+      "hedging": 0.6,
+      "negative_tone_weight": 0.15,
+      "proactivity": 0.56,
+      "verbosity_numeric": 0.5
+    },
+    "prototypical_antagonist": {
+      "traits": {
+        "O": 0.4,
+        "C": 0.5,
+        "E": 0.5,
+        "A": 0.1,
+        "N": 0.5
+      },
+      "confidence": 0.1956,
+      "elasticity": 0.3461,
+      "directness": 0.7304,
+      "formality": 0.36,
+      "disclosure": 0.3701,
+      "hedging": 0.16,
+      "negative_tone_weight": 0.25,
+      "proactivity": 0.5,
+      "verbosity_numeric": 0.5
+    },
+    "prototypical_neurotic": {
+      "traits": {
+        "O": 0.5,
+        "C": 0.4,
+        "E": 0.3,
+        "A": 0.5,
+        "N": 0.9
+      },
+      "confidence": 0.1,
+      "elasticity": 0.4214,
+      "directness": 0.5,
+      "formality": 0.36,
+      "disclosure": 0.3339,
+      "hedging": 0.48,
+      "negative_tone_weight": 0.45,
+      "proactivity": 0.38,
+      "verbosity_numeric": 0.5
+    },
+    "emotionally_stable": {
+      "traits": {
+        "O": 0.5,
+        "C": 0.6,
+        "E": 0.6,
+        "A": 0.6,
+        "N": 0.1
+      },
+      "confidence": 0.3662,
+      "elasticity": 0.4214,
+      "directness": 0.405,
+      "formality": 0.36,
+      "disclosure": 0.5736,
+      "hedging": 0.38,
+      "negative_tone_weight": 0.05,
+      "proactivity": 0.56,
+      "verbosity_numeric": 0.5
+    },
+    "creative_intellectual": {
+      "traits": {
+        "O": 0.9,
+        "C": 0.4,
+        "E": 0.5,
+        "A": 0.5,
+        "N": 0.5
+      },
+      "confidence": 0.1656,
+      "elasticity": 0.6263,
+      "directness": 0.5,
+      "formality": 0.36,
+      "disclosure": 0.4594,
+      "hedging": 0.4,
+      "negative_tone_weight": 0.25,
+      "proactivity": 0.5,
+      "verbosity_numeric": 0.25
+    },
+    "disciplined_achiever": {
+      "traits": {
+        "O": 0.3,
+        "C": 0.9,
+        "E": 0.5,
+        "A": 0.5,
+        "N": 0.3
+      },
+      "confidence": 0.446,
+      "elasticity": 0.2273,
+      "directness": 0.5,
+      "formality": 0.36,
+      "disclosure": 0.4533,
+      "hedging": 0.36,
+      "negative_tone_weight": 0.15,
+      "proactivity": 0.5,
+      "verbosity_numeric": 0.75
+    }
+  },
+  "direction_checks": [
+    {
+      "high": "prototypical_extravert",
+      "low": "prototypical_introvert",
+      "field": "disclosure",
+      "direction": ">",
+      "high_val": 0.5231,
+      "low_val": 0.2865,
+      "passed": true
+    },
+    {
+      "high": "prototypical_extravert",
+      "low": "prototypical_introvert",
+      "field": "enthusiasm_active",
+      "direction": ">",
+      "high_val": 1.0,
+      "low_val": 0.0,
+      "passed": true
+    },
+    {
+      "high": "prototypical_extravert",
+      "low": "prototypical_introvert",
+      "field": "proactivity",
+      "direction": ">",
+      "high_val": 0.74,
+      "low_val": 0.26,
+      "passed": true
+    },
+    {
+      "high": "prototypical_agreeable",
+      "low": "prototypical_antagonist",
+      "field": "hedging",
+      "direction": ">",
+      "high_val": 0.6,
+      "low_val": 0.16,
+      "passed": true
+    },
+    {
+      "high": "prototypical_antagonist",
+      "low": "prototypical_agreeable",
+      "field": "directness",
+      "direction": ">",
+      "high_val": 0.7304,
+      "low_val": 0.2696,
+      "passed": true
+    },
+    {
+      "high": "prototypical_neurotic",
+      "low": "emotionally_stable",
+      "field": "negative_tone_weight",
+      "direction": ">",
+      "high_val": 0.45,
+      "low_val": 0.05,
+      "passed": true
+    },
+    {
+      "high": "emotionally_stable",
+      "low": "prototypical_neurotic",
+      "field": "confidence",
+      "direction": ">",
+      "high_val": 0.3662,
+      "low_val": 0.1,
+      "passed": true
+    },
+    {
+      "high": "prototypical_neurotic",
+      "low": "emotionally_stable",
+      "field": "hedging",
+      "direction": ">",
+      "high_val": 0.48,
+      "low_val": 0.38,
+      "passed": true
+    },
+    {
+      "high": "creative_intellectual",
+      "low": "disciplined_achiever",
+      "field": "elasticity",
+      "direction": ">",
+      "high_val": 0.6263,
+      "low_val": 0.2273,
+      "passed": true
+    },
+    {
+      "high": "disciplined_achiever",
+      "low": "creative_intellectual",
+      "field": "verbosity_numeric",
+      "direction": ">",
+      "high_val": 0.75,
+      "low_val": 0.25,
+      "passed": true
+    }
+  ],
+  "summary": {
+    "total_checks": 10,
+    "passed": 10,
+    "failed": 0
+  }
+}
