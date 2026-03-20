@@ -451,6 +451,159 @@ def check_bias_stacking_elasticity() -> CheckResult:
 
 
 # =============================================================================
+# G1: TF-002 — Extreme N confidence over-suppression
+# =============================================================================
+
+def check_extreme_n_confidence() -> CheckResult:
+    """N=0.95 should produce low confidence but NOT collapse to floor (0.1)."""
+    planner, _ = _build_planner(neuroticism=0.95, conscientiousness=0.3)
+    cache = StanceCache()
+
+    ctx = _make_context("What do you think about this approach?", 1, cache)
+    ir = planner.generate_ir(ctx)
+    conf = ir.response_structure.confidence
+    _log(f"N=0.95 confidence: {conf:.3f}")
+
+    # Should be low but not collapsed to absolute floor
+    # Floor is 0.1 from the clamp. If confidence = 0.1, the three N paths
+    # are over-suppressing and we've lost all signal.
+    not_collapsed = conf > 0.1
+    reasonably_low = conf < 0.35
+
+    passed = not_collapsed and reasonably_low
+    detail = f"Confidence={conf:.3f} (expected: 0.1 < x < 0.35)"
+    if not not_collapsed:
+        detail += " — COLLAPSED to floor, N over-suppression!"
+    elif not reasonably_low:
+        detail += " — not low enough for N=0.95"
+
+    return CheckResult(
+        name="extreme_n_confidence_not_collapsed",
+        passed=passed,
+        detail=detail,
+        values={"confidence": conf, "N": 0.95},
+    )
+
+
+# =============================================================================
+# G1: TF-003 — Extreme A + contentious directness over-reduction
+# =============================================================================
+
+def check_extreme_a_directness() -> CheckResult:
+    """A=0.95 + contentious input should reduce directness but not collapse to 0."""
+    planner, _ = _build_planner(agreeableness=0.95)
+    cache = StanceCache()
+
+    # Contentious input that should trigger conflict_avoidance_boost
+    ctx = _make_context("I completely disagree with your wrong position on this!", 1, cache)
+    ir = planner.generate_ir(ctx)
+    dire = ir.communication_style.directness
+    _log(f"A=0.95 + contentious directness: {dire:.3f}")
+
+    # Should be low but not zero — even very agreeable people maintain some directness
+    not_collapsed = dire > 0.05
+    reasonably_low = dire < 0.4
+
+    passed = not_collapsed and reasonably_low
+    detail = f"Directness={dire:.3f} (expected: 0.05 < x < 0.4)"
+    if not not_collapsed:
+        detail += " — COLLAPSED near zero, A over-reduction!"
+    elif not reasonably_low:
+        detail += " — not low enough for A=0.95 + contentious"
+
+    return CheckResult(
+        name="extreme_a_directness_not_collapsed",
+        passed=passed,
+        detail=detail,
+        values={"directness": dire, "A": 0.95},
+    )
+
+
+# =============================================================================
+# G2: Tone direction validation
+# =============================================================================
+
+def check_tone_high_n_stress() -> CheckResult:
+    """High-N persona under stress should select anxious/negative tone."""
+    planner, _ = _build_planner(neuroticism=0.85)
+    cache = StanceCache()
+
+    # Apply stress
+    planner.state.apply_stress_trigger("conflict", intensity=0.8)
+
+    ctx = _make_context("What should we do about this problem?", 1, cache)
+    ir = planner.generate_ir(ctx)
+    tone = ir.communication_style.tone
+    _log(f"high-N + stress tone: {tone.value}")
+
+    # Should be anxious or concerned or at least negative
+    negative_tones = {
+        Tone.ANXIOUS_STRESSED, Tone.CONCERNED_EMPATHETIC,
+        Tone.FRUSTRATED_TENSE, Tone.DEFENSIVE_AGITATED,
+        Tone.DISAPPOINTED_RESIGNED, Tone.SAD_SUBDUED,
+        Tone.TIRED_WITHDRAWN,
+    }
+    passed = tone in negative_tones
+    return CheckResult(
+        name="high_n_stress_negative_tone",
+        passed=passed,
+        detail=f"Tone={tone.value} (expected one of: anxious, concerned, frustrated, etc.)",
+        values={"tone": tone.value, "N": 0.85, "stress": "high"},
+    )
+
+
+def check_tone_high_e_positive() -> CheckResult:
+    """High-E persona with positive mood should select enthusiastic/warm tone."""
+    planner, _ = _build_planner(extraversion=0.9, neuroticism=0.2)
+    cache = StanceCache()
+
+    # Boost mood positive
+    planner.state.update_mood_from_event(valence_delta=0.5, arousal_delta=0.3)
+
+    ctx = _make_context("Tell me about your favorite things!", 1, cache)
+    ir = planner.generate_ir(ctx)
+    tone = ir.communication_style.tone
+    _log(f"high-E + positive mood tone: {tone.value}")
+
+    positive_tones = {
+        Tone.WARM_ENTHUSIASTIC, Tone.EXCITED_ENGAGED,
+        Tone.THOUGHTFUL_ENGAGED, Tone.WARM_CONFIDENT,
+        Tone.FRIENDLY_RELAXED, Tone.CONTENT_CALM,
+    }
+    passed = tone in positive_tones
+    return CheckResult(
+        name="high_e_positive_tone",
+        passed=passed,
+        detail=f"Tone={tone.value} (expected one of: warm, excited, enthusiastic, etc.)",
+        values={"tone": tone.value, "E": 0.9, "mood": "positive"},
+    )
+
+
+def check_tone_neutral_midrange() -> CheckResult:
+    """Mid-range persona with neutral state should select neutral/professional tone."""
+    planner, _ = _build_planner()  # all traits at 0.5
+    cache = StanceCache()
+
+    ctx = _make_context("Can you explain how this process works?", 1, cache)
+    ir = planner.generate_ir(ctx)
+    tone = ir.communication_style.tone
+    _log(f"mid-range neutral tone: {tone.value}")
+
+    neutral_tones = {
+        Tone.NEUTRAL_CALM, Tone.PROFESSIONAL_COMPOSED,
+        Tone.MATTER_OF_FACT, Tone.CONTENT_CALM,
+        Tone.THOUGHTFUL_ENGAGED,
+    }
+    passed = tone in neutral_tones
+    return CheckResult(
+        name="neutral_persona_neutral_tone",
+        passed=passed,
+        detail=f"Tone={tone.value} (expected: neutral, professional, or calm)",
+        values={"tone": tone.value},
+    )
+
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -465,6 +618,13 @@ ALL_CHECKS = [
     check_emotional_appraisal,
     check_neuroticism_drift_rate,
     check_bias_stacking_elasticity,
+    # G1: Extreme value checks (TF-002/003)
+    check_extreme_n_confidence,
+    check_extreme_a_directness,
+    # G2: Tone direction validation
+    check_tone_high_n_stress,
+    check_tone_high_e_positive,
+    check_tone_neutral_midrange,
 ]
 
 

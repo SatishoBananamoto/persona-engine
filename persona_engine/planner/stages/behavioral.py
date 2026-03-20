@@ -217,7 +217,9 @@ class BehavioralMetricsStage(MetricsMixin, StyleMixin, GuidanceMixin):
             for field_name in ("confidence", "elasticity"):
                 if field_name in interaction_modifiers:
                     before_val = confidence if field_name == "confidence" else elasticity
-                    lo, hi = (0.1, 0.95) if field_name == "confidence" else (0.1, 0.9)
+                    # Confidence floor 0.12: even extreme-N personas retain
+                    # some confidence (TF-002 fix). Elasticity floor stays 0.1.
+                    lo, hi = (0.12, 0.95) if field_name == "confidence" else (0.1, 0.9)
                     new_val = max(lo, min(hi, before_val + interaction_modifiers[field_name]))
                     if field_name == "confidence":
                         confidence = new_val

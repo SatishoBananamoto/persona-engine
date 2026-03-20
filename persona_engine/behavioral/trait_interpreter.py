@@ -323,12 +323,16 @@ class TraitInterpreter:
 
         # Phase R2: C confidence ±0.05 → ±0.15
         c_boost = (self.traits.conscientiousness - 0.5) * 0.3
-        # Phase R2: N penalty -0.15 → -0.25, with sigmoid for extreme amplification
+        # N penalty: sigmoid amplification at extremes, but capped to prevent
+        # floor-collapse at N>0.9 (TF-002). Multiplier 0.18 keeps extreme-N
+        # penalty at ~0.175, aligned with literature (r≈-.15 to -.20).
         n_effect = trait_effect(self.traits.neuroticism)
-        n_penalty = n_effect * 0.25
+        n_penalty = n_effect * 0.18
 
         adjusted = dk_confidence + c_boost - n_penalty
-        return max(0.1, min(0.95, adjusted))
+        # Floor at 0.15 (not 0.1) — downstream modifiers (cognitive, bias)
+        # subtract further. 0.15 floor prevents extreme-N collapse (TF-002).
+        return max(0.15, min(0.95, adjusted))
 
     def get_trait_markers_for_validation(self) -> dict[str, Any]:
         """

@@ -307,6 +307,17 @@ Items identified during the graft session. Tracked here until they get their own
 - [x] **Dynamic validation** — DONE. 10/10 checks passed. Fatigue, mood drift, stress/patience, trust/disclosure, stance cache, inertia, stress decay, emotional appraisal, N drift rate, bias stacking. Report: `eval/dynamic_report.json`.
 - [ ] **Keyword coverage** — intent analyzer, domain detection, and stance generator all use hardcoded keyword lists. Open-vocabulary inputs miss detection. Options discussed: (1) enrich persona YAML subdomains (cheap, 80% coverage), (2) embedding-based fallback (medium cost, proper fix), (3) LLM classification (breaks determinism). Decision deferred to Satish.
 
+### Coverage Gaps (identified post-validation)
+
+| # | Item | Severity | What's missing | Plan |
+|---|------|----------|---------------|------|
+| G1 | TF-002/003 extreme value testing | Medium | DONE. N=0.95 collapsed confidence to floor — fixed with N penalty 0.25→0.18 + confidence floor 0.15 in trait_interpreter + 0.12 in behavioral_metrics. A=0.95 directness passed (0.121). |
+| G2 | Tone enum direction validation | Medium | DONE. 3 checks added: high-N+stress→ANXIOUS_STRESSED (pass), high-E+positive→EXCITED_ENGAGED (pass), neutral→NEUTRAL_CALM (pass). |
+| G3 | Stance generator unit tests | Low-Medium | DONE. 47 tests in tests/test_stance_generator.py covering all 6 internal functions. |
+| G4 | Additional tone enum members | Low | DONE. Confirmed NOT in target schema. Not a bug — consistent with skipping those calibration branches. |
+| G5 | scipy not in dev/all extras | Low | DONE. Added to dev extras in pyproject.toml. |
+| G6 | Generated eval reports committed | Low | DONE. Added eval/*.json to .gitignore, removed from tracking. |
+
 ### Done
 
 - [x] **TF-001: DK double-counting** — disabled DK bias in bias_simulator, kept DK curve in trait_interpreter. Commit: a6eea69
