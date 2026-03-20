@@ -176,7 +176,7 @@ AFTER individual trait effects. Intentional by design.
 
 | ID | Severity | Field | Issue | Recommendation |
 |----|----------|-------|-------|----------------|
-| TF-001 | **BUG** | confidence | Double Dunning-Kruger: DK curve in trait_interpreter + DK bias in bias_simulator | Remove DK bias OR make trait_interpreter use linear proficiency |
+| TF-001 | **FIXED** | confidence | Double Dunning-Kruger: DK curve in trait_interpreter + DK bias in bias_simulator | Fixed: DK bias disabled in bias_simulator. DK curve in trait_interpreter kept (more sophisticated). |
 | TF-002 | WATCH | confidence | N hits confidence via 3 paths (trait, bias, interactions) | Monitor extreme-N personas for over-suppression |
 | TF-003 | WATCH | directness | A double-influences via trait modifier + conflict_avoidance | Combined -0.335 for A=0.9 + contentious. Intentional but aggressive |
 | TF-004 | MINOR | elasticity | Schema modifier applied in unclamped gap | Interaction clamp catches it. Low risk. |

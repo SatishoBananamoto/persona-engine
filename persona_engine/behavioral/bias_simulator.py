@@ -236,10 +236,10 @@ class BiasSimulator:
         if eg_mod:
             modifiers.append(eg_mod)
 
-        # 8. Dunning-Kruger Bias (affects confidence — overconfident in low-proficiency)
-        dk_mod = self._compute_dunning_kruger_bias(proficiency, ctx)
-        if dk_mod:
-            modifiers.append(dk_mod)
+        # 8. Dunning-Kruger Bias — DISABLED (TF-001)
+        # The DK curve is already applied in TraitInterpreter.get_confidence_modifier()
+        # via dunning_kruger_confidence(). Applying it again here double-counts the effect.
+        # See docs/TRAIT_FLOW_ANALYSIS.md for details.
 
         return modifiers
 

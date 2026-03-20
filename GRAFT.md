@@ -191,6 +191,7 @@ Order: correctness → measurement infrastructure → enhancements → high-conf
 | D4 | 2026-03-20 | Skip 5 of 11 calibration values | Target's sigmoid + DK transforms are more sophisticated. Our linear values would regress them. |
 | D5 | 2026-03-20 | Partial logging port, not full | ~70% overlap. Only port unique improvements (centralized handler, LLMAPIKeyError, DEBUG logging). |
 | D6 | 2026-03-20 | Adapt save/load, don't cherry-pick | Different surrounding context. Same data structures. ~65 lines manual. |
+| D7 | 2026-03-20 | Fix TF-001: disable DK bias in bias_simulator, keep DK curve in trait_interpreter | Double Dunning-Kruger on confidence. The trait_interpreter DK curve is more sophisticated (5-segment piecewise, N-modulated). The bias_simulator version is simpler and redundant. |
 
 ---
 
@@ -206,6 +207,7 @@ Order: correctness → measurement infrastructure → enhancements → high-conf
 | 6 | Stance generator | DONE | 2602→2528 pass, 0 fail | Full replacement + personality modulation port + conflict detection. Commit: 39848f9 |
 | 7 | Logging (partial) | DONE | 2528 pass, 0 fail | Centralized handler, LLMAPIKeyError, DEBUG logging. 6 adapters. Commit: a503281 |
 | 8 | Remaining gaps | DONE | 2528 pass, 0 fail | SMALL_TALK, american casing, anchor_stance, validation warn, scipy dep. Commit: cfd5791 |
+| 9 | Fix TF-001: DK double-count | DONE | 2528 pass, 0 fail | Disabled DK bias in bias_simulator. DK curve in trait_interpreter kept. See docs/TRAIT_FLOW_ANALYSIS.md |
 
 ---
 
