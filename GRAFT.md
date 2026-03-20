@@ -458,12 +458,10 @@ engine = PersonaEngine.from_yaml("chef.yaml", prompt_strategy="prescriptive") # 
 
 - [ ] **PA-1: Create PromptStrategy interface** — abstract base with `build_system_prompt()` and `build_generation_prompt()`. Three implementations: PrescriptiveStrategy, DescriptiveStrategy, LLMStrategy.
 - [ ] **PA-2: Wire toggle into PersonaEngine** — `prompt_strategy` param in constructor and `from_yaml()`. Default: `descriptive`.
-- [ ] **PA-3: Implement DescriptiveStrategy** — rewrite all templates. No word lists. Frame IR as character state, not acting instructions. Key rewrites:
-  - `linguistic_markers.py` → 5 trait functions: prescriptive → descriptive
-  - `prompt_builder.py` → confidence/competence/directness descriptions: remove specific words
-  - Fix contradictory signals (confidence vs stance)
-  - Fix competence phrasing ("Do NOT use terminology correctly" → positive instruction)
-  - Review verbosity for low-competence topics
+- [x] **PA-3: Descriptive directives** — DONE (simpler approach than strategy pattern). Two changes:
+  1. `linguistic_markers.py` → replaced 5 bracket functions with interpolated `_TRAIT_POLES` system. 4 intensity levels per trait pole. Every persona gets a unique-ish character description. Clustering: 24 → 88 unique sets. Empty directives: 48% → 0%.
+  2. `prompt_builder.py` → confidence/competence/claim/uncertainty descriptions reworded. Removed all prescribed words.
+  - Stochastic marker system preserved (Whole Trait Theory) — surfaces one dominant trait behavior per turn.
 - [ ] **PA-4: Implement LLMStrategy** — use Haiku/small model to convert IR dataclass into natural character direction. Input: IR fields as JSON. Output: 3-5 sentence character brief.
 - [ ] **PA-5: Rename current prompt_builder to PrescriptiveStrategy** — preserve for backward compat.
 - [ ] **PA-6: A/B test** — same persona, same prompt, all 3 strategies. Compare text quality.

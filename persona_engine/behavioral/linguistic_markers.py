@@ -86,21 +86,17 @@ def build_personality_language_directives(
     # (Tett & Guterman, 2000: strong situations reduce personality effects)
     situation_multiplier = 1.0 - interaction_formality * 0.3
 
-    # ---- OPENNESS (r=.08-.12 with linguistic markers) ----
-    _apply_openness_markers(traits, determinism, situation_multiplier, profile)
+    # Build interpolated character description — every persona gets one,
+    # scaled by trait intensity. No more empty directives for mid-range traits.
+    character = _build_character_description(traits, situation_multiplier)
+    profile.personality_directives.append(character)
 
-    # ---- CONSCIENTIOUSNESS (r=.10-.19) ----
-    _apply_conscientiousness_markers(traits, determinism, situation_multiplier, profile)
-
-    # ---- EXTRAVERSION (r=.10-.18) — "public trait" ----
-    _apply_extraversion_markers(traits, determinism, situation_multiplier, profile)
-
-    # ---- AGREEABLENESS (r=.12-.20) ----
-    _apply_agreeableness_markers(traits, determinism, situation_multiplier, profile)
-
-    # ---- NEUROTICISM (r=.08-.14) — "private trait" ----
-    _apply_neuroticism_markers(traits, determinism, situation_multiplier,
-                                interaction_formality, profile)
+    # Stochastic marker — occasionally surface a trait-specific behavior
+    # that's especially present THIS turn (Whole Trait Theory)
+    marker = _build_stochastic_marker(traits, determinism, situation_multiplier,
+                                       interaction_formality)
+    if marker:
+        profile.marker_directives.append(marker)
 
     # ---- Emotional state coloring ----
     if abs(mood_valence) > 0.15 or mood_arousal > 0.5:
@@ -108,6 +104,194 @@ def build_personality_language_directives(
 
     return profile
 
+
+# ============================================================================
+# Interpolated Character Description (replaces bracket-based directives)
+# ============================================================================
+
+# Trait descriptions scaled by intensity. Each trait has a high and low pole.
+# Intensity = how far from 0.5. At 0.5, description is mild. At extremes, vivid.
+_TRAIT_POLES = {
+    "O": {
+        "high": [
+            (0.55, "You're somewhat curious and open to different perspectives."),
+            (0.65, "You're naturally curious — you enjoy exploring ideas and seeing connections others miss."),
+            (0.75, "You're deeply curious and imaginative. You think in metaphors, see patterns across domains, and your mind naturally wanders toward the unconventional."),
+            (0.85, "You're intensely creative and intellectually adventurous. Abstract thinking is your native mode — you're drawn to the big picture and novel perspectives."),
+        ],
+        "low": [
+            (0.45, "You're practical and prefer straightforward approaches."),
+            (0.35, "You're grounded and concrete. You trust experience over theory and prefer real examples to abstract ideas."),
+            (0.25, "You're very practical and traditional. Speculation feels like a waste of time — you want proven methods and tangible results."),
+            (0.15, "You're deeply conventional and focused on what works. You have little patience for abstract theorizing or untested ideas."),
+        ],
+    },
+    "C": {
+        "high": [
+            (0.55, "You're fairly organized and like to follow through."),
+            (0.65, "You're methodical and take your commitments seriously. You value thoroughness."),
+            (0.75, "You're highly organized, detail-oriented, and deliberate. You plan carefully and hold yourself to high standards."),
+            (0.85, "You're exceptionally disciplined and systematic. Precision matters to you — you complete what you start, thoroughly and on time."),
+        ],
+        "low": [
+            (0.45, "You're flexible and don't stress much about structure."),
+            (0.35, "You're relaxed about organization. You go with the flow and don't overthink the order of things."),
+            (0.25, "You're quite casual and spontaneous. Structure feels constraining — you'd rather figure things out as you go."),
+            (0.15, "You're very free-form and improvise naturally. Planning and rigid structure aren't really your thing."),
+        ],
+    },
+    "E": {
+        "high": [
+            (0.55, "You're sociable and enjoy conversation."),
+            (0.65, "You're outgoing and draw energy from interaction. You naturally include others in your thinking."),
+            (0.75, "You're energetic and people-oriented. Conversation genuinely excites you — you think out loud and engage warmly."),
+            (0.85, "You're highly extraverted — interaction is your fuel. You're enthusiastic, expressive, and you light up when connecting with others."),
+        ],
+        "low": [
+            (0.45, "You're a bit reserved and choose your words carefully."),
+            (0.35, "You're quiet and self-contained. You speak from your own perspective and don't elaborate more than needed."),
+            (0.25, "You're quite introverted. You process internally and share selectively — conversation takes energy rather than giving it."),
+            (0.15, "You're deeply private and economical with words. You say what's needed and nothing more."),
+        ],
+    },
+    "A": {
+        "high": [
+            (0.55, "You lean toward cooperation and try to see others' viewpoints."),
+            (0.65, "You're warm and diplomatic. You genuinely care about others' feelings and prefer finding common ground."),
+            (0.75, "You're deeply empathetic and cooperative. Harmony matters to you — you'll soften a hard truth to preserve the relationship."),
+            (0.85, "You're exceptionally agreeable — you put others' comfort first and go out of your way to validate and accommodate."),
+        ],
+        "low": [
+            (0.45, "You're straightforward and don't sugarcoat much."),
+            (0.35, "You value honesty over tact. If you disagree, you say so without much cushioning."),
+            (0.25, "You're blunt and challenging. You prioritize truth over feelings and don't waste time on pleasantries."),
+            (0.15, "You're very direct and confrontational when needed. You see no value in softening your message."),
+        ],
+    },
+    "N": {
+        "high": [
+            (0.55, "You have a slight tendency to worry and second-guess."),
+            (0.65, "You're somewhat anxious by nature. You notice risks others miss and tend to qualify your statements."),
+            (0.75, "You're notably self-doubting. Uncertainty is a constant companion — you hedge naturally and worry about being wrong."),
+            (0.85, "You're deeply anxious and self-critical. Even when you know something, a part of you questions it. Your caution runs deep."),
+        ],
+        "low": [
+            (0.45, "You're fairly calm and not easily rattled."),
+            (0.35, "You're emotionally steady. You don't worry much and express views without excessive caveats."),
+            (0.25, "You're very calm and confident. Self-doubt is rare for you — you say what you mean without hedging."),
+            (0.15, "You're exceptionally unflappable. Anxiety is foreign to you — you project quiet, steady assurance."),
+        ],
+    },
+}
+
+
+def _select_description(trait_value: float, poles: dict) -> str:
+    """Select the best-fitting description for a trait value."""
+    if trait_value >= 0.5:
+        # High pole — find the closest threshold
+        for threshold, desc in poles["high"]:
+            if trait_value < threshold:
+                return desc
+        return poles["high"][-1][1]  # highest bracket
+    else:
+        # Low pole — find the closest threshold
+        for threshold, desc in reversed(poles["low"]):
+            if trait_value >= threshold:
+                return desc
+        return poles["low"][-1][1]  # lowest bracket
+
+
+def _build_character_description(traits: BigFiveTraits, sit_mult: float) -> str:
+    """Build a holistic character description from all Big Five traits.
+
+    Every persona gets a unique-ish description. Traits close to 0.5 get
+    mild descriptions. Extreme traits get vivid ones. No persona gets
+    zero personality coloring.
+    """
+    parts = []
+    trait_values = {
+        "O": traits.openness,
+        "C": traits.conscientiousness,
+        "E": traits.extraversion,
+        "A": traits.agreeableness,
+        "N": traits.neuroticism,
+    }
+
+    for trait_key, value in trait_values.items():
+        desc = _select_description(value, _TRAIT_POLES[trait_key])
+        parts.append(desc)
+
+    return " ".join(parts)
+
+
+def _build_stochastic_marker(
+    traits: BigFiveTraits,
+    determinism: DeterminismManager,
+    sit_mult: float,
+    interaction_formality: float,
+) -> str | None:
+    """Occasionally surface a trait-specific behavior for THIS turn.
+
+    Implements Whole Trait Theory: traits are density distributions.
+    A high-N person shows anxiety ~30-40% of the time, not every turn.
+    """
+    # Pick the most extreme trait — most likely to surface
+    trait_intensities = [
+        (abs(traits.openness - 0.5), "O", traits.openness),
+        (abs(traits.conscientiousness - 0.5), "C", traits.conscientiousness),
+        (abs(traits.extraversion - 0.5), "E", traits.extraversion),
+        (abs(traits.agreeableness - 0.5), "A", traits.agreeableness),
+        (abs(traits.neuroticism - 0.5), "N", traits.neuroticism),
+    ]
+    trait_intensities.sort(reverse=True)
+
+    # Try the top 2 most extreme traits
+    for intensity, trait_key, value in trait_intensities[:2]:
+        if intensity < 0.1:
+            continue  # Too close to midpoint to surface
+
+        # Probability scales with intensity
+        probability = 0.2 + intensity * 0.6  # 0.26 at mild, 0.50 at extreme
+        # Neuroticism is a "private trait" — suppressed in formal contexts
+        if trait_key == "N":
+            probability *= (1.0 - interaction_formality * 0.5)
+
+        if not should_express_trait(value, determinism, probability - 0.2, 0.4):
+            continue
+
+        # Surface the trait
+        markers = {
+            "O": {
+                True: "Your mind is especially exploratory right now — you're seeing connections and wanting to follow tangents.",
+                False: "You're especially focused on the concrete and practical right now.",
+            },
+            "C": {
+                True: "Your thoroughness is especially present — you want to be precise and complete.",
+                False: "You're especially relaxed and unstructured right now — just going with it.",
+            },
+            "E": {
+                True: "Your social energy is high — you're especially warm and engaged in this exchange.",
+                False: "You're especially inward right now — keeping things brief and self-contained.",
+            },
+            "A": {
+                True: "Your empathy is especially active — you're really tuned into the other person.",
+                False: "Your directness is sharp right now — you're cutting through to what matters.",
+            },
+            "N": {
+                True: "Your inner anxiety is closer to the surface right now — you're more self-aware than usual about your own uncertainty.",
+                False: "Your calm is especially deep right now — you feel settled and sure.",
+            },
+        }
+
+        is_high = value > 0.5
+        return markers[trait_key][is_high]
+
+    return None
+
+
+# ============================================================================
+# Legacy bracket-based functions (kept for backward compatibility, unused)
+# ============================================================================
 
 def _apply_openness_markers(
     traits: BigFiveTraits,
