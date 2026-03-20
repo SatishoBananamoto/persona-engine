@@ -269,7 +269,7 @@ class TestPromptBuilderCompetence:
         """Low competence → prompt tells LLM not to use domain terms."""
         ir = make_ir(competence=0.15, confidence=0.2)
         prompt = builder.build_generation_prompt(ir, "Tell me about quantum physics")
-        assert "everyday language" in prompt.lower() or "don't really know" in prompt.lower()
+        assert "layperson" in prompt.lower() or "everyday understanding" in prompt.lower()
 
     def test_surface_competence_prompt_says_vague(self, builder):
         """Surface competence → allow vagueness."""

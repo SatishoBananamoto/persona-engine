@@ -158,7 +158,7 @@ class TestPersonalityLanguageDirectives:
         det = DeterminismManager(seed=42)
         profile = build_personality_language_directives(traits, det)
         combined = " ".join(profile.personality_directives)
-        assert "softener" in combined.lower() or "cooperative" in combined.lower()
+        assert "cooperation" in combined.lower() or "common ground" in combined.lower()
 
     def test_high_n_gets_hedging_directive(self):
         traits = _make_traits(neuroticism=0.8)
@@ -222,7 +222,7 @@ class TestLIWCMarkers:
                 traits, det, interaction_formality=0.2
             )
             markers = " ".join(profile.marker_directives).lower()
-            if "worry" in markers or "anxious" in markers or "concerned" in markers:
+            if "anxiety" in markers or "uncertainty" in markers or "reassurance" in markers:
                 anxiety_count += 1
         # Should appear sometimes but not always (Whole Trait Theory)
         assert 10 < anxiety_count < 45, f"Anxiety markers appeared {anxiety_count}/50 times"
@@ -235,7 +235,7 @@ class TestLIWCMarkers:
             det = DeterminismManager(seed=seed)
             profile = build_personality_language_directives(traits, det)
             markers = " ".join(profile.marker_directives).lower()
-            if "definitely" in markers or "clearly" in markers or "certainly" in markers:
+            if "certainty" in markers or "conviction" in markers or "commitment" in markers:
                 certainty_count += 1
         assert certainty_count > 5, f"Certainty markers appeared only {certainty_count}/50 times"
 

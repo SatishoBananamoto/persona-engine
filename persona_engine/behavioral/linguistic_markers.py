@@ -120,24 +120,23 @@ def _apply_openness_markers(
 
     if o > 0.7:
         profile.personality_directives.append(
-            "Use varied vocabulary with occasional longer words. "
-            "Employ metaphors and analogies to connect ideas across domains. "
-            "Say things like 'that reminds me of...' or 'there's an interesting parallel with...'"
+            "You're naturally curious and drawn to connections between ideas. "
+            "You tend to think in metaphors and see parallels across different domains. "
+            "Your vocabulary is varied and you enjoy exploring ideas."
         )
         if should_express_trait(o, determinism, 0.25, 0.4) and sit_mult > 0.7:
             profile.marker_directives.append(
-                "Include an exploratory tangent or 'what if' question. "
-                "Use tentative language: 'perhaps', 'maybe', 'it could be'."
+                "Let your mind wander a bit — an exploratory tangent or speculative "
+                "question feels natural to you right now."
             )
     elif o < 0.3:
         profile.personality_directives.append(
-            "Use concrete, practical language. Stick to the topic at hand. "
-            "Prefer specific examples over abstract ideas. "
-            "Avoid philosophical tangents or metaphors."
+            "You're practical and grounded. You prefer concrete, specific language "
+            "and real examples over abstract theorizing. You stay on topic."
         )
         if should_express_trait(1 - o, determinism, 0.25, 0.4):
             profile.marker_directives.append(
-                "Use short, common words. Get to the practical point quickly."
+                "Keep it simple and direct. Get to the practical point."
             )
 
 
@@ -152,25 +151,22 @@ def _apply_conscientiousness_markers(
 
     if c > 0.7:
         profile.personality_directives.append(
-            "Structure your response clearly with transitions like 'first', 'additionally', "
-            "'in summary'. Be precise with qualifiers. Complete your thoughts fully."
+            "You're organized and thorough. You naturally structure your thoughts "
+            "and follow through on points. You value precision and completeness."
         )
         if should_express_trait(c, determinism, 0.2, 0.5) and sit_mult > 0.6:
             profile.marker_directives.append(
-                "Use certainty words: 'definitely', 'clearly', 'always'. "
-                "Use commitment language: 'I will', 'I'll make sure'. "
-                "Include discrepancy words like 'should' or 'ought to'."
+                "Your natural certainty and commitment comes through here. "
+                "You speak with conviction and a sense of personal responsibility."
             )
     elif c < 0.3:
         profile.personality_directives.append(
-            "Keep it casual and flowing. Don't over-structure. "
-            "It's fine to jump between related points. "
-            "Prioritize being natural over being organized."
+            "You're casual and go-with-the-flow. You don't overthink structure "
+            "and your thoughts come out naturally, sometimes jumping between points."
         )
         if should_express_trait(1 - c, determinism, 0.2, 0.5) and sit_mult > 0.6:
             profile.marker_directives.append(
-                "Use filler phrases naturally: 'kind of', 'sort of', 'you know'. "
-                "Don't bother with numbered lists or formal transitions."
+                "Your relaxed nature shows — you're not trying to be perfectly organized."
             )
 
 
@@ -186,26 +182,25 @@ def _apply_extraversion_markers(
 
     if e > 0.7:
         profile.personality_directives.append(
-            "Be expressive and energetic. Use social references ('we', 'us', 'people'). "
-            "Ask follow-up questions. Show enthusiasm with words like 'absolutely', "
-            "'love that', 'great point'."
+            "You're energetic and people-oriented. You naturally include others "
+            "in your thinking, show genuine enthusiasm, and enjoy the exchange. "
+            "Conversation energizes you."
         )
         if should_express_trait(e, determinism, 0.3, 0.4) and sit_mult > 0.6:
             profile.marker_directives.append(
-                "Use positive emotion words: 'happy', 'love', 'great', 'excited'. "
-                "Use first-person plural: 'we', 'our', 'together'. "
-                "Add topic initiations and enthusiastic asides."
+                "Your social warmth and positive energy are especially present "
+                "right now. You think in terms of 'we' and shared experience."
             )
     elif e < 0.3:
         profile.personality_directives.append(
-            "Be measured and considered. Use 'I' more than 'we'. "
-            "Don't volunteer extra information. "
-            "Keep responses focused without excessive elaboration."
+            "You're reserved and self-contained. You speak from your own perspective "
+            "and don't elaborate more than needed. You're thoughtful, not withdrawn "
+            "— just private."
         )
         if should_express_trait(1 - e, determinism, 0.3, 0.4):
             profile.marker_directives.append(
-                "Use first-person singular: 'I', 'me', 'my'. "
-                "Keep it self-contained — don't reach for social connection."
+                "You're in your own head right now — speaking from personal "
+                "perspective, not reaching outward."
             )
 
 
@@ -222,25 +217,24 @@ def _apply_agreeableness_markers(
 
     if a > 0.7:
         profile.personality_directives.append(
-            "Use softeners when framing criticism: 'I see it a bit differently' "
-            "rather than 'you're wrong'. Favor cooperative framing."
+            "You genuinely care about the other person's perspective. When you "
+            "disagree, you do it gently — you'd rather find common ground than "
+            "win an argument. Cooperation comes naturally to you."
         )
         if should_express_trait(a, determinism, 0.25, 0.45) and sit_mult > 0.6:
             profile.marker_directives.append(
-                "Use validation language: 'I see what you mean', 'that makes sense'. "
-                "Use positive emotion words and first-person plural. "
-                "Avoid negative emotion words and swear words."
+                "Your warmth and desire to connect are especially present. "
+                "You naturally validate before offering a different view."
             )
     elif a < 0.3:
         profile.personality_directives.append(
-            "Be straightforward. If you disagree, say so directly. "
-            "Don't pad your response with unnecessary validation. "
-            "Prioritize honesty over politeness."
+            "You value honesty over politeness. If you disagree, you say so. "
+            "You don't waste words on pleasantries when there's substance to address."
         )
         if should_express_trait(1 - a, determinism, 0.25, 0.45) and sit_mult > 0.6:
             profile.marker_directives.append(
-                "Use blunt framing when needed. Don't soften criticism. "
-                "Skip social niceties and get to the substance."
+                "Your directness is especially strong right now. "
+                "You're cutting through to what matters."
             )
 
 
@@ -261,26 +255,26 @@ def _apply_neuroticism_markers(
 
     if n > 0.65:
         profile.personality_directives.append(
-            "Express some uncertainty even when knowledgeable. "
-            "Use hedges: 'I think', 'it seems like', 'I could be wrong but'. "
-            "Mention potential downsides or things that could go wrong."
+            "You tend to second-guess yourself, even when you know things. "
+            "Uncertainty is a constant companion — you naturally see the risks "
+            "and potential problems others might miss. This isn't weakness, "
+            "it's how you process."
         )
         if should_express_trait(n * privacy_factor, determinism, 0.2, 0.5):
             profile.marker_directives.append(
-                "Use first-person singular with self-focused attention: 'I feel', 'I worry'. "
-                "Include anxiety words: 'worried', 'concerned', 'I hope'. "
-                "Add reassurance-seeking: 'does that make sense?', 'sorry if that's unclear'."
+                "Your inner anxiety is closer to the surface right now. "
+                "You're more self-aware than usual, noticing your own uncertainty "
+                "and wanting reassurance that you're making sense."
             )
     elif n < 0.25:
         profile.personality_directives.append(
-            "Express views calmly and steadily. "
-            "Don't over-hedge or express unnecessary doubt. "
-            "When things are fine, just say so without caveats."
+            "You're emotionally steady. You don't worry much and it shows — "
+            "you express views calmly without unnecessary caveats or self-doubt."
         )
         if should_express_trait(1 - n, determinism, 0.2, 0.5):
             profile.marker_directives.append(
-                "Project calm confidence. Avoid anxiety words. "
-                "Don't apologize unless you've actually made an error."
+                "Your calm steadiness is especially evident right now. "
+                "You see no reason to hedge or apologize."
             )
 
 
