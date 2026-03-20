@@ -391,6 +391,11 @@ This is a multi-step fix that touches the confidence computation pipeline. The f
 - [x] **E2E: Stress → text markers** — PASS. High-N persona: hedging 8→11, tone→anxious_stressed, negative markers increased under challenge.
 - [x] **E2E: Fatigue → text shortening** — PASS. Fixed threshold 0.7→0.5 + low-engagement trigger. Real LLM result: early avg 95 words → late avg 47 words (50% reduction). Verbosity drops to BRIEF at turn 9.
 
+### Correlation Analysis
+
+- [x] **Correlation matrix** — DONE. 212 personas (100 Layer Zero + 100 random uniform + 12 shipped). 10/10 direction checks pass. Report: `eval/correlation_report.json`.
+- **Observation:** Some r-values are very high (r=1.0 for E→proactivity, N→neg_tone). This is by construction — IR parameters are deterministic functions of traits. Real psychology has r=0.08-0.20 because humans have noise. Our stochastic layer (linguistic_markers.py) adds noise at the TEXT level, not at the IR level. This is a known architectural property, not a bug.
+
 ### Other Pending
 
 - [ ] **Keyword coverage** — decision deferred to Satish. Options: (1) enrich persona YAML subdomains, (2) embedding-based fallback, (3) LLM classification.
