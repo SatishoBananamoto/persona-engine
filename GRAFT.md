@@ -286,8 +286,8 @@ Order: correctness → measurement infrastructure → enhancements → high-conf
 
 - [x] All steps complete with passing tests
 - [x] GRAFT.md fully updated with final state
-- [ ] Close or retarget PR #1 (currently against wrong base)
-- [ ] Create new PR: `graft/merge-tier1` → `claude/analyze-test-coverage-d93F4` (or → `main`)
-- [ ] Archive stale branches: `main`, `claude-md`, `explore-repo-KZTBj`, `external-review`, `general-session-VUY6r`, `review/tier1-bugfixes`
-- [ ] Update TRACKER.md for new branch state
-- [ ] Verify version consistency across pyproject.toml / __init__.py
+- [x] Close PR #1 (was against wrong base) — closed with comment, superseded by PR #2
+- [x] Create new PR: `graft/merge-tier1` → `claude/analyze-test-coverage-d93F4` — PR #2
+- [x] Verify version consistency: pyproject.toml = `__init__.py` = `0.4.0`
+- [ ] Archive stale branches — DEFERRED. Keep all branches until PR #2 is merged and verified. Tag then delete.
+- [x] TRACKER.md — not needed. GRAFT.md serves as the comprehensive record. Source branch's TRACKER.md was never on the target.
