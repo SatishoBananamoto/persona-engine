@@ -302,7 +302,7 @@ Items identified during the graft session. Tracked here until they get their own
 
 ### Pending
 
-- [ ] **Flowcharts** — per-field modifier chain diagrams + trait fan-out. Required to catch composition issues like TF-001 visually. Format: Mermaid or plain text in `docs/`. See `docs/TRAIT_FLOW_ANALYSIS.md` for the raw data.
+- [x] **Flowcharts** — DONE. 3 Mermaid diagrams in `docs/PIPELINE_FLOWCHARTS.md`: master pipeline, 4 per-field modifier chains (confidence/elasticity/directness/disclosure), 5 trait fan-out diagrams (O/C/E/A/N).
 - [ ] **Benchmark validation** — run 8 standard Big Five profiles through `engine.plan()`, compare IR output against Yarkoni (2010) correlation table. Validates direction + magnitude of trait→behavior mapping. See `docs/VALIDATION_SOURCES.md` for profiles and strategy.
 - [ ] **Keyword coverage** — intent analyzer, domain detection, and stance generator all use hardcoded keyword lists. Open-vocabulary inputs miss detection. Options discussed: (1) enrich persona YAML subdomains (cheap, 80% coverage), (2) embedding-based fallback (medium cost, proper fix), (3) LLM classification (breaks determinism). Decision deferred to Satish.
 
