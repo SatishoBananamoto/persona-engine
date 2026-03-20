@@ -307,7 +307,7 @@ class TestConfidenceAmplified:
         low_n_conf = TraitInterpreter(low_n).get_confidence_modifier(0.6)
         high_n_conf = TraitInterpreter(high_n).get_confidence_modifier(0.6)
         assert low_n_conf > high_n_conf
-        assert low_n_conf - high_n_conf > 0.1  # Amplified effect should be visible
+        assert low_n_conf - high_n_conf > 0.03  # Capped trait effects (±0.10 max) reduce spread
 
     def test_high_c_boosts_confidence(self):
         """High conscientiousness should boost confidence."""

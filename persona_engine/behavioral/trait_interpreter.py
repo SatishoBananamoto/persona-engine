@@ -307,32 +307,45 @@ class TraitInterpreter:
 
     def get_confidence_modifier(self, domain_proficiency: float) -> float:
         """
-        Adjusts confidence based on traits + Dunning-Kruger curve.
+        Compute confidence from self-efficacy baseline + domain expertise.
 
-        Phase R2: C confidence ±0.05 → ±0.15, N penalty max -0.15 → -0.25.
-        Also applies Dunning-Kruger non-linear proficiency → confidence mapping.
+        Architecture (CF-1/2/3):
+        1. General self-efficacy: trait-derived baseline independent of domain
+        2. Domain confidence: DK curve applied to proficiency
+        3. Final = max(self_efficacy, domain_confidence) + bounded personality modifier
+        4. Total personality effect capped at ±0.10 (literature: ~5% variance)
 
         Args:
             domain_proficiency: Base proficiency (0-1)
 
         Returns:
-            Modified confidence
+            Modified confidence (0.1-0.95)
         """
-        # Phase R2: Apply Dunning-Kruger curve first
-        dk_confidence = dunning_kruger_confidence(domain_proficiency, self.traits.neuroticism)
+        # CF-1: General self-efficacy — a person's baseline confidence
+        # independent of domain expertise. High-E, high-C people are
+        # generally more self-assured; high-N less so.
+        E = self.traits.extraversion
+        C = self.traits.conscientiousness
+        N = self.traits.neuroticism
+        self_efficacy = 0.35 + E * 0.10 + C * 0.08 - N * 0.08
+        # Range: ~0.27 (low-E, low-C, high-N) to ~0.53 (high-E, high-C, low-N)
 
-        # Phase R2: C confidence ±0.05 → ±0.15
-        c_boost = (self.traits.conscientiousness - 0.5) * 0.3
-        # N penalty: sigmoid amplification at extremes, but capped to prevent
-        # floor-collapse at N>0.9 (TF-002). Multiplier 0.18 keeps extreme-N
-        # penalty at ~0.175, aligned with literature (r≈-.15 to -.20).
-        n_effect = trait_effect(self.traits.neuroticism)
-        n_penalty = n_effect * 0.18
+        # CF-2: Domain confidence — DK curve maps proficiency to confidence
+        # This is a BONUS on top of self-efficacy for domain-relevant topics
+        dk_confidence = dunning_kruger_confidence(domain_proficiency, N)
 
-        adjusted = dk_confidence + c_boost - n_penalty
-        # Floor at 0.15 (not 0.1) — downstream modifiers (cognitive, bias)
-        # subtract further. 0.15 floor prevents extreme-N collapse (TF-002).
-        return max(0.15, min(0.95, adjusted))
+        # Use whichever is higher — domain expertise lifts confidence
+        # above self-efficacy, but never below it
+        base_confidence = max(self_efficacy, dk_confidence)
+
+        # CF-3: Bounded personality modifier — total trait effect on confidence
+        # capped at ±0.10 to match literature (~5% variance from personality)
+        c_modifier = (C - 0.5) * 0.12       # C boost: ±0.06
+        n_modifier = -(N - 0.5) * 0.08      # N penalty: ±0.04
+        personality_modifier = max(-0.10, min(0.10, c_modifier + n_modifier))
+
+        adjusted = base_confidence + personality_modifier
+        return max(0.10, min(0.95, adjusted))
 
     def get_trait_markers_for_validation(self) -> dict[str, Any]:
         """

@@ -797,35 +797,35 @@ class TestGetConfidenceModifier:
     """
 
     def test_mid_traits_mid_proficiency(self):
-        # DK(0.5, 0.5)=0.42, c_boost=0, n_penalty=sigmoid(0.5)*0.18=0.09 → 0.33
+        # New arch: self-efficacy baseline + capped trait effects (±0.10 max) → 0.42
         interp = make_interpreter(conscientiousness=0.5, neuroticism=0.5)
-        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.330, abs=0.01)
+        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.420, abs=0.01)
 
     def test_high_c_boost(self):
-        # DK(0.5, 0.0)=0.42, c_boost=0.15, n_penalty≈0.005 → 0.566
+        # New arch: self-efficacy baseline + C boost capped at +0.10 → 0.58
         interp = make_interpreter(conscientiousness=1.0, neuroticism=0.0)
-        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.566, abs=0.01)
+        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.580, abs=0.01)
 
     def test_low_c_penalty(self):
-        # DK(0.5, 0.0)=0.42, c_boost=-0.15, n_penalty≈0.005 → 0.266
+        # New arch: self-efficacy baseline + C penalty capped at -0.10 → 0.40
         interp = make_interpreter(conscientiousness=0.0, neuroticism=0.0)
-        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.266, abs=0.01)
+        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.400, abs=0.01)
 
     def test_high_n_penalty(self):
-        # DK(0.5, 1.0)=0.42, c_boost=0, n_penalty≈sigmoid(1.0)*0.18=0.177 → 0.243
+        # New arch: self-efficacy baseline + N penalty capped at -0.10 → 0.38
         interp = make_interpreter(conscientiousness=0.5, neuroticism=1.0)
-        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.243, abs=0.01)
+        assert interp.get_confidence_modifier(0.5) == pytest.approx(0.380, abs=0.01)
 
     def test_combined_boost_and_penalty(self):
-        # DK(0.7, 0.4)=0.67, c_boost=0.09, n_penalty≈sigmoid(0.4)*0.18=0.056 → 0.704
+        # New arch: self-efficacy baseline + combined C/N effects capped at ±0.10 → 0.714
         interp = make_interpreter(conscientiousness=0.8, neuroticism=0.4)
-        assert interp.get_confidence_modifier(0.7) == pytest.approx(0.704, abs=0.01)
+        assert interp.get_confidence_modifier(0.7) == pytest.approx(0.714, abs=0.01)
 
     # --- Clamping ---
 
     def test_clamped_to_min(self):
         interp = make_interpreter(conscientiousness=0.0, neuroticism=1.0)
-        assert interp.get_confidence_modifier(0.0) == pytest.approx(0.15)
+        assert interp.get_confidence_modifier(0.0) == pytest.approx(0.22)
 
     def test_clamped_to_max(self):
         interp = make_interpreter(conscientiousness=1.0, neuroticism=0.0)

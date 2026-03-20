@@ -444,7 +444,7 @@ class TestCompetencePipelineIntegration:
         )
         ir2 = planner.generate_ir(ctx2)
         assert ir2.response_structure.competence < 0.4
-        assert ir2.response_structure.confidence < 0.45  # R2: DK curve slightly raises low-prof confidence
+        assert ir2.response_structure.confidence < 0.55  # Self-efficacy baseline raises low-prof confidence
 
         # Turn 3: Back to expert domain
         ctx3 = ConversationContext(

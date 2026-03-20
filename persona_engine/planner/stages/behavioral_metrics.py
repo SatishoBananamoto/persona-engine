@@ -204,12 +204,6 @@ class MetricsMixin:
             value=confidence
         )
 
-        # TF-002: Minimum confidence floor — even extreme-N personas retain
-        # some confidence. Without this, cumulative N penalty + cognitive
-        # penalty + low proficiency can collapse confidence to 0.1 (the
-        # generic clamp01 floor), losing all signal from other modifiers.
-        confidence = max(0.12, confidence)
-
         return confidence
 
     def compute_competence(
