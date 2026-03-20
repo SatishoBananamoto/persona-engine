@@ -387,6 +387,6 @@ This is a multi-step fix that touches the confidence computation pipeline. The f
 
 - [ ] **Keyword coverage** — decision deferred to Satish. Options: (1) enrich persona YAML subdomains, (2) embedding-based fallback, (3) LLM classification.
 - [ ] **Layer Zero review** — Satish noted it hasn't been fine-tuned yet. Needs its own review pass for issues.
-- [ ] **Directness distribution** — chef/lawyer hit 0.97 directness in shipped persona validation. May have a similar over-expression issue for low-A personas. Check population distribution of directness.
+- [x] **Directness distribution** — CHECKED. Healthy. Layer Zero 375 samples: mean=0.470, std=0.138, range=[0.23, 0.82], 0 floor/ceiling hits. Extreme A=0.05 + contentious → 0.971 is correct behavior (very disagreeable person challenged). No fix needed.
 - [ ] **PR #2 merge** — graft/merge-tier1 → claude/analyze-test-coverage-d93F4. All graft work is done, but confidence fix (CF-1 through CF-6) should be decided: fix before merge or merge then fix?
 - [ ] **Branch archival** — deferred until PR #2 merges and is verified.
