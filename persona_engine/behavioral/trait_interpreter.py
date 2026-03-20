@@ -118,8 +118,9 @@ class TraitInterpreter:
         Returns:
             Verbosity enum
         """
-        # Phase R2: C verbosity ±0.1 → ±0.25 (high-C are observably more detailed)
-        adjusted = base_verbosity + (self.traits.conscientiousness - 0.5) * 0.5
+        # Phase R2: C verbosity (high-C are observably more detailed)
+        # E co-factor: extraverts tend toward slightly longer responses
+        adjusted = base_verbosity + (self.traits.conscientiousness - 0.5) * 0.5 + (self.traits.extraversion - 0.5) * 0.15
         adjusted = max(0.0, min(1.0, adjusted))
 
         if adjusted < 0.35:
@@ -149,9 +150,10 @@ class TraitInterpreter:
         High E: Proactively engages, initiates conversation
         Low E: More reactive, waits for prompts
 
-        Returns: Proactivity score (0-1)
+        Returns: Proactivity score (0.2-0.8)
         """
-        return self.traits.extraversion
+        # Floor/ceiling: even extreme introverts sometimes initiate
+        return 0.2 + self.traits.extraversion * 0.6
 
     def get_self_disclosure_modifier(self) -> float:
         """
@@ -162,8 +164,9 @@ class TraitInterpreter:
         """
         # Phase R2: Sigmoid-amplified E disclosure. Multiplier 0.45 chosen to
         # avoid swamping privacy clamp while producing ≥0.4 spread at extremes.
+        # N co-factor: high-N individuals disclose more via rumination/venting
         e_effect = trait_effect(self.traits.extraversion)
-        return (e_effect - 0.5) * 0.45
+        return (e_effect - 0.5) * 0.45 + self.traits.neuroticism * 0.1
 
     def influences_response_length_social(self) -> float:
         """
@@ -174,7 +177,8 @@ class TraitInterpreter:
 
     def get_enthusiasm_baseline(self) -> float:
         """Baseline enthusiasm level (influences tone selection)"""
-        return self.traits.extraversion
+        # Floor/ceiling: even introverts show some enthusiasm in their domain
+        return 0.2 + self.traits.extraversion * 0.5
 
     # ========================================================================
     # AGREEABLENESS → Behavior Mappings
@@ -210,8 +214,9 @@ class TraitInterpreter:
         return self.traits.agreeableness
 
     def influences_hedging_frequency(self) -> float:
-        """High A: Uses more hedging language"""
-        return self.traits.agreeableness * 0.6
+        """High A + high N: Uses more hedging language"""
+        # N co-factor: neurotic individuals hedge more (uncertainty/anxiety)
+        return min(0.8, self.traits.agreeableness * 0.6 + self.traits.neuroticism * 0.2)
 
     # ========================================================================
     # NEUROTICISM → Behavior Mappings
@@ -242,7 +247,9 @@ class TraitInterpreter:
         High N: More likely to use negative/anxious tones
         Returns bias toward negative tones (0-1)
         """
-        return self.traits.neuroticism * 0.7
+        # Tackman et al. (2023): N→negative emotion r≈.40; 0.5 multiplier
+        # keeps effective range aligned with literature
+        return self.traits.neuroticism * 0.5
 
     # ========================================================================
     # Multi-Trait Interactions

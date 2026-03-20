@@ -104,10 +104,10 @@ class TestTrustDisclosure:
 
     def test_high_trust_increases_disclosure(self, chef_engine):
         """When trust is high, disclosure should be higher."""
-        # Manually boost trust
+        # Manually boost trust (delta wide enough to survive disclosure clamping)
         chef_engine._memory.record_relationship_event(
             "User validated expertise and confirmed trust",
-            trust_delta=0.3, rapport_delta=0.0, turn=0,
+            trust_delta=0.5, rapport_delta=0.0, turn=0,
         )
         ir_high = chef_engine.plan("Tell me about your cooking philosophy")
         disc_high = ir_high.knowledge_disclosure.disclosure_level
@@ -116,7 +116,7 @@ class TestTrustDisclosure:
         engine2 = PersonaEngine.from_yaml("personas/chef.yaml", adapter=MockLLMAdapter())
         engine2._memory.record_relationship_event(
             "User was hostile and distrustful",
-            trust_delta=-0.3, rapport_delta=0.0, turn=0,
+            trust_delta=-0.5, rapport_delta=0.0, turn=0,
         )
         ir_low = engine2.plan("Tell me about your cooking philosophy")
         disc_low = ir_low.knowledge_disclosure.disclosure_level

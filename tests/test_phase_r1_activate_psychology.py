@@ -482,7 +482,7 @@ class TestZeroDeadMethods:
         planner = TurnPlanner(persona, DeterminismManager(seed=42))
         ctx = TraceContext()
         guidance = planner._behavioral.compute_trait_guidance(ctx, "test")
-        assert guidance.negative_tone_weight > 0.5
+        assert guidance.negative_tone_weight > 0.4
 
     def test_influences_proactivity_produces_directive(self):
         """influences_proactivity should produce follow-up directive for high-E."""
