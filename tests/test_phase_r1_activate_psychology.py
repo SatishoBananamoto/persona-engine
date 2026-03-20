@@ -22,7 +22,7 @@ from persona_engine.behavioral.trait_interpreter import TraitInterpreter
 from persona_engine.behavioral.cognitive_interpreter import CognitiveStyleInterpreter
 from persona_engine.behavioral.values_interpreter import ValuesInterpreter
 from persona_engine.memory import StanceCache
-from persona_engine.planner.stance_generator import generate_stance_safe, _value_short_description
+from persona_engine.planner.stance_generator import generate_stance_safe
 from persona_engine.planner.trace_context import TraceContext
 from persona_engine.planner.turn_planner import (
     ConversationContext,
@@ -276,12 +276,6 @@ class TestValueConflictResolution:
                          "conflict" in c.effect.lower()]
         # Should have at least one conflict-related citation
         assert len(conflict_cites) >= 1
-
-    def test_value_short_description(self):
-        """Value short descriptions should be human-readable."""
-        assert "autonomy" in _value_short_description("self_direction")
-        assert "caring" in _value_short_description("benevolence")
-        assert "safety" in _value_short_description("security")
 
     def test_internal_conflict_test_from_plan(self):
         """Plan's 'Internal Conflict Test': self_direction vs security on AI sharing."""
