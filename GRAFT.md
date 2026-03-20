@@ -203,8 +203,8 @@ Order: correctness → measurement infrastructure → enhancements → high-conf
 | 3 | Calibration report | DONE | N/A (docs only) | New file, clean copy. 879 lines. Commit: f4d773b |
 | 4 | Save/load v3 | DONE | 2602 pass, 0 fail | Manual adapt ~35 lines. Version test updated. Commit: 826ae1b |
 | 5 | Calibration code | DONE | 2602 pass, 0 fail | 4 direct, 3 adapt, 5 skip. 26 test values updated. Commit: eb0f717 |
-| 6 | Stance generator | NOT STARTED | — | — |
-| 7 | Logging (partial) | NOT STARTED | — | — |
+| 6 | Stance generator | DONE | 2602→2528 pass, 0 fail | Full replacement + personality modulation port + conflict detection. Commit: 39848f9 |
+| 7 | Logging (partial) | DONE | 2528 pass, 0 fail | Centralized handler, LLMAPIKeyError, DEBUG logging. 6 adapters. Commit: a503281 |
 
 ---
 
