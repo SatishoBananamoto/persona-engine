@@ -21,9 +21,42 @@ from persona_engine.exceptions import (
     LLMResponseError,
 )
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
     from persona_engine.schema.ir_schema import IntermediateRepresentation
     from persona_engine.schema.persona_schema import Persona
+
+
+def _handle_llm_exception(e: Exception, provider: str) -> None:
+    """Centralized LLM exception mapper.
+
+    Maps provider SDK exceptions to typed persona-engine exceptions.
+    Avoids duplicating the same inline try/except across every adapter.
+    """
+    error_type = type(e).__name__.lower()
+    error_msg = str(e).lower()
+
+    # Connection / timeout / network / rate limit
+    if any(kw in error_type for kw in ("connection", "timeout", "network")):
+        raise LLMConnectionError(f"{provider} connection failed: {e}") from e
+    if "rate" in error_type or "rate" in error_msg:
+        raise LLMConnectionError(f"{provider} rate limited: {e}") from e
+
+    # Authentication / permission
+    if any(kw in error_type for kw in ("auth", "permission", "forbidden")):
+        raise LLMAPIKeyError(f"{provider} authentication failed: {e}") from e
+    if any(kw in error_msg for kw in ("api key", "api_key", "unauthorized", "403")):
+        raise LLMAPIKeyError(f"{provider} authentication failed: {e}") from e
+
+    # Bad request / content filter
+    if any(kw in error_type for kw in ("badrequest", "invalid", "contentfilter")):
+        raise LLMResponseError(f"{provider} request error ({type(e).__name__}): {e}") from e
+
+    # Generic fallback
+    raise LLMResponseError(f"{provider} error ({type(e).__name__}): {e}") from e
 
 
 class BaseLLMAdapter(ABC):
@@ -115,6 +148,11 @@ class AnthropicAdapter(BaseLLMAdapter):
         if conversation_history:
             messages.extend(conversation_history)
         messages.append({"role": "user", "content": user_prompt})
+        logger.debug("LLM request", extra={
+            "provider": "anthropic", "model": self.model,
+            "max_tokens": max_tokens, "temperature": temperature,
+            "message_count": len(messages),
+        })
         try:
             message = self.client.messages.create(
                 model=self.model,
@@ -124,13 +162,7 @@ class AnthropicAdapter(BaseLLMAdapter):
                 messages=messages,
             )
         except Exception as e:
-            error_type = type(e).__name__
-            # Network, timeout, and rate limit errors
-            if any(keyword in error_type.lower() for keyword in ("connection", "timeout", "network")):
-                raise LLMConnectionError(f"Anthropic API connection failed: {e}") from e
-            if "rate" in error_type.lower() or "rate" in str(e).lower():
-                raise LLMConnectionError(f"Anthropic API rate limited: {e}") from e
-            raise LLMResponseError(f"Anthropic API error ({error_type}): {e}") from e
+            _handle_llm_exception(e, "Anthropic API")
 
         if not message.content:
             raise LLMResponseError("Anthropic returned empty response (no content blocks)")
@@ -199,6 +231,11 @@ class OpenAIAdapter(BaseLLMAdapter):
         if conversation_history:
             messages.extend(conversation_history)
         messages.append({"role": "user", "content": user_prompt})
+        logger.debug("LLM request", extra={
+            "provider": "openai", "model": self.model,
+            "max_tokens": max_tokens, "temperature": temperature,
+            "message_count": len(messages),
+        })
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -207,12 +244,7 @@ class OpenAIAdapter(BaseLLMAdapter):
                 messages=messages,
             )
         except Exception as e:
-            error_type = type(e).__name__
-            if any(keyword in error_type.lower() for keyword in ("connection", "timeout", "network")):
-                raise LLMConnectionError(f"OpenAI API connection failed: {e}") from e
-            if "rate" in error_type.lower() or "rate" in str(e).lower():
-                raise LLMConnectionError(f"OpenAI API rate limited: {e}") from e
-            raise LLMResponseError(f"OpenAI API error ({error_type}): {e}") from e
+            _handle_llm_exception(e, "OpenAI API")
 
         if not response.choices:
             raise LLMResponseError("OpenAI returned empty response (no choices)")
@@ -501,6 +533,11 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         if conversation_history:
             messages.extend(conversation_history)
         messages.append({"role": "user", "content": user_prompt})
+        logger.debug("LLM request", extra={
+            "provider": "openai_compatible", "model": self.model,
+            "max_tokens": max_tokens, "temperature": temperature,
+            "message_count": len(messages),
+        })
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -509,12 +546,7 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
                 messages=messages,
             )
         except Exception as e:
-            error_type = type(e).__name__
-            if any(keyword in error_type.lower() for keyword in ("connection", "timeout", "network")):
-                raise LLMConnectionError(f"API connection failed: {e}") from e
-            if "rate" in error_type.lower() or "rate" in str(e).lower():
-                raise LLMConnectionError(f"API rate limited: {e}") from e
-            raise LLMResponseError(f"API error ({error_type}): {e}") from e
+            _handle_llm_exception(e, "OpenAI-compatible API")
 
         if not response.choices:
             raise LLMResponseError("API returned empty response (no choices)")
@@ -597,6 +629,11 @@ class GeminiAdapter(BaseLLMAdapter):
             max_output_tokens=max_tokens,
             temperature=temperature,
         )
+        logger.debug("LLM request", extra={
+            "provider": "gemini", "model": self.model,
+            "max_tokens": max_tokens, "temperature": temperature,
+            "message_count": len(contents),
+        })
         try:
             response = self.client.models.generate_content(
                 model=self.model,
@@ -604,12 +641,7 @@ class GeminiAdapter(BaseLLMAdapter):
                 config=config,
             )
         except Exception as e:
-            error_type = type(e).__name__
-            if any(keyword in error_type.lower() for keyword in ("connection", "timeout", "network", "transport")):
-                raise LLMConnectionError(f"Gemini API connection failed: {e}") from e
-            if "rate" in error_type.lower() or "rate" in str(e).lower() or "429" in str(e):
-                raise LLMConnectionError(f"Gemini API rate limited: {e}") from e
-            raise LLMResponseError(f"Gemini API error ({error_type}): {e}") from e
+            _handle_llm_exception(e, "Gemini API")
 
         if not response.text:
             raise LLMResponseError("Gemini returned empty response (no text)")
@@ -677,6 +709,11 @@ class MistralAdapter(BaseLLMAdapter):
         if conversation_history:
             messages.extend(conversation_history)
         messages.append({"role": "user", "content": user_prompt})
+        logger.debug("LLM request", extra={
+            "provider": "mistral", "model": self.model,
+            "max_tokens": max_tokens, "temperature": temperature,
+            "message_count": len(messages),
+        })
         try:
             response = self.client.chat.complete(
                 model=self.model,
@@ -685,12 +722,7 @@ class MistralAdapter(BaseLLMAdapter):
                 messages=messages,
             )
         except Exception as e:
-            error_type = type(e).__name__
-            if any(keyword in error_type.lower() for keyword in ("connection", "timeout", "network")):
-                raise LLMConnectionError(f"Mistral API connection failed: {e}") from e
-            if "rate" in error_type.lower() or "rate" in str(e).lower() or "429" in str(e):
-                raise LLMConnectionError(f"Mistral API rate limited: {e}") from e
-            raise LLMResponseError(f"Mistral API error ({error_type}): {e}") from e
+            _handle_llm_exception(e, "Mistral API")
 
         if not response.choices:
             raise LLMResponseError("Mistral returned empty response (no choices)")
@@ -754,6 +786,11 @@ class OllamaAdapter(BaseLLMAdapter):
         if conversation_history:
             messages.extend(conversation_history)
         messages.append({"role": "user", "content": user_prompt})
+        logger.debug("LLM request", extra={
+            "provider": "ollama", "model": self.model,
+            "max_tokens": max_tokens, "temperature": temperature,
+            "message_count": len(messages),
+        })
         try:
             response = self.client.chat(
                 model=self.model,
@@ -761,12 +798,7 @@ class OllamaAdapter(BaseLLMAdapter):
                 options={"temperature": temperature, "num_predict": max_tokens},
             )
         except Exception as e:
-            error_type = type(e).__name__
-            if any(keyword in error_type.lower() for keyword in ("connection", "timeout", "network", "refused")):
-                raise LLMConnectionError(
-                    f"Ollama connection failed (is Ollama running at {self.host}?): {e}"
-                ) from e
-            raise LLMResponseError(f"Ollama error ({error_type}): {e}") from e
+            _handle_llm_exception(e, "Ollama API")
 
         content = response.get("message", {}).get("content", "")
         if not content:
