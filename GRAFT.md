@@ -293,3 +293,21 @@ Order: correctness → measurement infrastructure → enhancements → high-conf
 - [x] Verify version consistency: pyproject.toml = `__init__.py` = `0.4.0`
 - [ ] Archive stale branches — DEFERRED. Keep all branches until PR #2 is merged and verified. Tag then delete.
 - [x] TRACKER.md — not needed. GRAFT.md serves as the comprehensive record. Source branch's TRACKER.md was never on the target.
+
+---
+
+## Next: Post-Graft Engineering
+
+Items identified during the graft session. Tracked here until they get their own home.
+
+### Pending
+
+- [ ] **Flowcharts** — per-field modifier chain diagrams + trait fan-out. Required to catch composition issues like TF-001 visually. Format: Mermaid or plain text in `docs/`. See `docs/TRAIT_FLOW_ANALYSIS.md` for the raw data.
+- [ ] **Benchmark validation** — run 8 standard Big Five profiles through `engine.plan()`, compare IR output against Yarkoni (2010) correlation table. Validates direction + magnitude of trait→behavior mapping. See `docs/VALIDATION_SOURCES.md` for profiles and strategy.
+- [ ] **Keyword coverage** — intent analyzer, domain detection, and stance generator all use hardcoded keyword lists. Open-vocabulary inputs miss detection. Options discussed: (1) enrich persona YAML subdomains (cheap, 80% coverage), (2) embedding-based fallback (medium cost, proper fix), (3) LLM classification (breaks determinism). Decision deferred to Satish.
+
+### Done
+
+- [x] **TF-001: DK double-counting** — disabled DK bias in bias_simulator, kept DK curve in trait_interpreter. Commit: a6eea69
+- [x] **Trait flow analysis** — full per-field modifier chains documented in `docs/TRAIT_FLOW_ANALYSIS.md`. Commit: 8f7c3e6
+- [x] **Validation sources** — 11 papers/datasets, 8 benchmark profiles, strategy documented in `docs/VALIDATION_SOURCES.md`. Commit: 8f7c3e6
