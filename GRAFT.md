@@ -386,6 +386,13 @@ This is a multi-step fix that touches the confidence computation pipeline. The f
 ### Action Items — Other Pending
 
 - [ ] **Keyword coverage** — decision deferred to Satish. Options: (1) enrich persona YAML subdomains, (2) embedding-based fallback, (3) LLM classification.
+
+### Behavioral Validation (Level 2)
+
+Our current validation checks IR PARAMETER direction/distribution (Level 1). It doesn't verify that the GENERATED TEXT matches real human behavior. Two approaches:
+
+- [x] **BV-1: Linguistic markers proxy validation** — DONE. 10/10 profiles produce correct directives per Yarkoni (2010). High-trait profiles generate positive markers, low-trait profiles generate avoidance instructions. Both directionally correct. Initial keyword search showed 5 false negatives due to negation context ("avoid metaphors" matched "metaphor") — all confirmed correct on manual review.
+- [ ] **BV-2: Full text behavioral validation (needs API key)** — generate real text via Anthropic/OpenAI, run LIWC-style analysis, compare correlation patterns against Yarkoni's Table 1. Satish will provide API key later.
 - [ ] **Layer Zero review** — Satish noted it hasn't been fine-tuned yet. Needs its own review pass for issues.
 - [x] **Directness distribution** — CHECKED. Healthy. Layer Zero 375 samples: mean=0.470, std=0.138, range=[0.23, 0.82], 0 floor/ceiling hits. Extreme A=0.05 + contentious → 0.971 is correct behavior (very disagreeable person challenged). No fix needed.
 - [ ] **PR #2 merge** — graft/merge-tier1 → claude/analyze-test-coverage-d93F4. All graft work is done, but confidence fix (CF-1 through CF-6) should be decided: fix before merge or merge then fix?
