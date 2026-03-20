@@ -509,7 +509,7 @@ class PersonaEngine:
             return result
 
         data = {
-            "version": 2,
+            "version": 3,
             "conversation_id": self._conversation_id,
             "turn_number": self._turn_number,
             "persona_id": self._persona.persona_id,
@@ -534,6 +534,13 @@ class PersonaEngine:
                 ),
             },
             "memory_stats": self._memory.stats(),
+            "dynamic_state": self._planner.state.get_current_state().model_dump(),
+            "stance_cache": {
+                key: asdict(entry)
+                for key, entry in self._stance_cache.cache.items()
+            },
+            "prior_snapshot": asdict(self._planner._prior_snapshot)
+            if self._planner._prior_snapshot else None,
         }
         Path(path).write_text(json.dumps(data, indent=2, default=str))
 
@@ -602,6 +609,26 @@ class PersonaEngine:
                 if "tags" in ed:
                     ed["tags"] = tuple(ed["tags"])
                 engine._memory.episodes.store(Episode(**ed))
+
+        # Restore dynamic state (v3+)
+        ds = state.get("dynamic_state")
+        if ds:
+            from persona_engine.schema.persona_schema import DynamicState
+            restored_state = DynamicState(**ds)
+            engine._planner.state.state = restored_state
+
+        # Restore stance cache (v3+)
+        sc = state.get("stance_cache")
+        if sc:
+            from persona_engine.memory.stance_cache import CachedStance
+            for key, entry_dict in sc.items():
+                engine._stance_cache.cache[key] = CachedStance(**entry_dict)
+
+        # Restore prior snapshot for cross-turn inertia (v3+)
+        ps = state.get("prior_snapshot")
+        if ps:
+            from persona_engine.validation.cross_turn import TurnSnapshot
+            engine._planner._prior_snapshot = TurnSnapshot(**ps)
 
         return engine
 
