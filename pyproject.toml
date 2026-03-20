@@ -48,6 +48,9 @@ groq = [
 ollama = [
     "ollama>=0.4.0",
 ]
+eval = [
+    "scipy>=1.10.0",
+]
 server = [
     "fastapi>=0.100.0",
     "uvicorn>=0.23.0",

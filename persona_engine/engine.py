@@ -326,6 +326,11 @@ class PersonaEngine:
 
         # 2. Validate
         validation = self._run_validation(ir, turn, topic or ir.conversation_frame.goal.value)
+        if not validation.passed:
+            logger.warning(
+                "IR validation failed",
+                extra={"turn": turn, "violations": len(validation.violations)},
+            )
 
         # 3. Generate response
         memory_ctx = self._memory.get_context_for_turn(
@@ -541,6 +546,7 @@ class PersonaEngine:
             },
             "prior_snapshot": asdict(self._planner._prior_snapshot)
             if self._planner._prior_snapshot else None,
+            "anchor_stance": self._planner.bias_simulator._anchor_stance,
         }
         Path(path).write_text(json.dumps(data, indent=2, default=str))
 
@@ -629,6 +635,11 @@ class PersonaEngine:
         if ps:
             from persona_engine.validation.cross_turn import TurnSnapshot
             engine._planner._prior_snapshot = TurnSnapshot(**ps)
+
+        # Restore anchor stance for anchoring bias (v3+)
+        anchor = state.get("anchor_stance")
+        if anchor:
+            engine._planner.bias_simulator._anchor_stance = anchor
 
         return engine
 
