@@ -317,9 +317,76 @@ Items identified during the graft session. Tracked here until they get their own
 | G4 | Additional tone enum members | Low | DONE. Confirmed NOT in target schema. Not a bug — consistent with skipping those calibration branches. |
 | G5 | scipy not in dev/all extras | Low | DONE. Added to dev extras in pyproject.toml. |
 | G6 | Generated eval reports committed | Low | DONE. Added eval/*.json to .gitignore, removed from tracking. |
+| G7 | Stress test with Layer Zero random personas | Medium | DONE. 125 personas x 25 occupations. Found confidence distribution problem — see "Confidence Distribution Problem" section below. |
 
 ### Done
 
 - [x] **TF-001: DK double-counting** — disabled DK bias in bias_simulator, kept DK curve in trait_interpreter. Commit: a6eea69
+- [x] **TF-002: Extreme N confidence collapse** — N penalty 0.25→0.18, confidence floors 0.15/0.12. Addresses symptoms but not root cause (see below). Commit: b027d5d
 - [x] **Trait flow analysis** — full per-field modifier chains documented in `docs/TRAIT_FLOW_ANALYSIS.md`. Commit: 8f7c3e6
 - [x] **Validation sources** — 11 papers/datasets, 8 benchmark profiles, strategy documented in `docs/VALIDATION_SOURCES.md`. Commit: 8f7c3e6
+
+---
+
+## Confidence Distribution Problem
+
+> Discovered 2026-03-20 via Layer Zero stress test (125 random personas x 25 occupations).
+> This is an ARCHITECTURAL issue, not a parameter tuning issue. Floors and multiplier
+> tweaks are band-aids. The equations need restructuring.
+
+### What we found
+
+Population distribution of confidence across 125 randomly generated personas:
+
+```
+  0.0-0.1:  (0)
+  0.1-0.2: ################################################## (50)   40%
+  0.2-0.3: ##################################################### (53) 42%
+  0.3-0.4: ###################### (22)                             18%
+  0.4-1.0:  (0)                                                     0%
+
+  mean=0.234  std=0.064  range=[0.15, 0.35]
+```
+
+100% of the population is below 0.4 confidence. Nobody above. This is not a bell curve — it's a compressed, left-skewed band. Real humans have broadly varying confidence.
+
+### Root cause
+
+Confidence is anchored to **domain proficiency**, which is low (~0.3) for any question that doesn't match the persona's declared domain. The chain:
+
+1. Domain detection returns non-matching domain → proficiency defaults to ~0.3
+2. DK curve maps 0.3 → ~0.22 (transition/valley zone)
+3. N penalty subtracts (sigmoid(N) * 0.18)
+4. C penalty subtracts ((C-0.5) * 0.3)
+5. Cognitive adjustment subtracts ~0.05
+6. Result: 0.10-0.35 for the entire population
+
+The fundamental error: **confidence is built on top of domain proficiency alone.** A chef asked about climate change has no culinary proficiency relevant — but still has opinions and expresses them with confidence. Proficiency should be a modifier, not the foundation.
+
+### What the literature says
+
+- Personality traits explain ~5% of behavioral variance (Koutsoumpis et al. 2022 meta-analysis)
+- Our equations produce ~30% total trait influence on confidence — 6x over-expressed
+- Real confidence = **general self-efficacy** + domain expertise bonus + personality modulation
+- We have domain expertise + personality modulation. Missing: general self-efficacy baseline.
+
+### What needs to change
+
+This is a multi-step fix that touches the confidence computation pipeline. The floors and multiplier tweaks from TF-002 are temporary and should be replaced by these structural changes.
+
+### Action Items — Confidence Fix
+
+- [ ] **CF-1: Add general self-efficacy baseline.** Compute a trait-derived baseline confidence that doesn't depend on domain proficiency. Something like: `base = 0.35 + E*0.10 + C*0.08 - N*0.08` (range ~0.27-0.53). This becomes the FLOOR for confidence — even when domain proficiency is zero, the persona has general self-efficacy.
+- [ ] **CF-2: Make proficiency a bonus, not the foundation.** Current: `confidence = DK(proficiency) + modifiers`. Proposed: `confidence = max(self_efficacy, DK(proficiency)) + modifiers`. Domain expertise raises confidence above the self-efficacy baseline, but never below it.
+- [ ] **CF-3: Cap total personality modifier.** All trait effects on confidence (N penalty, C boost, cognitive adjustment) should be combined into a single bounded modifier. Total range: ±0.10 (literature-aligned). Currently uncapped and stacking to ±0.30.
+- [ ] **CF-4: Remove confidence floors.** Once CF-1/2/3 are in place, the floors in trait_interpreter (0.15) and behavioral_metrics (0.12) become unnecessary. Remove them — the equations should produce correct values without guardrails.
+- [ ] **CF-5: Validate with population distribution.** Re-run the 125-persona stress test. Target: bell-curve-ish distribution with mean ~0.45-0.55 and reasonable spread (std ~0.12-0.15). No pile-up at boundaries.
+- [ ] **CF-6: Re-run all existing validation suites.** After CF-1 through CF-4, ensure static (10/10), dynamic (15/15), and shipped persona checks all still pass.
+
+### Action Items — Other Pending
+
+- [ ] **Keyword coverage** — decision deferred to Satish. Options: (1) enrich persona YAML subdomains, (2) embedding-based fallback, (3) LLM classification.
+- [ ] **Layer Zero review** — Satish noted it hasn't been fine-tuned yet. Needs its own review pass for issues.
+- [ ] **Directness distribution** — chef/lawyer hit 0.97 directness in shipped persona validation. May have a similar over-expression issue for low-A personas. Check population distribution of directness.
+- [ ] **PR #2 merge** — graft/merge-tier1 → claude/analyze-test-coverage-d93F4. All graft work is done, but confidence fix (CF-1 through CF-6) should be decided: fix before merge or merge then fix?
+- [ ] **Branch archival** — deferred until PR #2 merges and is verified.
