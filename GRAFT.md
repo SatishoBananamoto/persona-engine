@@ -385,6 +385,14 @@ This is a multi-step fix that touches the confidence computation pipeline. The f
 
 ### Action Items — Other Pending
 
+### End-to-End Conversation Validation
+
+- [x] **E2E: Stance consistency** — PASS. Topic revisited after 2 intervening turns, 24% word overlap. Persona maintained position.
+- [x] **E2E: Stress → text markers** — PASS. High-N persona: hedging 8→11, tone→anxious_stressed, negative markers increased under challenge.
+- [ ] **E2E: Fatigue → text shortening** — FAIL. Fatigue accumulates in IR but LLM doesn't produce shorter text. Verbosity stays `medium` (threshold 0.7 not crossed in 12 turns with C=0.3). Two issues: (1) fatigue threshold may be too high, (2) LLM may not respond to subtle verbosity directive changes. Needs investigation.
+
+### Other Pending
+
 - [ ] **Keyword coverage** — decision deferred to Satish. Options: (1) enrich persona YAML subdomains, (2) embedding-based fallback, (3) LLM classification.
 
 ### Behavioral Validation (Level 2)
