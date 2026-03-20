@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "persona-engine"
 version = "0.2.0"
-description = "Universal conversational persona system with full psychological framework"
+description = "Testable, psychologically-grounded persona behavior engine for LLM applications"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
