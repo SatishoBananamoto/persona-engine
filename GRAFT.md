@@ -198,11 +198,11 @@ Order: correctness → measurement infrastructure → enhancements → high-conf
 
 | Step | Item | Status | Tests After | Notes |
 |------|------|--------|-------------|-------|
-| 1 | Bug fixes (5) | NOT STARTED | — | — |
-| 2 | Eval suite | NOT STARTED | — | — |
-| 3 | Calibration report | NOT STARTED | — | — |
-| 4 | Save/load v3 | NOT STARTED | — | — |
-| 5 | Calibration code | NOT STARTED | — | — |
+| 1 | Bug fixes (5) | DONE | 2602 pass, 0 fail | All 5 fixed. 6 test values updated. 1 assertion broadened. Commit: 1a8a007 |
+| 2 | Eval suite | DONE | 2602 pass, 0 fail | New files, clean copy. scipy dep pending in pyproject.toml. Commit: e24bbf9 |
+| 3 | Calibration report | DONE | N/A (docs only) | New file, clean copy. 879 lines. Commit: f4d773b |
+| 4 | Save/load v3 | DONE | 2602 pass, 0 fail | Manual adapt ~35 lines. Version test updated. Commit: 826ae1b |
+| 5 | Calibration code | DONE | 2602 pass, 0 fail | 4 direct, 3 adapt, 5 skip. 26 test values updated. Commit: eb0f717 |
 | 6 | Stance generator | NOT STARTED | — | — |
 | 7 | Logging (partial) | NOT STARTED | — | — |
 
