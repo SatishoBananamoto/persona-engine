@@ -205,13 +205,87 @@ Order: correctness → measurement infrastructure → enhancements → high-conf
 | 5 | Calibration code | DONE | 2602 pass, 0 fail | 4 direct, 3 adapt, 5 skip. 26 test values updated. Commit: eb0f717 |
 | 6 | Stance generator | DONE | 2602→2528 pass, 0 fail | Full replacement + personality modulation port + conflict detection. Commit: 39848f9 |
 | 7 | Logging (partial) | DONE | 2528 pass, 0 fail | Centralized handler, LLMAPIKeyError, DEBUG logging. 6 adapters. Commit: a503281 |
+| 8 | Remaining gaps | DONE | 2528 pass, 0 fail | SMALL_TALK, american casing, anchor_stance, validation warn, scipy dep. Commit: cfd5791 |
+
+---
+
+## What Was Changed — Comprehensive Record
+
+### From Source Branch (ported)
+
+| Change | Origin | Method | Files Changed |
+|--------|--------|--------|---------------|
+| Mood drift inversion: `0.05 + N*0.1` → `0.12 - N*0.08` | Source `80f5ae5` | Direct port | `state_manager.py` |
+| Extraversion added to baseline_valence: `+ E*0.15` | Source `80f5ae5` | Direct port | `state_manager.py` |
+| Trait-modulated stress_decay_rate: `0.08 + (1-N)*0.04` | Source `80f5ae5` | Direct port | `state_manager.py` |
+| Unbounded mood noise clamp after `add_noise` | Source `80f5ae5` | Direct port | `state_manager.py` |
+| MemoryError → PersonaMemoryError | Source `80f5ae5` | Direct port | `exceptions.py`, `test_phase3_fixes.py` |
+| evolve_state_post_turn moved after IR finalization | Source `80f5ae5` | Adapted (staged arch) | `interpretation.py`, `turn_planner.py` |
+| Elasticity None guard in TurnSnapshot.from_ir | Source `80f5ae5` | Direct port | `cross_turn.py` |
+| Eval suite (5 scipy-based statistical suites) | Source `5b3e608` | Clean copy (new files) | `eval/__init__.py`, `eval/persona_eval.py` |
+| Calibration research report (879 lines) | Source `de21860` | Clean copy (new file) | `research/calibration_report.txt` |
+| Save/load v3: dynamic_state, stance_cache, prior_snapshot | Source `8177396` | Manual adapt | `engine.py` |
+| Proactivity floor/ceiling: `0.2 + E*0.6` | Source `f33dbc4` | Direct port | `trait_interpreter.py` |
+| Enthusiasm floor/ceiling: `0.2 + E*0.5` | Source `f33dbc4` | Direct port | `trait_interpreter.py` |
+| Hedging N co-factor: `+ N*0.2`, cap 0.8 | Source `f33dbc4` | Direct port | `trait_interpreter.py` |
+| Verbosity E co-factor: `+ (E-0.5)*0.15` | Source `f33dbc4` | Direct port | `trait_interpreter.py` |
+| Negative tone bias: `N*0.7` → `N*0.5` (Tackman 2023) | Source `de21860` | Adapted | `trait_interpreter.py` |
+| Self-disclosure N co-factor: `+ N*0.1` | Source `de21860` | Added onto target's sigmoid | `trait_interpreter.py` |
+| Compositional stance generator (VALUE_TOPIC_TABLE, COMPETENCE_FRAMES) | Source `03e3091` | Full replacement | `stance_generator.py` |
+| SMALL_TALK keywords in intent analyzer | Source `c92dad5` | Direct port | `intent_analyzer.py` |
+| "american" → "American" casing | Source `ad0d702` | Direct port | `persona_builder.py` |
+| Centralized `_handle_llm_exception()` | Source `9809104` | Adapted for 6 adapters | `llm_adapter.py` |
+| DEBUG-level LLM request logging | Source `9809104` | Adapted for 6 adapters | `llm_adapter.py` |
+| Validation failure warning in engine.chat() | Source `9809104` | Adapted | `engine.py` |
+
+### From Target Branch (preserved or ported into new code)
+
+| Change | Origin | What Happened |
+|--------|--------|---------------|
+| `_modulate_stance_by_personality()` | Target R5 | Transplanted into new compositional stance generator |
+| Value conflict detection + citations | Target R1 | Re-added into new stance generator (source didn't have it) |
+| Sigmoid activation (`trait_effect()`) | Target R2 | Kept as-is — our calibration works around it |
+| Dunning-Kruger confidence curve | Target R2 | Kept as-is — we skipped conflicting calibration values |
+| Trait interactions engine (9 patterns) | Target R3 | Kept as-is — untouched |
+| Emotional appraisal engine | Target R4 | Kept as-is — untouched |
+| LIWC markers / stochastic expression | Target R5 | Kept as-is — untouched |
+| Social cognition / biases | Target R6 | Kept as-is — untouched |
+| Mixin stage architecture | Target general-session | Kept as-is — adapted bug fixes to work with it |
+| Multi-provider adapters | Target general-session | Kept as-is — added centralized exception handling |
+| All existing logging | Target `e946f88` | Kept as-is — only added unique improvements |
+
+### New (created during graft, not on either branch)
+
+| Change | Why | Files |
+|--------|-----|-------|
+| `_modulate_stance_by_personality` integration into compositional generator | Target had it in old template system, source didn't have it at all. New call site after `_assemble_stance()` | `stance_generator.py` |
+| Value conflict detection in compositional generator | Source generator didn't detect value conflicts. Target's old generator did. Re-added the logic in new architecture | `stance_generator.py` |
+| `anchor_stance` serialization in save/load | Neither branch serialized it. Identified as gap during review | `engine.py` |
+| Trust disclosure test delta widened (0.3 → 0.5) | N co-factor pushed both sides to same clamp. Test adaptation | `test_cross_turn_dynamics.py` |
+| Response generation test assertion broadened | evolve_state timing fix made template adapter output identical. Added verbosity/formality checks | `test_response_generation.py` |
+| ~30 test value updates | New formulas produce different numbers. Mechanical updates | `test_state_manager.py`, `test_trait_interpreter.py`, etc. |
+| scipy optional dep in pyproject.toml | Eval suite requires it, wasn't declared | `pyproject.toml` |
+
+### Intentionally Skipped
+
+| Item | Reason |
+|------|--------|
+| Calibration: elasticity O-weight (0.7 → 0.6) | Target's sigmoid already achieves the compression |
+| Calibration: verbosity C-multiplier (0.5 → 0.2) | Target's 0.5 is intentional for high-C detail |
+| Calibration: directness A-multiplier | Target's sigmoid handles this |
+| Calibration: confidence modifier (C-boost, N-penalty) | Target's DK curve replaces our linear values |
+| Calibration: elasticity shift (+0.2 vs +0.25) | Target's +0.2 is correct for sigmoid'd output |
+| README rewrite | Target already rewrote it differently |
+| TRACKER.md | Will rewrite for new branch state |
+| Wiring audit doc | Target wired all methods in R1; audit is historical |
+| Bulk of structured logging (engine/turn_planner/response_generator) | ~70% overlap with target's existing logging |
 
 ---
 
 ## Post-Graft Checklist
 
-- [ ] All 7 steps complete with passing tests
-- [ ] GRAFT.md fully updated with final state
+- [x] All steps complete with passing tests
+- [x] GRAFT.md fully updated with final state
 - [ ] Close or retarget PR #1 (currently against wrong base)
 - [ ] Create new PR: `graft/merge-tier1` → `claude/analyze-test-coverage-d93F4` (or → `main`)
 - [ ] Archive stale branches: `main`, `claude-md`, `explore-repo-KZTBj`, `external-review`, `general-session-VUY6r`, `review/tier1-bugfixes`
