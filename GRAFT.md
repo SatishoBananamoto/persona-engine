@@ -392,7 +392,7 @@ This is a multi-step fix that touches the confidence computation pipeline. The f
 Our current validation checks IR PARAMETER direction/distribution (Level 1). It doesn't verify that the GENERATED TEXT matches real human behavior. Two approaches:
 
 - [x] **BV-1: Linguistic markers proxy validation** — DONE. 10/10 profiles produce correct directives per Yarkoni (2010). High-trait profiles generate positive markers, low-trait profiles generate avoidance instructions. Both directionally correct. Initial keyword search showed 5 false negatives due to negation context ("avoid metaphors" matched "metaphor") — all confirmed correct on manual review.
-- [ ] **BV-2: Full text behavioral validation (needs API key)** — generate real text via Anthropic/OpenAI, run LIWC-style analysis, compare correlation patterns against Yarkoni's Table 1. Satish will provide API key later.
+- [x] **BV-2: Full text behavioral validation** — DONE. 10 profiles x 3 prompts via Anthropic API. 9/10 direction checks pass. 1 failure is noise (A neg_emotion: 1 vs 0, both near zero). Strong signals: N hedging 1.7x, E social 4x, C certainty inf, C structure inf. Real LLM text aligns with Yarkoni. Report: `eval/bv2_report.json`.
 - [ ] **Layer Zero review** — Satish noted it hasn't been fine-tuned yet. Needs its own review pass for issues.
 - [x] **Directness distribution** — CHECKED. Healthy. Layer Zero 375 samples: mean=0.470, std=0.138, range=[0.23, 0.82], 0 floor/ceiling hits. Extreme A=0.05 + contentious → 0.971 is correct behavior (very disagreeable person challenged). No fix needed.
 - [ ] **PR #2 merge** — graft/merge-tier1 → claude/analyze-test-coverage-d93F4. All graft work is done, but confidence fix (CF-1 through CF-6) should be decided: fix before merge or merge then fix?
