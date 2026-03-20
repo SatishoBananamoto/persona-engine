@@ -165,9 +165,17 @@ class TurnPlanner:
         foundation.memory_context = memory_context
         metrics = self._stage_behavioral_metrics(context, ctx, foundation)
         knowledge = self._stage_knowledge_safety(context, ctx, foundation, metrics)
-        return self._stage_finalization(
+        ir = self._stage_finalization(
             context, ctx, turn_seed, memory_ops, foundation, metrics, knowledge
         )
+
+        # State evolution — applied AFTER IR is finalized (affects next turn, not current)
+        self.state.evolve_state_post_turn(
+            conversation_length=context.turn_number,
+            topic_relevance=foundation.topic_relevance,
+        )
+
+        return ir
 
     # ========================================================================
     # Stage delegation methods (preserve method names for backward compat)

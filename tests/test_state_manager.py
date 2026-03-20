@@ -99,15 +99,16 @@ class TestConstructor:
             initial_state=_default_state(),
             traits=_default_traits(neuroticism=1.0),
         )
-        # rate = 0.05 + neuroticism * 0.1
-        assert low_n.mood_drift_rate == pytest.approx(0.05)
-        assert high_n.mood_drift_rate == pytest.approx(0.15)
+        # rate = 0.12 - neuroticism * 0.08 (high N → slower drift)
+        assert low_n.mood_drift_rate == pytest.approx(0.12)
+        assert high_n.mood_drift_rate == pytest.approx(0.04)
 
     def test_fatigue_accumulation_rate(self, manager):
         assert manager.fatigue_accumulation_rate == pytest.approx(0.02)
 
     def test_stress_decay_rate(self, manager):
-        assert manager.stress_decay_rate == pytest.approx(0.08)
+        # rate = 0.08 + (1.0 - N) * 0.04; N=0.5 → 0.10
+        assert manager.stress_decay_rate == pytest.approx(0.10)
 
 
 # =========================================================================
@@ -231,13 +232,13 @@ class TestApplyMoodDrift:
             initial_state=_default_state(mood_valence=1.0, mood_arousal=0.0),
             traits=_default_traits(neuroticism=0.5),
         )
-        # baseline_valence = 0.0, baseline_arousal = 0.5
-        # rate = 0.05 + 0.5*0.1 = 0.10
+        # baseline_valence = 0.1 + 0.5*0.15 - 0.5*0.2 = 0.075, baseline_arousal = 0.5
+        # rate = 0.12 - 0.5*0.08 = 0.08
         sm.apply_mood_drift()
-        # valence: 1.0 + (0.0 - 1.0)*0.1 = 0.9
-        assert sm.state.mood_valence == pytest.approx(0.9)
-        # arousal: 0.0 + (0.5 - 0.0)*0.1 = 0.05
-        assert sm.state.mood_arousal == pytest.approx(0.05)
+        # valence: 1.0 + (0.075 - 1.0)*0.08 = 0.926
+        assert sm.state.mood_valence == pytest.approx(0.926)
+        # arousal: 0.0 + (0.5 - 0.0)*0.08 = 0.04
+        assert sm.state.mood_arousal == pytest.approx(0.04)
 
 
 # =========================================================================
@@ -562,7 +563,8 @@ class TestReduceStress:
     def test_normal_decay(self, manager):
         manager.state.stress = 0.5
         manager.reduce_stress()
-        assert manager.state.stress == pytest.approx(0.42)
+        # stress_decay_rate = 0.08 + (1.0 - 0.5) * 0.04 = 0.10
+        assert manager.state.stress == pytest.approx(0.40)
 
     def test_does_not_go_below_zero(self, manager):
         manager.state.stress = 0.02
@@ -1019,8 +1021,8 @@ class TestCreateStateManager:
         persona = self._build_persona(neuroticism=0.8)
         sm = create_state_manager(persona)
         assert sm.traits.neuroticism == pytest.approx(0.8)
-        # mood_drift_rate = 0.05 + 0.8 * 0.1 = 0.13
-        assert sm.mood_drift_rate == pytest.approx(0.13)
+        # mood_drift_rate = 0.12 - 0.8 * 0.08 = 0.056
+        assert sm.mood_drift_rate == pytest.approx(0.056)
 
     def test_factory_with_custom_determinism(self):
         persona = self._build_persona()

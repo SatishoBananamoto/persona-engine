@@ -37,9 +37,11 @@ class StateManager:
         self.determinism = determinism or DeterminismManager()
 
         # State evolution rates (influenced by neuroticism)
-        self.mood_drift_rate = 0.05 + (traits.neuroticism * 0.1)
+        # High N → mood lingers (slower drift), low N → mood stabilizes quickly
+        self.mood_drift_rate = 0.12 - (traits.neuroticism * 0.08)
         self.fatigue_accumulation_rate = 0.02
-        self.stress_decay_rate = 0.08
+        # High N → slower stress recovery
+        self.stress_decay_rate = 0.08 + (1.0 - traits.neuroticism) * 0.04
 
     # ========================================================================
     # State Getters
@@ -96,8 +98,8 @@ class StateManager:
         High neuroticism: Slower drift (mood lingers)
         Low neuroticism: Faster drift (mood stabilizes quickly)
         """
-        # Baseline mood (neutral-slightly positive for most people)
-        baseline_valence = 0.1 - (self.traits.neuroticism * 0.2)
+        # Baseline mood (extraversion → positive baseline, neuroticism → negative)
+        baseline_valence = 0.1 + (self.traits.extraversion * 0.15) - (self.traits.neuroticism * 0.2)
         baseline_arousal = 0.5
 
         # Drift toward baseline
@@ -260,14 +262,14 @@ class StateManager:
         """Add small random variations to state (human unpredictability)"""
         noise_budget = 0.03
 
-        self.state.mood_valence = self.determinism.add_noise(
+        self.state.mood_valence = max(-1.0, min(1.0, self.determinism.add_noise(
             self.state.mood_valence,
             noise_budget
-        )
-        self.state.mood_arousal = self.determinism.add_noise(
+        )))
+        self.state.mood_arousal = max(0.0, min(1.0, self.determinism.add_noise(
             self.state.mood_arousal,
             noise_budget
-        )
+        )))
 
     # ========================================================================
     # State Influence on Behavior

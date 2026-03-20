@@ -70,15 +70,15 @@ class IRGenerationError(PersonaEngineError):
 # Memory
 # ---------------------------------------------------------------------------
 
-class MemoryError(PersonaEngineError):
+class PersonaMemoryError(PersonaEngineError):
     """Base for memory store failures."""
 
 
-class MemoryCapacityError(MemoryError):
+class MemoryCapacityError(PersonaMemoryError):
     """Store full and eviction failed."""
 
 
-class MemoryCorruptionError(MemoryError):
+class MemoryCorruptionError(PersonaMemoryError):
     """Inconsistent state detected in memory stores."""
 
 
