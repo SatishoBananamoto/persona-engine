@@ -303,7 +303,8 @@ Items identified during the graft session. Tracked here until they get their own
 ### Pending
 
 - [x] **Flowcharts** — DONE. 3 Mermaid diagrams in `docs/PIPELINE_FLOWCHARTS.md`: master pipeline, 4 per-field modifier chains (confidence/elasticity/directness/disclosure), 5 trait fan-out diagrams (O/C/E/A/N).
-- [x] **Benchmark validation** — DONE. 8 profiles x 4 prompts, 10/10 direction checks passed. All trait→behavior mappings align with literature. Report: `eval/benchmark_report.json`. Smallest effect: neurotic vs stable hedging (+0.100).
+- [x] **Benchmark validation (static)** — DONE. 8 profiles x 4 prompts, 10/10 direction checks passed. Report: `eval/benchmark_report.json`.
+- [x] **Dynamic validation** — DONE. 10/10 checks passed. Fatigue, mood drift, stress/patience, trust/disclosure, stance cache, inertia, stress decay, emotional appraisal, N drift rate, bias stacking. Report: `eval/dynamic_report.json`.
 - [ ] **Keyword coverage** — intent analyzer, domain detection, and stance generator all use hardcoded keyword lists. Open-vocabulary inputs miss detection. Options discussed: (1) enrich persona YAML subdomains (cheap, 80% coverage), (2) embedding-based fallback (medium cost, proper fix), (3) LLM classification (breaks determinism). Decision deferred to Satish.
 
 ### Done
