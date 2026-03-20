@@ -837,13 +837,29 @@ class TestGetVerbosityModifier:
         )
         assert sm.get_verbosity_modifier() == -1
 
-    def test_boundary_fatigue_exactly_0_7(self):
-        """fatigue == 0.7 is NOT > 0.7, so not -1."""
+    def test_boundary_fatigue_exactly_0_5(self):
+        """fatigue == 0.5 is NOT > 0.5, so not -1."""
         sm = StateManager(
-            initial_state=_default_state(fatigue=0.7, engagement=0.5),
+            initial_state=_default_state(fatigue=0.5, engagement=0.5),
             traits=_default_traits(),
         )
         assert sm.get_verbosity_modifier() == 0
+
+    def test_fatigue_above_0_5_triggers(self):
+        """fatigue > 0.5 should trigger -1."""
+        sm = StateManager(
+            initial_state=_default_state(fatigue=0.51, engagement=0.5),
+            traits=_default_traits(),
+        )
+        assert sm.get_verbosity_modifier() == -1
+
+    def test_low_engagement_triggers(self):
+        """engagement < 0.15 should trigger -1 even without high fatigue."""
+        sm = StateManager(
+            initial_state=_default_state(fatigue=0.0, engagement=0.10),
+            traits=_default_traits(),
+        )
+        assert sm.get_verbosity_modifier() == -1
 
     def test_boundary_engagement_exactly_0_7(self):
         """engagement == 0.7 is NOT > 0.7, so not +1."""

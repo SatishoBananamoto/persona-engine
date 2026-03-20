@@ -296,13 +296,15 @@ class StateManager:
         """
         State influence on verbosity.
 
-        High fatigue: Briefer responses (-1)
+        High fatigue OR low engagement: Briefer responses (-1)
         High engagement: More detailed (+1)
 
         Returns:
             Modifier to apply to verbosity level (-1, 0, +1)
         """
-        if self.state.fatigue > 0.7:
+        if self.state.fatigue > 0.5:
+            return -1
+        elif self.state.engagement < 0.15:
             return -1
         elif self.state.engagement > 0.7:
             return 1

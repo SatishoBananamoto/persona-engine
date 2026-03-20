@@ -389,7 +389,7 @@ This is a multi-step fix that touches the confidence computation pipeline. The f
 
 - [x] **E2E: Stance consistency** — PASS. Topic revisited after 2 intervening turns, 24% word overlap. Persona maintained position.
 - [x] **E2E: Stress → text markers** — PASS. High-N persona: hedging 8→11, tone→anxious_stressed, negative markers increased under challenge.
-- [ ] **E2E: Fatigue → text shortening** — FAIL. Fatigue accumulates in IR but LLM doesn't produce shorter text. Verbosity stays `medium` (threshold 0.7 not crossed in 12 turns with C=0.3). Two issues: (1) fatigue threshold may be too high, (2) LLM may not respond to subtle verbosity directive changes. Needs investigation.
+- [ ] **E2E: Fatigue → text shortening** — FIX APPLIED, re-run pending (waiting for kv). Root cause: fatigue threshold 0.7 unreachable in normal conversations (takes 20+ turns). Fixed: threshold 0.7→0.5, added low-engagement trigger (<0.15→verbosity -1). Verbosity now drops to BRIEF at turn 8. Unit tests + dynamic 15/15 pass. E2E re-run needs API.
 
 ### Other Pending
 
