@@ -396,6 +396,58 @@ This is a multi-step fix that touches the confidence computation pipeline. The f
 - [x] **Correlation matrix** — DONE. 212 personas (100 Layer Zero + 100 random uniform + 12 shipped). 10/10 direction checks pass. Report: `eval/correlation_report.json`.
 - **Observation:** Some r-values are very high (r=1.0 for E→proactivity, N→neg_tone). This is by construction — IR parameters are deterministic functions of traits. Real psychology has r=0.08-0.20 because humans have noise. Our stochastic layer (linguistic_markers.py) adds noise at the TEXT level, not at the IR level. This is a known architectural property, not a bug.
 
+### Prompt Architecture Problem (discovered during E2E review)
+
+> Real prompt inspection revealed that the LLM is following word-level instructions,
+> not embodying personality. This undermines the authenticity of generated text and
+> makes our BV-2 validation partially circular.
+
+**What the prompt looks like (LANGUAGE STYLE section):**
+```
+- Use positive emotion words: 'happy', 'love', 'great', 'excited'
+- Use first-person plural: 'we', 'our', 'together'
+- Use hedges: 'I think', 'it seems to me', 'perhaps'
+```
+
+**The problem:** These are prescriptive word lists. The LLM parrots them. Our BV-2 validation
+then counts those exact words → of course they're present. We told the LLM to use them.
+
+**Why this matters:**
+1. **Circular validation** — BV-2 results (9/10) are partially invalid. We're measuring our own input.
+2. **Unnatural text** — personas sound like they're following a checklist, not speaking naturally
+3. **No emergent personality** — behavior is injected, not derived from character
+
+**Additional issues found in real prompt:**
+- DIRECTNESS: 98% for chef asked about remote work — over-expressed (A=0.35 → "very direct, blunt")
+- COMPETENCE: 16% with "Do NOT use domain-specific terminology correctly" — awkward, confusing phrasing
+- CONFIDENCE: 56% "reasonably confident" but STANCE says "I'm not deeply familiar" — contradictory
+- VERBOSITY: DETAILED for a blunt chef on an unfamiliar topic — would he really give 6+ sentences?
+
+**Three levels of fix (from easiest to best):**
+
+| Level | Approach | Example | Authenticity |
+|-------|----------|---------|-------------|
+| **Prescriptive** (current) | "Say 'I think' and 'perhaps'" | Low — parroting | High controllability |
+| **Descriptive** | "Express genuine uncertainty without false confidence" | Medium — LLM interprets | Medium |
+| **Structural** | IR says confidence=0.2, verbosity=brief — LLM infers expression | High — emergent | Lower controllability |
+
+**Recommended approach:** Hybrid of descriptive + structural.
+- Remove all word lists from LANGUAGE STYLE directives
+- Keep structural IR parameters (confidence, directness, formality as numbers)
+- Rewrite linguistic_markers.py to produce DESCRIPTIVE directives, not prescriptive
+- Rewrite prompt_builder.py descriptions to avoid listing specific words
+- Example: instead of `"Use hedging language: 'I think', 'it seems to me'"` → `"You feel uncertain here. Express your genuine hesitation."`
+
+**Action items:**
+
+- [ ] **PA-1: Audit prompt_builder.py** — list every place where specific words/phrases are prescribed to the LLM
+- [ ] **PA-2: Rewrite linguistic_markers.py** — convert all 5 trait marker functions from prescriptive ("use words X, Y, Z") to descriptive ("express quality Q naturally")
+- [ ] **PA-3: Fix contradictory signals** — when confidence and stance contradict, resolve before sending to LLM
+- [ ] **PA-4: Fix competence phrasing** — "Do NOT use domain-specific terminology correctly" is confusing. Rewrite as positive instruction.
+- [ ] **PA-5: Review verbosity for off-topic** — DETAILED may be wrong when persona has low competence on the topic
+- [ ] **PA-6: Re-run BV-2 after fix** — validate that text still shows personality markers WITHOUT prescriptive word lists. This is the real test — does the LLM produce differentiated text from descriptive directives alone?
+- [ ] **PA-7: Consider A→directness over-expression** — chef at 98% directness for an off-topic question. The directness pipeline may need topic-sensitivity modulation.
+
 ### Other Pending
 
 - [ ] **Keyword coverage** — decision deferred to Satish. Options: (1) enrich persona YAML subdomains, (2) embedding-based fallback, (3) LLM classification.
