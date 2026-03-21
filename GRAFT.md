@@ -1,11 +1,13 @@
 # The Graft — Operation Tracker
 
-> Surgically moving unique work from `review/tier1-bugfixes` (wrong base) onto `claude/analyze-test-coverage-d93F4` (correct base).
-> This file is the SINGLE SOURCE OF TRUTH. Updated before every step, after every step. If it's not here, it didn't happen.
+> This file is the SINGLE SOURCE OF TRUTH for persona-engine development.
+> Updated before every step, after every step. If it's not here, it didn't happen.
 
 **Session**: Persona Engine's — The Graft
 **Date started**: 2026-03-20
-**Working branch**: `graft/merge-tier1` (off `claude/analyze-test-coverage-d93F4`)
+**Date completed**: 2026-03-21
+**Status**: COMPLETE — all work merged into `main` (PR #3, 2026-03-21T03:12:17Z)
+**Current branch**: `main` (148 commits, v0.4.0)
 
 ### How to use this document
 
