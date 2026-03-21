@@ -5,7 +5,23 @@
 
 **Session**: Persona Engine's — The Graft
 **Date started**: 2026-03-20
-**Working branch**: `graft/merge-tier1` (to be created off `claude/analyze-test-coverage-d93F4`)
+**Working branch**: `graft/merge-tier1` (off `claude/analyze-test-coverage-d93F4`)
+
+### How to use this document
+
+Read this FIRST when starting any persona-engine session. Find "Pending" sections, pick highest-priority chunk, do it, update this doc, commit.
+
+**Action item prefixes:**
+
+| Prefix | Category | Example |
+|--------|----------|---------|
+| **CF-** | Confidence Fix | CF-1: self-efficacy baseline |
+| **PA-** | Prompt Architecture | PA-3: descriptive directives |
+| **PG-** | Psychometric Grounding | PG-1: map to BFI-2 items |
+| **TF-** | Trait Flow issues | TF-001: DK double-counting |
+| **G-** | Coverage Gaps | G1: extreme value testing |
+| **BV-** | Behavioral Validation | BV-2: real LLM text analysis |
+| **E2E** | End-to-end tests | E2E: multi-turn conversation |
 
 ---
 
@@ -475,10 +491,7 @@ The 40 descriptions in `_TRAIT_POLES` (linguistic_markers.py) are directionally 
 not sourced from validated instruments.
 
 **What needs to happen:**
-- [ ] **PG-1: Map each description to BFI-2 items.** Soto & John (2017) BFI-2 has 60 items
-  with validated phrasings for each trait facet. Compare our 40 descriptions against these
-  items. If our wording aligns with a validated item → grounded. If not → rewrite to match.
-  Source: Soto & John (2017), "The Next Big Five Inventory (BFI-2)", JPSP.
+- [x] **PG-1: Map descriptions to BFI-2/IPIP-NEO items.** DONE. 39/40 aligned with validated IPIP-NEO items (public domain). 1 rewrite: A=0.15 "confrontational" → "unflinchingly honest" (original mapped to hostile IPIP items). Intensity thresholds align with BFI-2 norms (~1 SD = moderate, ~2 SD = very strong). Full mapping in `docs/PSYCHOMETRIC_GROUNDING.md`.
 - [ ] **PG-2: Cross-check against IPIP-NEO items.** IPIP-NEO has 300 items (free, public domain)
   with more granular facet-level coverage. Useful for the intensity graduation (mild vs vivid
   descriptions at different trait levels). Source: https://ipip.ori.org/

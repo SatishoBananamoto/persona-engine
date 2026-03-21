@@ -165,7 +165,7 @@ _TRAIT_POLES = {
             (0.45, "You're straightforward and don't sugarcoat much."),
             (0.35, "You value honesty over tact. If you disagree, you say so without much cushioning."),
             (0.25, "You're blunt and challenging. You prioritize truth over feelings and don't waste time on pleasantries."),
-            (0.15, "You're very direct and confrontational when needed. You see no value in softening your message."),
+            (0.15, "You're unflinchingly honest. You don't soften your message — if something needs saying, you say it plainly."),
         ],
     },
     "N": {
