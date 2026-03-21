@@ -1,0 +1,14 @@
+{
+  "_meta": {
+    "description": "Big Five inter-trait correlation matrix for multivariate sampling",
+    "source": "van der Linden, te Nijenhuis, & Bakker (2010). Meta-analysis of Big Five intercorrelations. K=212, N=144,117.",
+    "order": ["openness", "conscientiousness", "extraversion", "agreeableness", "neuroticism"]
+  },
+  "matrix": [
+    [1.00,  0.14,  0.43,  0.13, -0.12],
+    [0.14,  1.00,  0.18,  0.43, -0.29],
+    [0.43,  0.18,  1.00,  0.17, -0.25],
+    [0.13,  0.43,  0.17,  1.00, -0.22],
+    [-0.12, -0.29, -0.25, -0.22,  1.00]
+  ]
+}

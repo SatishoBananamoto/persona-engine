@@ -14,6 +14,20 @@ demo_output.txt
 error_log.txt
 sim_log.txt
 *.log
+.coverage
+htmlcov/
+.pytest_cache/
+.hypothesis/
+
+# Eval reports (generated, re-run to recreate)
+eval/report.json
+eval/benchmark_report.json
+eval/dynamic_report.json
+eval/correlation_report.json
+eval/bv2_report.json
+eval/e2e_report.json
+# Keep baseline snapshots (permanent reference)
+!eval/baseline_*.json
 
 # IDE
 .vscode/
@@ -34,3 +48,4 @@ Thumbs.db
 # Archive (old ICIF-AES project)
 icif_aes_archive/
 .env
+.claude/

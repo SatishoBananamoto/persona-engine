@@ -12,17 +12,17 @@ Production-hardened with:
 - Deterministic normalization utilities
 """
 
-from enum import Enum
-from typing import List, Optional, Literal, Union, Any, Dict, Tuple
-from pydantic import BaseModel, Field, field_validator, model_validator
 import json
+from enum import StrEnum
+from typing import Any, Literal, Union
 
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # ============================================================================
 # Enums for Controlled Vocabularies
 # ============================================================================
 
-class InteractionMode(str, Enum):
+class InteractionMode(StrEnum):
     """Type of conversation context"""
     CASUAL_CHAT = "casual_chat"
     INTERVIEW = "interview"
@@ -31,10 +31,10 @@ class InteractionMode(str, Enum):
     COACHING = "coaching"
     DEBATE = "debate"
     SMALL_TALK = "small_talk"
-    BRAINSTORM = "brainstorm"  # Bug fix: was referenced but not defined
+    BRAINSTORM = "brainstorm"
 
 
-class ConversationGoal(str, Enum):
+class ConversationGoal(StrEnum):
     """What the conversation is trying to achieve"""
     GATHER_INFO = "gather_info"
     RESOLVE_ISSUE = "resolve_issue"
@@ -45,14 +45,14 @@ class ConversationGoal(str, Enum):
     EXPLORE_IDEAS = "explore_ideas"
 
 
-class Verbosity(str, Enum):
+class Verbosity(StrEnum):
     """Response length target"""
     BRIEF = "brief"          # 1-2 sentences
     MEDIUM = "medium"        # 3-5 sentences
     DETAILED = "detailed"    # 6+ sentences
 
 
-class UncertaintyAction(str, Enum):
+class UncertaintyAction(StrEnum):
     """How to handle uncertainty"""
     ANSWER = "answer"                    # Provide confident answer
     HEDGE = "hedge"                      # Answer with hedging language
@@ -60,7 +60,7 @@ class UncertaintyAction(str, Enum):
     REFUSE = "refuse"                    # Politely decline to answer
 
 
-class KnowledgeClaimType(str, Enum):
+class KnowledgeClaimType(StrEnum):
     """Type of knowledge claim being made"""
     PERSONAL_EXPERIENCE = "personal_experience"
     COMMON_KNOWLEDGE = "general_common_knowledge"
@@ -69,35 +69,35 @@ class KnowledgeClaimType(str, Enum):
     NONE = "none"  # No knowledge claim (e.g., just asking questions)
 
 
-class Tone(str, Enum):
+class Tone(StrEnum):
     """Curated emotional tone vocabulary (from valence/arousal mapping)"""
     # Positive valence, high arousal
     WARM_ENTHUSIASTIC = "warm_enthusiastic"
     EXCITED_ENGAGED = "excited_engaged"
-    
+
     # Positive valence, moderate arousal
     THOUGHTFUL_ENGAGED = "thoughtful_engaged"
     WARM_CONFIDENT = "warm_confident"
     FRIENDLY_RELAXED = "friendly_relaxed"
-    
+
     # Positive valence, low arousal
     CONTENT_CALM = "content_calm"
     SATISFIED_PEACEFUL = "satisfied_peaceful"
-    
+
     # Neutral valence
     NEUTRAL_CALM = "neutral_calm"
     PROFESSIONAL_COMPOSED = "professional_composed"
     MATTER_OF_FACT = "matter_of_fact"
-    
+
     # Negative valence, high arousal
     FRUSTRATED_TENSE = "frustrated_tense"
     ANXIOUS_STRESSED = "anxious_stressed"
     DEFENSIVE_AGITATED = "defensive_agitated"
-    
+
     # Negative valence, moderate arousal
     CONCERNED_EMPATHETIC = "concerned_empathetic"
     DISAPPOINTED_RESIGNED = "disappointed_resigned"
-    
+
     # Negative valence, low arousal
     SAD_SUBDUED = "sad_subdued"
     TIRED_WITHDRAWN = "tired_withdrawn"
@@ -109,16 +109,16 @@ class Tone(str, Enum):
 
 class ConversationFrame(BaseModel):
     """Context and goals for the current interaction"""
-    
+
     interaction_mode: InteractionMode = Field(
         description="Type of conversation (casual, interview, support, etc.)"
     )
-    
+
     goal: ConversationGoal = Field(
         description="Primary objective of this conversation"
     )
-    
-    success_criteria: Optional[List[str]] = Field(
+
+    success_criteria: list[str] | None = Field(
         default=None,
         description="Optional specific objectives to achieve",
         examples=[["Understand user's main concern", "Offer 2-3 solutions", "Confirm next steps"]]
@@ -127,55 +127,67 @@ class ConversationFrame(BaseModel):
 
 class ResponseStructure(BaseModel):
     """Core content and reasoning of the response"""
-    
+
     intent: str = Field(
         description="What the persona wants to communicate",
         examples=["Share personal experience with UX research", "Ask clarifying question about requirements"]
     )
-    
-    stance: Optional[str] = Field(
+
+    stance: str | None = Field(
         default=None,
         description="Persona's opinion/position on the topic (if applicable)",
         examples=["Supports remote work flexibility", "Skeptical of AI replacing designers"]
     )
-    
-    rationale: Optional[str] = Field(
+
+    rationale: str | None = Field(
         default=None,
         description="Why this stance (values + experience + uncertainty)",
         examples=["Based on 5 years remote work (experience) + work-life balance value (values)"]
     )
-    
-    elasticity: Optional[float] = Field(
+
+    elasticity: float | None = Field(
         default=None,
         ge=0.0,
         le=1.0,
         description="Openness to changing mind (0=rigid, 1=fully flexible). Tied to Openness + cognitive_complexity"
     )
-    
+
     confidence: float = Field(
         ge=0.0,
         le=1.0,
         description="Certainty in the response (0=very uncertain, 1=very certain)"
     )
 
+    competence: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "How equipped the persona is to engage with this topic "
+            "(0=completely out of depth, 1=deep expert). "
+            "Distinct from confidence: a knowledgeable persona can feel uncertain "
+            "(low confidence, high competence), and vice versa."
+        ),
+    )
+
 
 class CommunicationStyle(BaseModel):
     """How the message should be delivered"""
-    
+
     tone: Tone = Field(
         description="Emotional affect (from valence/arousal mapping)"
     )
-    
+
     verbosity: Verbosity = Field(
         description="Target response length"
     )
-    
+
     formality: float = Field(
         ge=0.0,
         le=1.0,
         description="Formality level (0=casual, 1=very formal). Context-adjusted from social role mode"
     )
-    
+
     directness: float = Field(
         ge=0.0,
         le=1.0,
@@ -185,24 +197,24 @@ class CommunicationStyle(BaseModel):
 
 class KnowledgeAndDisclosure(BaseModel):
     """What to reveal and how to handle knowledge boundaries"""
-    
+
     disclosure_level: float = Field(
         ge=0.0,
         le=1.0,
         description="How much personal info to share (from disclosure function: topic × trust × context × mood)"
     )
-    
+
     uncertainty_action: UncertaintyAction = Field(
         description="How to handle uncertain knowledge"
     )
-    
+
     knowledge_claim_type: KnowledgeClaimType = Field(
         description="Type of knowledge being claimed"
     )
-    
+
     @field_validator('knowledge_claim_type')
     @classmethod
-    def validate_claim_type_with_confidence(cls, v, info):
+    def validate_claim_type_with_confidence(cls, v: "KnowledgeClaimType", info: Any) -> "KnowledgeClaimType":
         """Ensure claim type aligns with confidence"""
         # Note: Full validation happens in IR validator with persona proficiency
         return v
@@ -215,21 +227,21 @@ JsonScalar = Union[float, int, str, bool, None]
 class Citation(BaseModel):
     """
     Delta-based citation for complete traceability.
-    
+
     Tracks not just "what influenced" but "how and by how much".
     Supports both numeric (directness, confidence) and non-numeric
     (tone, verbosity) field changes.
     """
-    
-    source_type: Literal["base", "trait", "value", "goal", "rule", "state", "memory", "constraint"] = Field(
-        description="What influenced this decision (added 'base' for initialization, 'constraint' for clamps)"
+
+    source_type: Literal["base", "trait", "value", "goal", "rule", "state", "memory", "constraint", "cross_turn", "trait_interaction"] = Field(
+        description="What influenced this decision (added 'base' for initialization, 'constraint' for clamps, 'cross_turn' for inertia smoothing, 'trait_interaction' for emergent patterns)"
     )
-    
+
     source_id: str = Field(
         description="Specific trait/value/rule/constraint identifier",
         examples=["conscientiousness", "self_direction", "work_social_role", "mood_positive", "privacy_filter"]
     )
-    
+
     effect: str = Field(
         description="Human-readable description of the influence",
         examples=[
@@ -239,57 +251,57 @@ class Citation(BaseModel):
             "Positive mood → warmer tone"
         ]
     )
-    
+
     weight: float = Field(
         ge=0.0,
         le=1.0,
         description="Strength of this influence (0-1)",
         default=1.0
     )
-    
+
     # NEW: Delta tracking fields
-    target_field: Optional[str] = Field(
+    target_field: str | None = Field(
         default=None,
         description="IR field being modified (dot notation)",
         examples=["communication_style.directness", "response_structure.confidence", "communication_style.tone"]
     )
-    
-    operation: Optional[Literal["set", "add", "multiply", "clamp", "override", "blend"]] = Field(
+
+    operation: Literal["set", "add", "multiply", "clamp", "override", "blend"] | None = Field(
         default=None,
         description="Type of modification applied"
     )
-    
-    value_before: Optional[JsonScalar] = Field(
+
+    value_before: JsonScalar | None = Field(
         default=None,
         description="Value before modification (float, int, str, bool for enums)"
     )
-    
-    value_after: Optional[JsonScalar] = Field(
+
+    value_after: JsonScalar | None = Field(
         default=None,
         description="Value after modification"
     )
-    
-    delta: Optional[float] = Field(
+
+    delta: float | None = Field(
         default=None,
         description="Numeric delta (value_after - value_before), auto-computed for numeric values"
     )
-    
-    reason: Optional[str] = Field(
+
+    reason: str | None = Field(
         default=None,
         description="Short explanation of why this modification was made"
     )
-    
+
     @model_validator(mode="after")
-    def validate_and_compute_delta(self):
+    def validate_and_compute_delta(self) -> "Citation":
         """Validate consistency and auto-compute delta for numeric values"""
         # If operation is specified, target_field should be too
         if self.operation and not self.target_field:
             raise ValueError("operation requires target_field")
-        
+
         # Auto-compute delta for numeric values
         if isinstance(self.value_before, (int, float)) and isinstance(self.value_after, (int, float)):
             computed_delta = float(self.value_after) - float(self.value_before)
-            
+
             if self.delta is None:
                 self.delta = round(computed_delta, 6)  # Auto-fill
             else:
@@ -298,7 +310,7 @@ class Citation(BaseModel):
                     raise ValueError(
                         f"delta mismatch: specified {self.delta} vs computed {computed_delta} (tolerance 1e-5)"
                     )
-        
+
         return self
 
 
@@ -308,16 +320,16 @@ class Citation(BaseModel):
 
 class MemoryReadRequest(BaseModel):
     """Request to read from memory (future: fact/preference lookup)"""
-    
+
     query_type: Literal["fact", "preference", "relationship", "episode"] = Field(
         description="Type of memory to retrieve"
     )
-    
+
     query: str = Field(
         description="What to look up",
         examples=["User's job title", "Preferred communication style", "Previous conversation about AI"]
     )
-    
+
     confidence_threshold: float = Field(
         default=0.5,
         ge=0.0,
@@ -328,11 +340,11 @@ class MemoryReadRequest(BaseModel):
 
 class MemoryWriteIntent(BaseModel):
     """Intent to write to memory (not immediate execution - queued for Phase 4)"""
-    
+
     content_type: Literal["fact", "preference", "relationship", "episode"] = Field(
         description="Type of memory to store"
     )
-    
+
     content: str = Field(
         description="What to remember",
         examples=[
@@ -341,19 +353,19 @@ class MemoryWriteIntent(BaseModel):
             "Discussed UX research methodologies"
         ]
     )
-    
+
     confidence: float = Field(
         ge=0.0,
         le=1.0,
         description="Confidence in this memory (0=uncertain inference, 1=explicitly stated)"
     )
-    
+
     privacy_level: float = Field(
         ge=0.0,
         le=1.0,
         description="Sensitivity of this information (0=public, 1=highly private)"
     )
-    
+
     source: str = Field(
         description="Origin of this memory",
         examples=["user_stated", "inferred_from_context", "observed_behavior"]
@@ -363,21 +375,21 @@ class MemoryWriteIntent(BaseModel):
 class MemoryOps(BaseModel):
     """
     Memory operations channel (separated from response generation).
-    
+
     Phase 4 will use this to prevent leaky memory or forgotten facts.
     For now, Turn Planner populates this but it's not executed.
     """
-    
-    read_requests: List[MemoryReadRequest] = Field(
+
+    read_requests: list[MemoryReadRequest] = Field(
         default_factory=list,
         description="Memory lookups needed for this turn"
     )
-    
-    write_intents: List[MemoryWriteIntent] = Field(
+
+    write_intents: list[MemoryWriteIntent] = Field(
         default_factory=list,
         description="Memories to store after this turn"
     )
-    
+
     write_policy: Literal["strict", "lenient"] = Field(
         default="strict",
         description="Strict = only write high-confidence memories, Lenient = write all"
@@ -390,12 +402,12 @@ class MemoryOps(BaseModel):
 
 class ClampRecord(BaseModel):
     """Record of a value being clamped by constraints"""
-    
+
     proposed: float = Field(description="Value before clamping")
     actual: float = Field(description="Value after clamping")
-    minimum: Optional[float] = Field(default=None, description="Lower bound (if applicable)")
-    maximum: Optional[float] = Field(default=None, description="Upper bound (if applicable)")
-    reason: Optional[str] = Field(
+    minimum: float | None = Field(default=None, description="Lower bound (if applicable)")
+    maximum: float | None = Field(default=None, description="Upper bound (if applicable)")
+    reason: str | None = Field(
         default=None,
         description="Why clamped",
         examples=["Privacy filter", "Bounds [0,1]", "Claim policy"]
@@ -405,31 +417,41 @@ class ClampRecord(BaseModel):
 class SafetyPlan(BaseModel):
     """
     Active safety constraints and blocks for this turn.
-    
+
     Makes constraint enforcement auditable and transparent.
     """
-    
-    active_constraints: List[str] = Field(
+
+    active_constraints: list[str] = Field(
         default_factory=list,
         description="Which constraints are active",
         examples=[["privacy_filter", "claim_policy", "must_avoid"]]
     )
-    
-    blocked_topics: List[str] = Field(
+
+    blocked_topics: list[str] = Field(
         default_factory=list,
         description="Topics from must_avoid that were matched",
         examples=[["employer_name", "participant_data"]]
     )
-    
-    clamped_fields: Dict[str, List[ClampRecord]] = Field(
+
+    clamped_fields: dict[str, list[ClampRecord]] = Field(
         default_factory=dict,
         description="Fields that were clamped (supports multiple clamps per field)"
     )
-    
-    pattern_blocks: List[str] = Field(
+
+    pattern_blocks: list[str] = Field(
         default_factory=list,
         description="Response patterns that were blocked and why",
         examples=[["Pattern 'share_work_story' blocked: mentions must_avoid 'employer_name'"]]
+    )
+
+    cannot_claim: list[str] = Field(
+        default_factory=list,
+        description="Roles/credentials persona cannot claim (from invariants)",
+    )
+
+    must_avoid: list[str] = Field(
+        default_factory=list,
+        description="Topics persona must never engage with (from invariants)",
     )
 
 
@@ -440,66 +462,90 @@ class SafetyPlan(BaseModel):
 class IntermediateRepresentation(BaseModel):
     """
     Complete structured plan for a persona's response (production-hardened).
-    
+
     This is the output of the Turn Planner and input to the Text Renderer.
     All behavior should be testable by examining this structure.
-    
+
     Production features:
     - Delta-based citations for debuggability
     - Safety plan for constraint transparency
     - Memory ops channel for Phase 4 preparation
     - Deterministic normalization for golden tests
     """
-    
+
     # Conversation context
     conversation_frame: ConversationFrame
-    
+
     # Core response content
     response_structure: ResponseStructure
-    
+
     # Communication style
     communication_style: CommunicationStyle
-    
+
     # Knowledge & disclosure
     knowledge_disclosure: KnowledgeAndDisclosure
-    
+
     # Traceability (enhanced with deltas)
-    citations: List[Citation] = Field(
+    citations: list[Citation] = Field(
         default_factory=list,
         description="Delta-based citations showing all modifications"
     )
-    
+
     # NEW: Safety & constraints
     safety_plan: SafetyPlan = Field(
         default_factory=SafetyPlan,
         description="Active constraints, blocks, and clamps"
     )
-    
+
     # NEW: Memory operations (Phase 4 prep)
     memory_ops: MemoryOps = Field(
         default_factory=MemoryOps,
         description="Memory read/write intents for this turn"
     )
-    
+
+    # Personality-driven behavioral directives (Phase R1)
+    behavioral_directives: list[str] = Field(
+        default_factory=list,
+        description="Personality-driven behavioral instructions for the LLM, "
+        "derived from trait and cognitive style guidance"
+    )
+
+    # Personality-specific language directives (Phase R5)
+    personality_language: list[str] = Field(
+        default_factory=list,
+        description="LIWC-grounded linguistic marker directives for personality-"
+        "differentiated language generation"
+    )
+
     # Metadata
-    turn_id: Optional[str] = Field(
+    turn_id: str | None = Field(
         default=None,
         description="Unique identifier for this turn (for logging/debugging)"
     )
-    
-    seed: Optional[int] = Field(
+
+    seed: int | None = Field(
         default=None,
         description="Random seed used for this turn (for deterministic reproduction)"
     )
-    
+
+    def __repr__(self) -> str:
+        stance = self.response_structure.stance or ""
+        snippet = (stance[:50] + "...") if len(stance) > 50 else stance
+        return (
+            f"IR(mode={self.conversation_frame.interaction_mode.value!r}, "
+            f"comp={self.response_structure.competence:.2f}, "
+            f"conf={self.response_structure.confidence:.2f}, "
+            f"stance={snippet!r})"
+        )
+
     def normalize(self, ndigits: int = 3) -> "IntermediateRepresentation":
         """Return normalized copy for deterministic comparison (test/QA only)"""
         return normalize_ir(self, ndigits=ndigits)
-    
+
     def to_json_deterministic(self, ndigits: int = 3) -> str:
         """
         Convert to deterministic JSON string for golden tests.
-        
+
         Features:
         - Quantized floats (default 3 decimals)
         - Sorted keys
@@ -507,7 +553,7 @@ class IntermediateRepresentation(BaseModel):
         - Removes runtime IDs (turn_id)
         """
         return ir_to_deterministic_json(self, ndigits=ndigits)
-    
+
     model_config = {"json_schema_extra": {
         "examples": [{
             "conversation_frame": {
@@ -565,27 +611,27 @@ class IntermediateRepresentation(BaseModel):
 
 class ValidationViolation(BaseModel):
     """A single validation failure"""
-    
+
     violation_type: str = Field(
         description="Category of violation",
         examples=["invariant_contradiction", "knowledge_boundary_exceeded", "style_out_of_bounds"]
     )
-    
+
     severity: Literal["error", "warning"] = Field(
         description="How serious is this violation"
     )
-    
+
     message: str = Field(
         description="Human-readable explanation"
     )
-    
-    field_path: Optional[str] = Field(
+
+    field_path: str | None = Field(
         default=None,
         description="IR field that caused the violation (dot notation)",
         examples=["knowledge_disclosure.knowledge_claim_type", "response_structure.stance"]
     )
-    
-    suggested_fix: Optional[str] = Field(
+
+    suggested_fix: str | None = Field(
         default=None,
         description="How to repair this violation"
     )
@@ -593,22 +639,22 @@ class ValidationViolation(BaseModel):
 
 class IRValidationResult(BaseModel):
     """Result of validating an IR against persona profile"""
-    
+
     passed: bool = Field(
         description="Whether IR passed all checks"
     )
-    
-    violations: List[ValidationViolation] = Field(
+
+    violations: list[ValidationViolation] = Field(
         default_factory=list,
         description="List of validation failures (if any)"
     )
-    
-    checked_invariants: List[str] = Field(
+
+    checked_invariants: list[str] = Field(
         description="Which invariants were checked",
         examples=[["identity_facts", "cannot_claim", "must_avoid", "knowledge_boundaries"]]
     )
-    
-    timestamp: Optional[str] = Field(
+
+    timestamp: str | None = Field(
         default=None,
         description="When validation occurred (ISO format)"
     )
@@ -630,7 +676,7 @@ from collections.abc import Mapping, Sequence
 def _quantize(obj: Any, ndigits: int = 3) -> Any:
     """
     Recursively quantize floats in a data structure.
-    
+
     Prevents float rounding differences from breaking golden tests.
     """
     if isinstance(obj, float):
@@ -649,22 +695,22 @@ def normalize_ir(
 ) -> "IntermediateRepresentation":
     """
     Normalize IR for deterministic comparison.
-    
+
     Prevents test flakiness from:
     - Float rounding differences across platforms
     - Dict iteration order
     - Unsorted collections
-    
+
     Args:
         ir: IR to normalize
         ndigits: Decimal places for float rounding
-        
+
     Returns:
         Normalized copy of IR
     """
     # Get python dict representation
     data = ir.model_dump(mode="python")
-    
+
     # Sort citations by key fields for deterministic order
     if "citations" in data and isinstance(data["citations"], list):
         data["citations"] = sorted(
@@ -677,17 +723,17 @@ def normalize_ir(
                 c.get("effect") or "",
             ),
         )
-    
+
     # Sort safety_plan lists
     sp = data.get("safety_plan")
     if isinstance(sp, dict):
         for k in ("active_constraints", "blocked_topics", "pattern_blocks"):
             if isinstance(sp.get(k), list):
                 sp[k] = sorted(sp[k])
-    
+
     # Recursive quantization of all floats
     data = _quantize(data, ndigits=ndigits)
-    
+
     # Reconstruct IR from normalized data
     return IntermediateRepresentation.model_validate(data)
 
@@ -698,16 +744,16 @@ def ir_to_deterministic_json(
 ) -> str:
     """
     Convert IR to byte-identical JSON for golden tests.
-    
+
     Pydantic v2 compatible (uses json.dumps, not model_dump_json(sort_keys=...)).
-    
+
     Args:
         ir: IR to serialize
         ndigits: Decimal places for float rounding
-        
+
     Returns:
         Deterministic JSON string
-        
+
     Usage:
         ir1_json = ir_to_deterministic_json(ir1)
         ir2_json = ir_to_deterministic_json(ir2)
@@ -715,13 +761,13 @@ def ir_to_deterministic_json(
     """
     # Normalize first
     normalized = normalize_ir(ir, ndigits=ndigits)
-    
+
     # Get JSON-serializable dict
-    payload: Dict[str, Any] = normalized.model_dump(mode="json")
-    
+    payload: dict[str, Any] = normalized.model_dump(mode="json")
+
     # Remove runtime IDs from golden tests (optional)
     payload.pop("turn_id", None)
-    
+
     # Serialize with sorted keys and consistent separators
     return json.dumps(
         payload,
@@ -737,7 +783,7 @@ def ir_to_deterministic_json(
 
 def apply_numeric_modifier(
     *,
-    citations: List[Citation],
+    citations: list[Citation],
     source_type: str,
     source_id: str,
     target_field: str,
@@ -746,13 +792,13 @@ def apply_numeric_modifier(
     after: float,
     effect: str,
     weight: float,
-    reason: Optional[str] = None,
+    reason: str | None = None,
 ) -> float:
     """
     Apply a numeric modifier and auto-generate citation.
-    
+
     Prevents "forgot to add citation" bugs.
-    
+
     Args:
         citations: List to append citation to
         source_type: "trait", "value", "rule", "state", "constraint", etc.
@@ -764,10 +810,10 @@ def apply_numeric_modifier(
         effect: Human-readable description
         weight: Importance (0-1)
         reason: Optional detailed explanation
-        
+
     Returns:
         The 'after' value (for chaining)
-        
+
     Example:
         directness = apply_numeric_modifier(
             citations=citations,
@@ -798,7 +844,7 @@ def apply_numeric_modifier(
 
 def apply_enum_modifier(
     *,
-    citations: List[Citation],
+    citations: list[Citation],
     source_type: str,
     source_id: str,
     target_field: str,
@@ -807,19 +853,19 @@ def apply_enum_modifier(
     after: str,
     effect: str,
     weight: float,
-    reason: Optional[str] = None,
+    reason: str | None = None,
 ) -> str:
     """
     Apply an enum/string modifier and auto-generate citation.
-    
+
     Use for tone, verbosity, uncertainty_action, etc.
-    
+
     Args:
         Same as apply_numeric_modifier but before/after are strings
-        
+
     Returns:
         The 'after' value (for chaining)
-        
+
     Example:
         tone = apply_enum_modifier(
             citations=citations,

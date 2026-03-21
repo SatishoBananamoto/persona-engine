@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "persona-engine"
-version = "0.1.0"
+version = "0.4.0"
 description = "Universal conversational persona system with full psychological framework"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,7 +12,7 @@ license = {text = "MIT"}
 authors = [
     {name = "Persona Engine Team"}
 ]
-keywords = ["persona", "ai", "psychology", "simulation", "testing"]
+keywords = ["persona", "ai", "psychology", "simulation", "testing", "llm"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -20,33 +20,76 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 
 dependencies = [
     "pydantic>=2.5.0",
-    "anthropic>=0.40.0",
     "pyyaml>=6.0",
-    "python-dotenv>=1.0.0",
+    "numpy>=1.24.0",
 ]
 
 [project.optional-dependencies]
+anthropic = [
+    "anthropic>=0.40.0",
+]
+openai = [
+    "openai>=1.0.0",
+]
+gemini = [
+    "google-genai>=1.0.0",
+]
+mistral = [
+    "mistralai>=1.0.0",
+]
+groq = [
+    "openai>=1.0.0",
+]
+ollama = [
+    "ollama>=0.4.0",
+]
+eval = [
+    "scipy>=1.10.0",
+]
+server = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+]
+all = [
+    "anthropic>=0.40.0",
+    "openai>=1.0.0",
+    "google-genai>=1.0.0",
+    "mistralai>=1.0.0",
+    "ollama>=0.4.0",
+    "python-dotenv>=1.0.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+]
 dev = [
+    "anthropic>=0.40.0",
+    "openai>=1.0.0",
+    "python-dotenv>=1.0.0",
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
     "pytest-asyncio>=0.21.0",
+    "hypothesis>=6.92.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
     "mypy>=1.7.0",
+    "scipy>=1.10.0",
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/persona-engine"
+Homepage = "https://github.com/SatishoBananamoto/persona-engine"
 Documentation = "https://persona-engine.readthedocs.io"
-Repository = "https://github.com/yourusername/persona-engine"
+Repository = "https://github.com/SatishoBananamoto/persona-engine"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["persona_engine*"]
+include = ["persona_engine*", "layer_zero*"]
+
+[tool.setuptools.package-data]
+persona_engine = ["py.typed"]
 
 [tool.black]
 line-length = 100

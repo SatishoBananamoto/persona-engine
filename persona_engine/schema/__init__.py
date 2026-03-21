@@ -1,30 +1,29 @@
 """Schema module exports"""
 
+from persona_engine.schema.ir_schema import (
+    Citation,
+    CommunicationStyle,
+    ConversationFrame,
+    ConversationGoal,
+    InteractionMode,
+    IntermediateRepresentation,
+    KnowledgeAndDisclosure,
+    KnowledgeClaimType,
+    ResponseStructure,
+    Tone,
+    UncertaintyAction,
+    Verbosity,
+)
 from persona_engine.schema.persona_schema import (
-    Persona,
-    PersonalityProfile,
     BigFiveTraits,
-    SchwartzValues,
+    ClaimPolicy,
     CognitiveStyle,
     CommunicationPreferences,
     DynamicState,
+    Persona,
     PersonaInvariants,
-    ClaimPolicy,
-)
-
-from persona_engine.schema.ir_schema import (
-    IntermediateRepresentation,
-    ConversationFrame,
-    ResponseStructure,
-    CommunicationStyle,
-    KnowledgeAndDisclosure,
-    Citation,
-    InteractionMode,
-    ConversationGoal,
-    Verbosity,
-    Tone,
-    UncertaintyAction,
-    KnowledgeClaimType,
+    PersonalityProfile,
+    SchwartzValues,
 )
 
 __all__ = [

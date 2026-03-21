@@ -10,9 +10,11 @@ Production-grade domain detection that:
 - prevents double-counting of phrases and unigrams
 """
 
-from typing import List, Dict, Optional, Tuple, Set, Any, TYPE_CHECKING
-from dataclasses import dataclass, field
+from __future__ import annotations
+
 import re
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from persona_engine.planner.trace_context import TraceContext
@@ -51,7 +53,7 @@ def _get_field(obj: Any, field_name: str, default: Any = None) -> Any:
 def tokenize_with_ngrams(
     text: str,
     max_n: int = MAX_NGRAM_SIZE,
-) -> Tuple[List[str], Set[str]]:
+) -> tuple[list[str], set[str]]:
     """
     Tokenize input into unigrams + phrase n-grams.
 
@@ -59,13 +61,18 @@ def tokenize_with_ngrams(
         (tokens, ngrams) where tokens is the unigram list and ngrams
         is a set of bigram/trigram phrases joined by single spaces.
 
-    Deterministic: lowercase, strip punctuation, split on whitespace.
+    Deterministic: lowercase, strip control chars + punctuation, split on whitespace.
     """
+    # Strip control characters (null bytes, escape sequences) for safety
+    text = "".join(ch for ch in text if ord(ch) >= 32 or ch in ("\n", "\t"))
     text = text.lower()
+    # Strip non-word, non-space characters (punctuation, emoji, etc.)
     text = re.sub(r"[^\w\s]", " ", text)
-    tokens = [t.strip() for t in text.split() if t.strip()]
+    # Normalize unicode whitespace and collapse
+    text = re.sub(r"\s+", " ", text).strip()
+    tokens = [t for t in text.split() if t]
 
-    ngrams: Set[str] = set()
+    ngrams: set[str] = set()
     for n in range(2, max_n + 1):
         for i in range(len(tokens) - n + 1):
             phrase = " ".join(tokens[i : i + n])
@@ -74,10 +81,10 @@ def tokenize_with_ngrams(
     return tokens, ngrams
 
 
-def _extract_keywords(text: str, filter_short: bool = False) -> List[str]:
+def _extract_keywords(text: str, filter_short: bool = False) -> list[str]:
     """
     Extract keywords from a string using the same tokenization rules.
-    
+
     Args:
         text: Input string to tokenize
         filter_short: If True, filter out tokens < 3 chars unless whitelisted
@@ -85,10 +92,10 @@ def _extract_keywords(text: str, filter_short: bool = False) -> List[str]:
     text = text.lower()
     text = re.sub(r"[^\w\s]", " ", text)
     tokens = [t.strip() for t in text.split() if t.strip()]
-    
+
     if filter_short:
         return [t for t in tokens if len(t) >= 3 or t in TECHNICAL_TERMS_WHITELIST]
-        
+
     return tokens
 
 
@@ -108,22 +115,22 @@ class DomainEntry:
     """Single domain in the registry."""
 
     domain_id: str
-    keywords: Dict[str, float]  # keyword -> weight (0.0-1.0)
-    negative_keywords: List[str] = field(default_factory=list)
+    keywords: dict[str, float]  # keyword -> weight (0.0-1.0)
+    negative_keywords: list[str] = field(default_factory=list)
 
-    def score_input(self, tokens: List[str], ngrams: Set[str]) -> float:
+    def score_input(self, tokens: list[str], ngrams: set[str]) -> float:
         """
         Score input against this domain's keywords.
 
         Uses exact matching for unigrams and phrase matching for
         multi-word keywords via the ngram set.
-        
+
         Note: Cumulative scoring - scores both phrases and constituent unigrams
         if they appear in the keyword list. This provides a natural boost
         for phrase matches.
         """
         score = 0.0
-        
+
         # 1. Penalize negative keywords first
         for neg in self.negative_keywords:
             hit = (neg in ngrams) if (" " in neg) else (neg in tokens)
@@ -131,20 +138,20 @@ class DomainEntry:
                 score -= NEGATIVE_KEYWORD_PENALTY
 
         # 2. Score positive keywords
-        matched_keywords: Set[str] = set()
+        matched_keywords: set[str] = set()
 
         # Check all keywords against ngrams/tokens
         for kw, weight in self.keywords.items():
             is_phrase = " " in kw
             hit = False
-            
+
             if is_phrase:
                 if kw in ngrams:
                     hit = True
             else:
                 if kw in tokens:
                     hit = True
-            
+
             if hit and kw not in matched_keywords:
                 score += weight
                 matched_keywords.add(kw)
@@ -152,63 +159,9 @@ class DomainEntry:
         return max(0.0, score)
 
 
-# Built-in domain registry — can be extended per deployment
-# Note: Whitelist filtering is NOT applied to these hardcoded keywords.
-# Short tokens like "ux", "ai" in the registry are preserved.
-DOMAIN_REGISTRY: List[DomainEntry] = [
-    DomainEntry(
-        domain_id="psychology",
-        keywords={
-            "psychology": 1.0, "behavior": 0.8, "cognitive": 0.9, "research": 0.6,
-            "user": 0.5, "ux": 0.9, "experience": 0.5, "mental": 0.7,
-            "emotions": 0.6, "perception": 0.6, "learning": 0.5, "memory": 0.5,
-            "motivation": 0.6, "personality": 0.6, "bias": 0.7, "heuristic": 0.7,
-            "usability": 0.8, "interview": 0.5, "participant": 0.7, "study": 0.5,
-        },
-        negative_keywords=["physics", "chemistry", "engineering"],
-    ),
-    DomainEntry(
-        domain_id="technology",
-        keywords={
-            "technology": 1.0, "software": 0.9, "code": 0.8, "programming": 0.9,
-            "computer": 0.7, "data": 0.6, "algorithm": 0.8, "system": 0.5,
-            "app": 0.6, "web": 0.7, "design": 0.5, "tool": 0.5, "platform": 0.5,
-            "api": 0.8, "database": 0.7, "cloud": 0.6, "ai": 0.7, "ml": 0.7,
-            "prototype": 0.6, "figma": 0.7, "sketch": 0.6,
-        },
-        negative_keywords=["biology", "medicine"],
-    ),
-    DomainEntry(
-        domain_id="business",
-        keywords={
-            "business": 1.0, "company": 0.7, "market": 0.7, "strategy": 0.8,
-            "management": 0.7, "project": 0.6, "stakeholder": 0.8, "agile": 0.7,
-            "deadline": 0.5, "budget": 0.6, "roi": 0.8, "kpi": 0.7, "revenue": 0.7,
-            "customer": 0.6, "client": 0.6, "meeting": 0.4, "team": 0.5,
-            "sprint": 0.6, "roadmap": 0.7,
-        },
-        negative_keywords=[],
-    ),
-    DomainEntry(
-        domain_id="health",
-        keywords={
-            "health": 1.0, "medical": 0.9, "doctor": 0.8, "disease": 0.7,
-            "symptom": 0.8, "treatment": 0.8, "diagnosis": 0.9, "medicine": 0.8,
-            "therapy": 0.7, "wellness": 0.6, "exercise": 0.5, "nutrition": 0.6,
-            "diet": 0.5, "mental health": 0.8, "anxiety": 0.7, "depression": 0.7,
-        },
-        negative_keywords=[],
-    ),
-    DomainEntry(
-        domain_id="personal",
-        keywords={
-            "personal": 0.8, "family": 0.7, "relationship": 0.8, "friend": 0.6,
-            "hobby": 0.6, "travel": 0.5, "home": 0.5, "life": 0.4, "feel": 0.5,
-            "opinion": 0.4, "think": 0.3, "believe": 0.4, "prefer": 0.4,
-        },
-        negative_keywords=[],
-    ),
-]
+# Domain registry imported from external module for easy customization.
+# Backward-compatible: DOMAIN_REGISTRY is still available at this module level.
+from persona_engine.planner.domain_registry import DOMAIN_REGISTRY  # noqa: E402
 
 
 # =============================================================================
@@ -222,9 +175,9 @@ _PRIORITY_PERSONA = 1  # persona wins ties
 
 def detect_domain(
     user_input: str,
-    persona_domains: Optional[List[dict]] = None,
-    ctx: Optional["TraceContext"] = None,
-) -> Tuple[str, float]:
+    persona_domains: list[dict] | None = None,
+    ctx: TraceContext | None = None,
+) -> tuple[str, float]:
     """
     Detect domain from user input using keyword scoring.
 
@@ -260,7 +213,7 @@ def detect_domain(
     # ------------------------------------------------------------------
     # Score all candidates: (score, priority, domain_id)
     # ------------------------------------------------------------------
-    scores: List[Tuple[float, int, str]] = []
+    scores: list[tuple[float, int, str]] = []
 
     for entry in DOMAIN_REGISTRY:
         score = entry.score_input(tokens, ngrams)
@@ -276,17 +229,17 @@ def detect_domain(
             subdomains = _get_field(pd, "subdomains", [])
 
             # Build keywords from domain name + subdomains
-            domain_keywords: Dict[str, float] = {domain_name: 1.0}
+            domain_keywords: dict[str, float] = {domain_name: 1.0}
             for sd in subdomains:
                 # Use unified tokenizer to split "UI/UX" -> "ui", "ux"
                 sd_keywords = _extract_keywords(sd, filter_short=False)
-                
+
                 # Check for phrasal subdomains vs single words
                 if len(sd_keywords) > 1:
                     # Add exact phrase
                     phrase = " ".join(sd_keywords)
                     domain_keywords[phrase] = 0.8
-                
+
                 # Add individual tokens
                 for word in sd_keywords:
                     # Apply whitelist filter here for dynamic keywords
@@ -347,21 +300,128 @@ def detect_domain(
 
 
 # =============================================================================
+# DOMAIN ADJACENCY (for competence computation)
+# =============================================================================
+
+# Decay factor for adjacency: adjacent domain proficiency is reduced by this
+ADJACENCY_DECAY = 0.4
+
+
+def compute_domain_adjacency(
+    detected_domain: str,
+    persona_domains: list[dict] | None = None,
+    ctx: TraceContext | None = None,
+) -> tuple[float, str | None]:
+    """
+    Compute how close the detected domain is to the persona's known domains.
+
+    Uses keyword overlap between the detected domain's keyword set and
+    each persona domain's keyword set. Returns the best adjacent domain's
+    proficiency * decay factor.
+
+    Args:
+        detected_domain: The domain detected from user input
+        persona_domains: List of persona knowledge_domain dicts with
+                         'domain', 'proficiency', 'subdomains' keys
+        ctx: TraceContext for citations
+
+    Returns:
+        (adjacency_score, nearest_domain_name) — score in [0, 1], or
+        (0.0, None) if no adjacency found
+    """
+    if not persona_domains:
+        return 0.0, None
+
+    detected_lower = detected_domain.lower()
+
+    # Direct match → not adjacency, handled elsewhere
+    for pd in persona_domains:
+        if (_get_field(pd, "domain") or "").strip().lower() == detected_lower:
+            return 0.0, None
+
+    # Build keyword set for detected domain from registry
+    detected_keywords: set[str] = set()
+    for entry in DOMAIN_REGISTRY:
+        if entry.domain_id.lower() == detected_lower:
+            detected_keywords = set(entry.keywords.keys())
+            break
+
+    # If detected domain not in registry, tokenize the domain name itself
+    if not detected_keywords:
+        detected_keywords = set(_extract_keywords(detected_domain, filter_short=True))
+
+    if not detected_keywords:
+        return 0.0, None
+
+    # Score each persona domain by keyword overlap with detected domain
+    best_score = 0.0
+    best_domain: str | None = None
+
+    for pd in persona_domains:
+        domain_name = (_get_field(pd, "domain") or "").strip().lower()
+        proficiency = float(_get_field(pd, "proficiency", 0.0))
+        subdomains = _get_field(pd, "subdomains", [])
+
+        # Build keyword set for this persona domain
+        persona_keywords: set[str] = set()
+
+        # From registry
+        for entry in DOMAIN_REGISTRY:
+            if entry.domain_id.lower() == domain_name:
+                persona_keywords.update(entry.keywords.keys())
+                break
+
+        # From domain name + subdomains
+        persona_keywords.update(_extract_keywords(domain_name, filter_short=True))
+        for sd in subdomains:
+            persona_keywords.update(_extract_keywords(sd, filter_short=True))
+
+        if not persona_keywords:
+            continue
+
+        # Jaccard-like overlap
+        overlap = len(detected_keywords & persona_keywords)
+        union = len(detected_keywords | persona_keywords)
+        if union == 0:
+            continue
+
+        similarity = overlap / union
+        adjacency = proficiency * similarity * ADJACENCY_DECAY
+
+        if adjacency > best_score:
+            best_score = adjacency
+            best_domain = domain_name
+
+    if ctx and best_domain:
+        ctx.add_basic_citation(
+            source_type="rule",
+            source_id="domain_adjacency",
+            effect=(
+                f"Nearest domain to '{detected_domain}' is '{best_domain}' "
+                f"(adjacency={best_score:.3f})"
+            ),
+            weight=0.7,
+        )
+
+    return best_score, best_domain
+
+
+# =============================================================================
 # TOPIC RELEVANCE
 # =============================================================================
 
 def compute_topic_relevance(
     user_input: str,
-    persona_domains: Optional[List[Any]] = None,
-    persona_goals: Optional[List[Any]] = None,
-    ctx: Optional["TraceContext"] = None,
+    persona_domains: list[Any] | None = None,
+    persona_goals: list[Any] | None = None,
+    ctx: TraceContext | None = None,
     default_relevance: float = DEFAULT_TOPIC_RELEVANCE,
 ) -> float:
     """
     Compute topic relevance as overlap between input and persona interests.
 
     Relevance = (# overlapping keywords) / (# input tokens).
-    
+
     Prevents double-counting by consuming tokens matched by phrases.
 
     Args:
@@ -386,8 +446,8 @@ def compute_topic_relevance(
         return default_relevance
 
     # 1. Build Interest Sets
-    interest_keywords: Set[str] = set()
-    interest_phrases: Set[str] = set() 
+    interest_keywords: set[str] = set()
+    interest_phrases: set[str] = set()
 
     if persona_domains:
         for pd in persona_domains:
@@ -403,10 +463,10 @@ def compute_topic_relevance(
                 sd_tokens = _extract_keywords(sd, filter_short=False)
                 if not sd_tokens:
                     continue
-                
+
                 if len(sd_tokens) > 1:
                     interest_phrases.add(" ".join(sd_tokens))
-                
+
                 # Add individual words with filter
                 for word in sd_tokens:
                     if len(word) >= 3 or word in TECHNICAL_TERMS_WHITELIST:
@@ -417,7 +477,7 @@ def compute_topic_relevance(
             goal_text = (_get_field(g, "goal") or "")
             if not goal_text.strip():
                 continue
-            
+
             # Goals usually sentences -> extract just keywords with filter
             goal_tokens = _extract_keywords(goal_text, filter_short=True)
             for word in goal_tokens:
@@ -439,13 +499,13 @@ def compute_topic_relevance(
     # 2. Compute Coverage (Prevent double-counting)
     # We want to find how many *tokens* are covered by interests.
     # Phrases cover multiple tokens. Unigrams cover 1.
-    
-    covered_indices: Set[int] = set()
-    
+
+    covered_indices: set[int] = set()
+
     # A. Check phrases first (longest first ideally, but ngrams set is flat)
-    # Since we don't have indices in `ngrams`, we must reconstruct detection 
+    # Since we don't have indices in `ngrams`, we must reconstruct detection
     # to associate matches with token indices.
-    
+
     # Iterate through generated ngrams again to map to indices
     # MAX_NGRAM_SIZE is small (3), so this is cheap.
     for n in range(MAX_NGRAM_SIZE, 1, -1):  # 3, then 2
@@ -455,7 +515,7 @@ def compute_topic_relevance(
             is_overlap = any(j in covered_indices for j in range(i, i + n))
             if is_overlap:
                 continue
-                
+
             phrase = " ".join(tokens_list[i : i + n])
             if phrase in interest_phrases:
                 # MARK CONSUMED
@@ -528,7 +588,7 @@ def _is_sentence_start(text: str, phrase: str) -> bool:
 
 def detect_evidence_strength(
     user_input: str,
-    ctx: Optional["TraceContext"] = None,
+    ctx: TraceContext | None = None,
 ) -> float:
     """
     Detect if user input contains evidence of disagreement/challenge.
@@ -618,7 +678,7 @@ def _norm_action(action: str) -> str:
 
 
 # Intent map: (user_intent, normalized_uncertainty_action) → intent string
-_INTENT_MAP: Dict[Tuple[str, str], str] = {
+_INTENT_MAP: dict[tuple[str, str], str] = {
     # User is asking
     ("ask", "ANSWER"): "Provide direct answer with domain knowledge",
     ("ask", "HEDGE"): "Provide tentative answer with uncertainty markers",
@@ -657,7 +717,7 @@ def generate_intent_string(
     conversation_goal: str,
     uncertainty_action: str,
     needs_clarification: bool = False,
-    ctx: Optional["TraceContext"] = None,
+    ctx: TraceContext | None = None,
 ) -> str:
     """
     Generate meaningful intent string for IR.
@@ -689,20 +749,20 @@ def generate_intent_string(
 
     norm = _norm_action(uncertainty_action)
     key = (user_intent.lower(), norm)
-    intent = _INTENT_MAP.get(key)
+    mapped_intent = _INTENT_MAP.get(key)
 
-    if intent:
+    if mapped_intent:
         if ctx:
             ctx.add_basic_citation(
                 source_type="rule",
                 source_id="intent_generation",
                 effect=(
                     f"Intent: user_intent='{user_intent}' + "
-                    f"uncertainty='{norm}' → '{intent}'"
+                    f"uncertainty='{norm}' → '{mapped_intent}'"
                 ),
                 weight=1.0,
             )
-        return intent
+        return mapped_intent
 
     # Fallback for unknown combinations
     fallback = f"Respond to {user_intent} with {uncertainty_action.lower()} approach"

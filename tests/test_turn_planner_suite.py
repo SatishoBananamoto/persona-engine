@@ -345,7 +345,12 @@ class TestContracts:
         """
         print("\n=== CONTRACT TEST: Exact canonical bias IDs ===")
         
-        CANONICAL_BIAS_IDS = {"confirmation_bias", "negativity_bias", "authority_bias"}
+        CANONICAL_BIAS_IDS = {
+            "confirmation_bias", "negativity_bias", "authority_bias",
+            "anchoring_bias", "status_quo_bias", "availability_bias",
+            "empathy_gap_bias", "dunning_kruger_bias",
+            "elasticity_biases", "confidence_biases", "arousal_biases",
+        }
         
         # Use high conformity persona to guarantee authority bias triggers
         persona = load_persona("personas/test_high_conformity.yaml")

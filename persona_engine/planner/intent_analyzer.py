@@ -11,42 +11,43 @@ Outputs:
 - needs_clarification flag
 """
 
-from typing import Tuple, Optional
-from persona_engine.schema.ir_schema import InteractionMode, ConversationGoal
+
 from persona_engine.planner.trace_context import TraceContext
+from persona_engine.schema.ir_schema import ConversationGoal, InteractionMode
 
 
 def analyze_intent(
     user_input: str,
-    current_mode: Optional[InteractionMode],
-    current_goal: Optional[ConversationGoal],
+    current_mode: InteractionMode | None,
+    current_goal: ConversationGoal | None,
     ctx: TraceContext
-) -> Tuple[InteractionMode, ConversationGoal, str, bool]:
+) -> tuple[InteractionMode, ConversationGoal, str, bool]:
     """
     Analyze user intent (deterministic, rule-based).
-    
+
     This runs EARLY in the pipeline (before stance generation) so that
     interaction_mode and goal can influence behavioral decisions.
-    
+
     Args:
         user_input: Raw user input text
         current_mode: Already-set mode (None = infer it)
         current_goal: Already-set goal (None = infer it)
         ctx: TraceContext for recording decisions
-        
+
     Returns:
         (interaction_mode, goal, user_intent, needs_clarification)
     """
-    
+
     user_lower = user_input.lower()
-    
+
     # ========================================================================
     # 1. INTERACTION MODE (only infer if not already set)
     # ========================================================================
-    
+
     if current_mode is None:
         # Deterministic keyword matching (sorted for consistency)
         mode_keywords = {
+            InteractionMode.SMALL_TALK: ["weather", "weekend", "how are you", "how's it going", "what's up"],
             InteractionMode.SURVEY: ["survey", "questionnaire", "poll", "rating"],
             InteractionMode.CUSTOMER_SUPPORT: ["help", "support", "issue", "problem", "fix", "broken"],
             InteractionMode.INTERVIEW: ["interview", "hiring", "candidate", "position", "job"],
@@ -54,15 +55,15 @@ def analyze_intent(
             InteractionMode.COACHING: ["coach", "guidance", "advice", "mentor", "grow"],
             InteractionMode.BRAINSTORM: ["brainstorm", "ideas", "creative", "explore"],
         }
-        
+
         # Check in deterministic order (enum definition order)
         detected_mode = InteractionMode.CASUAL_CHAT  # Default
-        
+
         for mode, keywords in sorted(mode_keywords.items(), key=lambda x: x[0].value):
             if any(kw in user_lower for kw in keywords):
                 detected_mode = mode
                 break
-        
+
         # Record mode inference
         ctx.enum(
             source_type="rule",
@@ -75,18 +76,18 @@ def analyze_intent(
             weight=1.0,
             reason="Early intent analysis"
         )
-        
+
         mode = detected_mode
     else:
         mode = current_mode
-    
+
     # ========================================================================
     # 2. CONVERSATION GOAL
     # ========================================================================
-    
+
     if current_goal is None:
         # Infer goal from input patterns
-        
+
         # Question detection
         if "?" in user_input:
             if any(word in user_lower for word in ["why", "how", "explain", "what", "tell me", "describe"]):
@@ -95,26 +96,26 @@ def analyze_intent(
                 goal = ConversationGoal.PERSUADE
             else:
                 goal = ConversationGoal.GATHER_INFO
-        
+
         # Problem-solving
         elif any(word in user_lower for word in ["fix", "solve", "resolve", "help with", "deal with"]):
             goal = ConversationGoal.RESOLVE_ISSUE
-        
+
         # Opinion/feeling
         elif any(word in user_lower for word in ["think", "feel", "believe", "opinion", "view"]):
             goal = ConversationGoal.BUILD_RAPPORT
-        
+
         # Teaching/explaining
         elif any(word in user_lower for word in ["learn", "teach", "understand", "know about"]):
             goal = ConversationGoal.EDUCATE
-        
+
         # Exploration
         elif any(word in user_lower for word in ["explore", "consider", "discuss", "talk about"]):
             goal = ConversationGoal.EXPLORE_IDEAS
-        
+
         else:
             goal = ConversationGoal.BUILD_RAPPORT  # Default
-        
+
         # Record goal inference
         ctx.enum(
             source_type="rule",
@@ -129,11 +130,11 @@ def analyze_intent(
         )
     else:
         goal = current_goal
-    
+
     # ========================================================================
     # 3. USER INTENT CLASSIFICATION
     # ========================================================================
-    
+
     if "?" in user_input:
         user_intent = "ask"
     elif any(word in user_lower for word in ["please", "could you", "would you", "can you"]):
@@ -146,16 +147,18 @@ def analyze_intent(
         user_intent = "clarify"
     else:
         user_intent = "share"
-    
+
     # ========================================================================
     # 4. NEEDS CLARIFICATION DETECTION
     # ========================================================================
-    
+
     needs_clarification = (
-        len(user_input.split()) < 5  # Very short
-        or user_input.count("?") > 2  # Multiple questions
-        or any(word in user_lower for word in ["or", "either", "maybe", "not sure", "kind of"])  # Ambiguous
-        or (user_intent == "ask" and len(user_input.split()) < 8)  # Vague question
+        len(user_input.split()) < 3  # Truly tiny input
+        or user_input.count("?") > 3  # 4+ questions is genuinely ambiguous
+        or any(phrase in user_lower for phrase in [
+            "not sure what", "kind of confused",
+            "what do you mean", "can you clarify",
+        ])
     )
-    
+
     return mode, goal, user_intent, needs_clarification

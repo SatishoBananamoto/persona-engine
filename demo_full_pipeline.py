@@ -2,46 +2,41 @@
 """
 Full Pipeline Demo - Persona Engine
 
-Demonstrates the complete flow from user input to persona response:
-1. Load persona from YAML
-2. Generate IR (Intermediate Representation) via Turn Planner
-3. Convert IR to text via Response Generator
-4. Display result with citations and validation
+Demonstrates the complete flow:
+  1. Load persona from YAML
+  2. Generate IR via TurnPlanner
+  3. Convert IR to text via ResponseGenerator
+  4. Display result with IR constraints
 
 USAGE:
-    # Edit .env file with your API key, then run:
+    # Template mode (no API key needed):
     python demo_full_pipeline.py
-    
-    # Or use mock mode (no API key needed)
-    python demo_full_pipeline.py --mock
+
+    # With Anthropic API:
+    export ANTHROPIC_API_KEY='your-key'
+    python demo_full_pipeline.py --backend anthropic
+
+    # Mock mode (for testing):
+    python demo_full_pipeline.py --backend mock
 """
 
 import argparse
-import yaml
 import sys
 from pathlib import Path
 
-# Load .env file if it exists
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass  # dotenv not installed, use env vars directly
+import yaml
 
-# Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from persona_engine.schema.persona_schema import Persona
-from persona_engine.planner.turn_planner import TurnPlanner, ConversationContext
-from persona_engine.schema.ir_schema import InteractionMode, ConversationGoal
 from persona_engine.memory.stance_cache import StanceCache
+from persona_engine.planner.turn_planner import ConversationContext, TurnPlanner
+from persona_engine.generation import ResponseGenerator, create_response_generator
+from persona_engine.schema.ir_schema import ConversationGoal, InteractionMode
+from persona_engine.schema.persona_schema import Persona
 from persona_engine.utils.determinism import DeterminismManager
-from persona_engine.generation import create_adapter
-from persona_engine.generation.response_generator import ResponseGenerator
 
 
 def load_persona(path: str = "personas/ux_researcher.yaml") -> Persona:
-    """Load persona from YAML file."""
     with open(path) as f:
         data = yaml.safe_load(f)
     if "domains" in data and "knowledge_domains" not in data:
@@ -49,66 +44,36 @@ def load_persona(path: str = "personas/ux_researcher.yaml") -> Persona:
     return Persona(**data)
 
 
-def create_context(
-    user_input: str,
-    mode: InteractionMode = InteractionMode.CASUAL_CHAT,
-    goal: ConversationGoal = ConversationGoal.EXPLORE_IDEAS,
-    topic: str = "general",
-    turn: int = 1,
-) -> ConversationContext:
-    """Create a conversation context."""
-    return ConversationContext(
-        conversation_id="demo_session",
-        turn_number=turn,
-        interaction_mode=mode,
-        goal=goal,
-        topic_signature=topic,
-        user_input=user_input,
-        stance_cache=StanceCache(),
-    )
+def demo_conversation(backend: str = "template", persona_path: str = "personas/ux_researcher.yaml"):
+    print(f"\n{'='*20} PERSONA ENGINE - FULL PIPELINE DEMO {'='*20}\n")
 
-
-def print_separator(title: str = ""):
-    """Print a visual separator."""
-    print()
-    if title:
-        print(f"{'='*20} {title} {'='*20}")
-    else:
-        print("=" * 60)
-    print()
-
-
-def demo_conversation(provider: str = "anthropic", persona_path: str = "personas/ux_researcher.yaml"):
-    """Run an interactive demo conversation."""
-    
-    print_separator("PERSONA ENGINE - FULL PIPELINE DEMO")
-    
     # Load persona
-    print(f"Loading persona from: {persona_path}")
     persona = load_persona(persona_path)
+    print(f"Loading persona from: {persona_path}")
     print(f"  Name: {persona.label}")
     print(f"  Occupation: {persona.identity.occupation}")
     print(f"  Age: {persona.identity.age}")
-    
-    # Initialize components
-    print(f"\nInitializing with provider: {provider}")
+
+    # Initialize
+    print(f"\nInitializing with backend: {backend}")
     determinism = DeterminismManager(seed=42)
     planner = TurnPlanner(persona, determinism)
-    
-    try:
-        adapter = create_adapter(provider)
-        generator = ResponseGenerator(persona, adapter)
-        print(f"  Model: {adapter.get_model_name()}")
-    except ValueError as e:
-        print(f"\nERROR: {e}")
-        print("\nTo fix this:")
-        print("  1. Set environment variable: $env:ANTHROPIC_API_KEY = 'your-key'")
-        print("  2. Or run with --mock flag: python demo_full_pipeline.py --mock")
-        return
-    
-    print_separator("DEMO CONVERSATIONS")
-    
-    # Demo conversations
+
+    if backend == "anthropic":
+        import os
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            print("\nERROR: ANTHROPIC_API_KEY not set.")
+            print("  export ANTHROPIC_API_KEY='your-key'")
+            print("  Or run without --backend anthropic for template mode.")
+            return
+
+    generator = create_response_generator(persona=persona, provider=backend)
+    print(f"  Backend: {backend}")
+
+    print(f"\n{'='*20} DEMO CONVERSATIONS {'='*20}\n")
+
+    # Demo turns
     demo_inputs = [
         {
             "input": "Hi Sarah! Tell me about your work as a UX researcher.",
@@ -129,87 +94,66 @@ def demo_conversation(provider: str = "anthropic", persona_path: str = "personas
             "topic": "quantum_computing",
         },
     ]
-    
-    turn = 1
-    for demo in demo_inputs:
+
+    cache = StanceCache()
+
+    for turn, demo in enumerate(demo_inputs, 1):
         print(f"--- Turn {turn} ---")
-        print(f"USER: {demo['input']}")
-        print()
-        
+        print(f"USER: {demo['input']}\n")
+
         # Generate IR
-        context = create_context(
-            user_input=demo["input"],
-            mode=demo["mode"],
+        context = ConversationContext(
+            conversation_id="demo_session",
+            turn_number=turn,
+            interaction_mode=demo["mode"],
             goal=demo["goal"],
-            topic=demo["topic"],
-            turn=turn,
+            topic_signature=demo["topic"],
+            user_input=demo["input"],
+            stance_cache=cache,
         )
         ir = planner.generate_ir(context)
-        
-        # Show key IR constraints
+
+        # Show IR constraints
         print("IR CONSTRAINTS:")
         print(f"  Tone: {ir.communication_style.tone.value}")
         print(f"  Formality: {ir.communication_style.formality:.2f}")
         print(f"  Verbosity: {ir.communication_style.verbosity.value}")
         print(f"  Confidence: {ir.response_structure.confidence:.2f}")
         print(f"  Claim Type: {ir.knowledge_disclosure.knowledge_claim_type.value}")
+        print(f"  Uncertainty: {ir.knowledge_disclosure.uncertainty_action.value}")
         if ir.response_structure.stance:
             print(f"  Stance: {ir.response_structure.stance[:80]}...")
         print()
-        
+
         # Generate response
         response = generator.generate(ir, demo["input"])
-        
-        print(f"SARAH ({persona.label.split('-')[0].strip()}):") 
+
+        print(f"SARAH:")
         print(response.text)
         print()
-        
-        # Show validation
-        if response.violations:
-            print("VALIDATION:")
-            for v in response.violations:
-                print(f"  [{v.severity.upper()}] {v.constraint}: {v.actual}")
-        else:
-            print("VALIDATION: All constraints satisfied [OK]")
-        
-        print(f"Est. tokens: ~{response.estimated_tokens}")
+
+        if response.estimated_tokens:
+            print(f"Estimated tokens: {response.estimated_tokens}")
+        print(f"Model: {response.model}")
         print()
-        
-        turn += 1
-    
-    print_separator("DEMO COMPLETE")
-    print(f"Total turns: {turn - 1}")
-    print(f"Provider: {provider}")
-    print(f"Model: {generator.adapter.get_model_name()}")
+
+    print(f"{'='*20} DEMO COMPLETE {'='*20}")
+    print(f"Total turns: {len(demo_inputs)}")
+    print(f"Backend: {backend}")
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Persona Engine Full Pipeline Demo"
-    )
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Persona Engine Full Pipeline Demo")
     parser.add_argument(
-        "--mock",
-        action="store_true",
-        help="Use mock LLM (no API key needed)"
-    )
-    parser.add_argument(
-        "--provider",
-        choices=["anthropic", "openai", "mock"],
-        default="anthropic",
-        help="LLM provider to use (default: anthropic)"
+        "--backend",
+        choices=["template", "anthropic", "mock"],
+        default="template",
+        help="Response generation backend (default: template)",
     )
     parser.add_argument(
         "--persona",
         default="personas/ux_researcher.yaml",
-        help="Path to persona YAML file"
+        help="Path to persona YAML file",
     )
-    
     args = parser.parse_args()
-    
-    provider = "mock" if args.mock else args.provider
-    
-    demo_conversation(provider=provider, persona_path=args.persona)
-
-
-if __name__ == "__main__":
-    main()
+    demo_conversation(backend=args.backend, persona_path=args.persona)

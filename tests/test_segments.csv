@@ -1,0 +1,4 @@
+segment_name,age_min,age_max,occupation,location,gender_dist,count
+junior_nurses,22,30,nurse,Chicago,female:0.8 male:0.2,5
+senior_engineers,35,50,software engineer,San Francisco,female:0.3 male:0.7,5
+young_teachers,25,35,teacher,London,female:0.6 male:0.4,5

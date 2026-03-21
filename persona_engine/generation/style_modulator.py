@@ -5,7 +5,7 @@ Post-processes LLM output to ensure compliance with IR constraints.
 Applies verbosity enforcement and constraint validation.
 """
 
-from typing import List, Optional, Tuple
+from __future__ import annotations
 from dataclasses import dataclass
 from persona_engine.schema.ir_schema import (
     IntermediateRepresentation,
@@ -74,7 +74,7 @@ class StyleModulator:
         self,
         text: str,
         ir: IntermediateRepresentation
-    ) -> List[ConstraintViolation]:
+    ) -> list[ConstraintViolation]:
         """
         Check if generated text respects IR constraints.
         
@@ -102,7 +102,7 @@ class StyleModulator:
         
         return violations
     
-    def _split_sentences(self, text: str) -> List[str]:
+    def _split_sentences(self, text: str) -> list[str]:
         """Split text into sentences."""
         import re
         # Simple sentence splitting (handles common cases)
@@ -113,7 +113,7 @@ class StyleModulator:
         self,
         text: str,
         target: Verbosity
-    ) -> Optional[ConstraintViolation]:
+    ) -> ConstraintViolation | None:
         """Check if text matches target verbosity."""
         sentences = self._split_sentences(text)
         min_s, max_s = self.VERBOSITY_TARGETS[target]
@@ -139,12 +139,16 @@ class StyleModulator:
         self,
         text: str,
         ir: IntermediateRepresentation
-    ) -> List[ConstraintViolation]:
-        """Check for safety constraint violations."""
+    ) -> list[ConstraintViolation]:
+        """Check for safety constraint violations.
+
+        Checks blocked_topics from the safety plan AND cannot_claim /
+        must_avoid from the persona invariants (stored on the IR safety plan).
+        """
         violations = []
         text_lower = text.lower()
-        
-        # Check topics to avoid
+
+        # Check blocked topics (from safety plan)
         if ir.safety_plan.blocked_topics:
             for topic in ir.safety_plan.blocked_topics:
                 if topic.lower() in text_lower:
@@ -154,14 +158,34 @@ class StyleModulator:
                         actual=f"Text contains '{topic}'",
                         severity="error"
                     ))
-        
+
+        # Check cannot_claim items
+        for claim in getattr(ir.safety_plan, "cannot_claim", []):
+            if claim.lower() in text_lower:
+                violations.append(ConstraintViolation(
+                    constraint="cannot_claim",
+                    expected=f"Must not claim '{claim}'",
+                    actual=f"Text contains forbidden claim '{claim}'",
+                    severity="error"
+                ))
+
+        # Check must_avoid items
+        for avoided in getattr(ir.safety_plan, "must_avoid", []):
+            if avoided.lower() in text_lower:
+                violations.append(ConstraintViolation(
+                    constraint="must_avoid",
+                    expected=f"Must avoid '{avoided}'",
+                    actual=f"Text mentions avoided topic '{avoided}'",
+                    severity="error"
+                ))
+
         return violations
     
     def _check_knowledge_claims(
         self,
         text: str,
         ir: IntermediateRepresentation
-    ) -> List[ConstraintViolation]:
+    ) -> list[ConstraintViolation]:
         """Check for inappropriate knowledge claims."""
         violations = []
         text_lower = text.lower()
@@ -201,7 +225,7 @@ class StyleModulator:
     
     def summarize_violations(
         self,
-        violations: List[ConstraintViolation]
+        violations: list[ConstraintViolation]
     ) -> str:
         """Create a human-readable summary of violations."""
         if not violations:

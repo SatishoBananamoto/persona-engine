@@ -3,7 +3,7 @@
 ## MVP Goal
 Build **Persona Engine + Turn Planner (IR) + Validator + Local SDK** with 10-15 excellent personas and deterministic test harness.
 
-## Phase 1: Foundation & Schema  
+## Phase 1: Foundation & Schema
 - [x] Finalize enhanced persona schema (goals, social roles, uncertainty, disclosure function, **claim policy, invariants**)
 - [x] Define Intermediate Representation (IR) schema (**conversation frame, stance+rationale+elasticity**)
 - [x] Set up Python package structure (`persona_engine/`)
@@ -32,20 +32,22 @@ Build **Persona Engine + Turn Planner (IR) + Validator + Local SDK** with 10-15 
 - [x] Add uncertainty policy (driven by proficiency + challenge)
 
 ## Phase 4: Memory System (Typed Facts)
-- [ ] Design typed fact storage (facts, preferences, relationships, episodic)
-- [ ] Implement fact store (with confidence, privacy, recency)
-- [ ] Build preference store (learned patterns)
-- [ ] Create relationship store (trust levels)
-- [ ] Add episodic summary store (compressed, not verbatim)
-- [ ] Prevent persona drift from memory replay
+- [x] Design typed fact storage (facts, preferences, relationships, episodic)
+- [x] Implement fact store (with confidence, privacy, recency)
+- [x] Build preference store (learned patterns)
+- [x] Create relationship store (trust levels)
+- [x] Add episodic summary store (compressed, not verbatim)
+- [x] Prevent persona drift from memory replay (confidence decay)
+- [x] Wire memory reads into IR generation (facts influence confidence/stance)
 
 ## Phase 5: Response Generator (IR → Text)
 - [x] Choose LLM provider (Anthropic Claude selected)
 - [x] Build LLM adapter abstraction (AnthropicAdapter, OpenAIAdapter, MockLLMAdapter)
 - [x] Implement IR → text renderer (IRPromptBuilder with constraint formatting)
-- [ ] Add template engine for strict mode
+- [x] Add template engine for strict mode (TemplateAdapter)
 - [x] Create style modulator (applies verbosity, formality, directness from IR)
-- [ ] Implement strict mode (reduces creativity, increases templates)
+- [x] Implement strict mode (forces TemplateAdapter, deterministic output)
+- [x] Add LLM error handling with typed exceptions and retry
 
 ## Phase 6: Validation & QA Suite
 - [x] Build comprehensive Turn Planner test suite (determinism, contract, scenario tests)
@@ -62,42 +64,52 @@ Build **Persona Engine + Turn Planner (IR) + Validator + Local SDK** with 10-15 
   - [x] Knowledge boundary coherence (expert domain claims, unknown domain humility)
   - [x] Citation integrity (all behavioral floats cited, clamps recorded)
   - [x] Determinism coherence (same seed = identical IR)
-- [ ] Build IR validator (checks plan before generation)
-- [ ] Implement invariant checks (no contradictions, knowledge boundaries)
-- [ ] Create trait marker scorer (across domains)
-- [ ] Add style drift detection (verbosity/formality variance over turns)
-- [ ] Build knowledge boundary enforcer
-- [ ] Implement property-based testing framework
-- [ ] Add distributional guarantees (trait markers within range)
-- [ ] Create deterministic failure reproduction (seeded)
+- [x] Build IR validator (checks plan before generation)
+- [x] Implement invariant checks (no contradictions, knowledge boundaries)
+- [x] Create trait marker scorer (across domains)
+- [x] Add style drift detection (verbosity/formality variance over turns)
+- [x] Build knowledge boundary enforcer
+- [x] Implement property-based testing framework
+- [x] Add bias modifier application (biases affect IR fields with citations)
 
 ## Phase 7: Python SDK (Local Mode)
-- [ ] Create SDK package structure
-- [ ] Build high-level `Persona` class interface
-- [ ] Add `Conversation` class for multi-turn dialogue
-- [ ] Implement persona builder utilities
-- [ ] Create validator CLI tools
-- [ ] Add export formats (YAML, JSON)
+- [x] Create SDK package structure
+- [x] Build high-level `Persona` class interface
+- [x] Add `Conversation` class for multi-turn dialogue
+- [x] Implement persona builder utilities
+- [x] Create validator CLI tools
+- [x] Add export formats (YAML, JSON)
 
 ## Phase 8: Persona Library & Testing
-- [ ] Design 10-15 diverse personas (depth over breadth)
-- [ ] Create segment families with variants
-- [ ] Build counterfactual twins (same persona, one trait differs)
-- [ ] Generate benchmark conversations (casual, interview, support, survey)
-- [ ] Run full QA suite on all personas
-- [ ] Document coherence scores + validation reports
+- [x] Design 12 diverse personas (chef, physicist, lawyer, musician, fitness coach, UX researcher, software engineer, social worker, entrepreneur, retired teacher + 2 test personas)
+- [x] Create segment families with variants
+- [x] Build counterfactual twins (5 Big Five trait pairs = 10 twin personas)
+- [x] Generate benchmark conversations (casual chat, interview, customer support, survey)
+- [x] Run full QA suite on all personas
+- [x] Input sanitization consistency across all paths
 
 ## Phase 9: Documentation & Examples
-- [ ] Write SDK usage guide
-- [ ] Create persona authoring guide
-- [ ] Document IR structure and validation logic
-- [ ] Add example conversations
-- [ ] Write QA suite interpretation guide
-- [ ] Create "getting started" tutorial
+- [x] Write SDK usage guide (`docs/sdk_guide.md`)
+- [x] Create persona authoring guide (`docs/persona_authoring.md`)
+- [x] Document IR structure and validation logic (`docs/ir_reference.md`)
+- [x] Create "getting started" tutorial (`docs/tutorial.md`)
+- [x] Add structured logging to all core modules
+- [x] Add example scripts (`examples/`)
+
+## Phase 10: Production Readiness (Current)
+- [x] GitHub Actions CI/CD pipeline
+- [x] Pre-commit hooks configuration
+- [x] CHANGELOG tracking all phases
+- [x] Comprehensive conftest.py with shared fixtures
+- [ ] Distributional guarantees (trait markers within range)
+- [ ] Deterministic failure reproduction (seeded)
+- [ ] QA suite interpretation guide
 
 ## Future (Post-MVP)
 - [ ] Optional: Reference FastAPI server (feature-flagged)
+- [ ] Async/await LLM adapter support
 - [ ] Expand persona library (breadth)
 - [ ] Add multi-language support
 - [ ] Build admin dashboard
 - [ ] Production API service
+- [ ] Event bus / hooks for extensibility

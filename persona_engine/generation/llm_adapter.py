@@ -1,40 +1,92 @@
 """
 LLM Adapter Abstraction
 
-Provides a unified interface for different LLM providers (Anthropic, OpenAI, Mock).
+Provides a unified interface for different LLM providers.
+Supported providers: Anthropic, OpenAI, Google Gemini, Mistral, Groq,
+Ollama (local), and any OpenAI-compatible endpoint.
+
 This module handles all LLM API interactions for the Response Generator.
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any
+from typing import TYPE_CHECKING, Any, Optional
 import os
+
+from persona_engine.exceptions import (
+    ConfigurationError,
+    LLMAPIKeyError,
+    LLMConnectionError,
+    LLMResponseError,
+)
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from persona_engine.schema.ir_schema import IntermediateRepresentation
+    from persona_engine.schema.persona_schema import Persona
+
+
+def _handle_llm_exception(e: Exception, provider: str) -> None:
+    """Centralized LLM exception mapper.
+
+    Maps provider SDK exceptions to typed persona-engine exceptions.
+    Avoids duplicating the same inline try/except across every adapter.
+    """
+    error_type = type(e).__name__.lower()
+    error_msg = str(e).lower()
+
+    # Connection / timeout / network / rate limit
+    if any(kw in error_type for kw in ("connection", "timeout", "network")):
+        raise LLMConnectionError(f"{provider} connection failed: {e}") from e
+    if "rate" in error_type or "rate" in error_msg:
+        raise LLMConnectionError(f"{provider} rate limited: {e}") from e
+
+    # Authentication / permission
+    if any(kw in error_type for kw in ("auth", "permission", "forbidden")):
+        raise LLMAPIKeyError(f"{provider} authentication failed: {e}") from e
+    if any(kw in error_msg for kw in ("api key", "api_key", "unauthorized", "403")):
+        raise LLMAPIKeyError(f"{provider} authentication failed: {e}") from e
+
+    # Bad request / content filter
+    if any(kw in error_type for kw in ("badrequest", "invalid", "contentfilter")):
+        raise LLMResponseError(f"{provider} request error ({type(e).__name__}): {e}") from e
+
+    # Generic fallback
+    raise LLMResponseError(f"{provider} error ({type(e).__name__}): {e}") from e
 
 
 class BaseLLMAdapter(ABC):
     """Abstract base class for LLM adapters."""
-    
+
     @abstractmethod
     def generate(
         self,
         system_prompt: str,
         user_prompt: str,
         max_tokens: int = 1024,
-        temperature: float = 0.7
+        temperature: float = 0.7,
+        conversation_history: Optional[list[dict[str, str]]] = None,
     ) -> str:
         """
         Generate a response from the LLM.
-        
+
         Args:
             system_prompt: System/persona identity prompt
-            user_prompt: User message and generation constraints
+            user_prompt: Current turn's generation prompt (constraints + user message)
             max_tokens: Maximum tokens in response
             temperature: Randomness (0=deterministic, 1=creative)
-            
+            conversation_history: Prior turns as
+                ``[{"role": "user", "content": ...}, {"role": "assistant", "content": ...}, ...]``
+
         Returns:
             Generated text response
         """
         pass
-    
+
     @abstractmethod
     def get_model_name(self) -> str:
         """Return the model name being used."""
@@ -63,45 +115,61 @@ class AnthropicAdapter(BaseLLMAdapter):
         """
         self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
         if not self.api_key:
-            raise ValueError(
+            raise LLMAPIKeyError(
                 "Anthropic API key required. Set ANTHROPIC_API_KEY environment variable "
                 "or pass api_key parameter."
             )
         self.model = model
-        self._client = None
-    
+        self._client: Any = None
+
     @property
-    def client(self):
+    def client(self) -> Any:
         """Lazy-load the Anthropic client."""
         if self._client is None:
             try:
                 import anthropic
                 self._client = anthropic.Anthropic(api_key=self.api_key)
             except ImportError:
-                raise ImportError(
+                raise ConfigurationError(
                     "anthropic package not installed. Run: pip install anthropic"
                 )
         return self._client
-    
+
     def generate(
         self,
         system_prompt: str,
         user_prompt: str,
         max_tokens: int = 1024,
-        temperature: float = 0.7
+        temperature: float = 0.7,
+        conversation_history: Optional[list[dict[str, str]]] = None,
     ) -> str:
         """Generate response using Claude."""
-        message = self.client.messages.create(
-            model=self.model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=system_prompt,
-            messages=[
-                {"role": "user", "content": user_prompt}
-            ]
-        )
-        return message.content[0].text
-    
+        messages: list[dict[str, str]] = []
+        if conversation_history:
+            messages.extend(conversation_history)
+        messages.append({"role": "user", "content": user_prompt})
+        logger.debug("LLM request", extra={
+            "provider": "anthropic", "model": self.model,
+            "max_tokens": max_tokens, "temperature": temperature,
+            "message_count": len(messages),
+        })
+        try:
+            message = self.client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system=system_prompt,
+                messages=messages,
+            )
+        except Exception as e:
+            _handle_llm_exception(e, "Anthropic API")
+
+        if not message.content:
+            raise LLMResponseError("Anthropic returned empty response (no content blocks)")
+
+        text_block = message.content[0]
+        return text_block.text if hasattr(text_block, "text") else str(text_block)
+
     def get_model_name(self) -> str:
         return self.model
 
@@ -128,7 +196,7 @@ class OpenAIAdapter(BaseLLMAdapter):
         """
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
-            raise ValueError(
+            raise LLMAPIKeyError(
                 "OpenAI API key required. Set OPENAI_API_KEY environment variable "
                 "or pass api_key parameter."
             )
@@ -136,37 +204,54 @@ class OpenAIAdapter(BaseLLMAdapter):
         self._client = None
     
     @property
-    def client(self):
+    def client(self) -> Any:
         """Lazy-load the OpenAI client."""
         if self._client is None:
             try:
                 import openai
                 self._client = openai.OpenAI(api_key=self.api_key)
             except ImportError:
-                raise ImportError(
+                raise ConfigurationError(
                     "openai package not installed. Run: pip install openai"
                 )
         return self._client
-    
+
     def generate(
         self,
         system_prompt: str,
         user_prompt: str,
         max_tokens: int = 1024,
-        temperature: float = 0.7
+        temperature: float = 0.7,
+        conversation_history: Optional[list[dict[str, str]]] = None,
     ) -> str:
         """Generate response using GPT."""
-        response = self.client.chat.completions.create(
-            model=self.model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
-        )
-        return response.choices[0].message.content
-    
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": system_prompt},
+        ]
+        if conversation_history:
+            messages.extend(conversation_history)
+        messages.append({"role": "user", "content": user_prompt})
+        logger.debug("LLM request", extra={
+            "provider": "openai", "model": self.model,
+            "max_tokens": max_tokens, "temperature": temperature,
+            "message_count": len(messages),
+        })
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                messages=messages,
+            )
+        except Exception as e:
+            _handle_llm_exception(e, "OpenAI API")
+
+        if not response.choices:
+            raise LLMResponseError("OpenAI returned empty response (no choices)")
+
+        content = response.choices[0].message.content
+        return content if content is not None else ""
+
     def get_model_name(self) -> str:
         return self.model
 
@@ -187,25 +272,27 @@ class MockLLMAdapter(BaseLLMAdapter):
             response_template: Custom response template (optional)
         """
         self.response_template = response_template
-        self.last_system_prompt = None
-        self.last_user_prompt = None
-        self.call_count = 0
+        self.last_system_prompt: str | None = None
+        self.last_user_prompt: str | None = None
+        self.call_count: int = 0
     
     def generate(
         self,
         system_prompt: str,
         user_prompt: str,
         max_tokens: int = 1024,
-        temperature: float = 0.7
+        temperature: float = 0.7,
+        conversation_history: Optional[list[dict[str, str]]] = None,
     ) -> str:
         """Generate mock response."""
         self.last_system_prompt = system_prompt
         self.last_user_prompt = user_prompt
+        self.last_conversation_history = conversation_history
         self.call_count += 1
-        
+
         if self.response_template:
             return self.response_template
-        
+
         # Generate a reasonable mock response based on detected constraints
         return self._generate_contextual_mock(system_prompt, user_prompt)
     
@@ -236,38 +323,577 @@ class MockLLMAdapter(BaseLLMAdapter):
         return "mock-llm"
 
 
+class TemplateAdapter(BaseLLMAdapter):
+    """
+    Rule-based text generation using IR fields directly.
+
+    No LLM call needed. Produces readable text that varies based on
+    tone, verbosity, confidence, and other IR parameters.
+    Ideal for development, testing, and zero-cost operation.
+    """
+
+    _OPENERS: dict[str, list[str]] = {
+        "warm_enthusiastic": ["I'm really excited about this!", "Oh, that's a great topic!"],
+        "excited_engaged": ["This is fascinating!", "I love thinking about this!"],
+        "thoughtful_engaged": ["That's an interesting question.", "Let me think about that carefully."],
+        "warm_confident": ["I'm glad you asked about this.", "Great question!"],
+        "friendly_relaxed": ["Sure thing!", "Yeah, so here's the thing."],
+        "content_calm": ["I appreciate you bringing this up.", "That's a nice topic to explore."],
+        "satisfied_peaceful": ["I'm happy to share my thoughts on this.", "That's something I feel good about."],
+        "neutral_calm": ["I see.", "That's a reasonable question."],
+        "professional_composed": ["That's a relevant consideration.", "Allow me to address that."],
+        "matter_of_fact": ["Here's the thing.", "Simply put,"],
+        "frustrated_tense": ["Look,", "Honestly, this is frustrating."],
+        "anxious_stressed": ["I'm a bit worried about this, honestly.", "Well, that's concerning..."],
+        "defensive_agitated": ["I don't think that's fair.", "That's not quite right, actually."],
+        "concerned_empathetic": ["I'm concerned about this.", "That does sound difficult."],
+        "disappointed_resigned": ["I suppose that's how it is.", "Well, that's a bit disappointing."],
+        "sad_subdued": ["I suppose...", "Well..."],
+        "tired_withdrawn": ["Mm.", "Right, well..."],
+    }
+    _HEDGES = ["I think", "From what I understand", "If I'm not mistaken", "As far as I know"]
+    _EXPERIENCE = ["In my experience", "From what I've seen", "Based on my work"]
+
+    def generate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int = 1024,
+        temperature: float = 0.7,
+        conversation_history: Optional[list[dict[str, str]]] = None,
+    ) -> str:
+        """Fallback when called without IR (standard interface)."""
+        return f"[Template fallback - no IR provided for: {user_prompt[:50]}]"
+
+    def get_model_name(self) -> str:
+        return "template-rule-based"
+
+    def generate_from_ir(
+        self,
+        ir: IntermediateRepresentation,
+        user_input: str,
+        persona: Persona | None = None,
+    ) -> str:
+        """Generate text directly from IR fields (no LLM prompt needed)."""
+        tone = ir.communication_style.tone.value
+        verbosity = ir.communication_style.verbosity.value
+        formality = ir.communication_style.formality
+        confidence = ir.response_structure.confidence
+        stance = ir.response_structure.stance or ""
+        rationale = ir.response_structure.rationale or ""
+        uncertainty = ir.knowledge_disclosure.uncertainty_action.value
+
+        parts: list[str] = []
+
+        # 1. Opener based on tone
+        openers = self._OPENERS.get(tone, self._OPENERS["neutral_calm"])
+        parts.append(openers[0])
+
+        # 2. Core stance with confidence-appropriate framing
+        if stance:
+            if confidence < 0.4:
+                stance_text = f"{self._HEDGES[0]} {stance[0].lower()}{stance[1:]}"
+            elif confidence < 0.7:
+                stance_text = f"{self._EXPERIENCE[0]}, {stance[0].lower()}{stance[1:]}"
+            else:
+                stance_text = stance
+            if not stance_text.endswith("."):
+                stance_text += "."
+            parts.append(stance_text)
+
+        # 3. Rationale (only for medium/detailed)
+        if verbosity != "brief" and rationale:
+            parts.append(f"This is because {rationale[0].lower()}{rationale[1:]}.")
+
+        # 4. Uncertainty action
+        if uncertainty == "ask_clarifying":
+            parts.append("Could you tell me more about what specifically you'd like to know?")
+        elif uncertainty == "hedge":
+            parts.append("Though I should note I'm not entirely certain about all the details.")
+        elif uncertainty == "refuse":
+            parts.append("I'm not really the right person to speak to that, though.")
+
+        # 5. Extra detail for detailed verbosity
+        if verbosity == "detailed" and persona:
+            occupation = getattr(getattr(persona, "identity", None), "occupation", None)
+            if occupation:
+                parts.append(f"As a {occupation}, this is something I've thought about quite a bit.")
+
+        # 6. Assemble
+        text = " ".join(parts)
+
+        # 7. Formality transform
+        if formality > 0.75:
+            text = self._formalize(text)
+        elif formality < 0.25:
+            text = self._casualize(text)
+
+        # 8. Length enforcement for brief
+        if verbosity == "brief":
+            sentences = text.split(". ")
+            text = ". ".join(sentences[:2])
+            if not text.endswith("."):
+                text += "."
+
+        return text
+
+    @staticmethod
+    def _formalize(text: str) -> str:
+        """Apply formal language transforms."""
+        replacements = {
+            "Yeah, ": "Yes, ", "yeah, ": "yes, ", "Sure thing!": "Certainly.",
+            "Here's the thing.": "The matter is as follows.",
+            "I'm ": "I am ", "don't": "do not", "can't": "cannot",
+            "won't": "will not", "shouldn't": "should not", "wouldn't": "would not",
+            "couldn't": "could not", "isn't": "is not", "aren't": "are not",
+            "wasn't": "was not", "weren't": "were not", "that's": "that is",
+            "it's": "it is", "Mm.": "I see.", "Look,": "To be frank,",
+        }
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+        return text
+
+    @staticmethod
+    def _casualize(text: str) -> str:
+        """Apply casual language transforms."""
+        replacements = {
+            "I am ": "I'm ", "do not": "don't", "cannot": "can't", "will not": "won't",
+            "That is a relevant consideration.": "So here's the deal.",
+            "Allow me to address that.": "Let me jump in here.",
+            "Certainly.": "Sure thing!", "I see.": "Yeah, got it.",
+        }
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+        return text
+
+
+class OpenAICompatibleAdapter(BaseLLMAdapter):
+    """
+    Adapter for any OpenAI-compatible API endpoint.
+
+    Works with Groq, Together AI, vLLM, LM Studio, and any service
+    exposing the OpenAI chat completions interface.
+    Set the appropriate API key env var and base_url before use.
+    """
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = "default",
+        base_url: Optional[str] = None,
+        api_key_env_var: str = "OPENAI_API_KEY",
+    ):
+        """
+        Initialize OpenAI-compatible adapter.
+
+        Args:
+            api_key: API key (defaults to api_key_env_var env var)
+            model: Model to use
+            base_url: API base URL (e.g. "https://api.groq.com/openai/v1")
+            api_key_env_var: Environment variable name for API key
+        """
+        self.api_key = api_key or os.environ.get(api_key_env_var)
+        if not self.api_key:
+            raise LLMAPIKeyError(
+                f"API key required. Set {api_key_env_var} environment variable "
+                "or pass api_key parameter."
+            )
+        self.model = model
+        self.base_url = base_url
+        self._client = None
+
+    @property
+    def client(self) -> Any:
+        """Lazy-load the OpenAI-compatible client."""
+        if self._client is None:
+            try:
+                import openai
+                kwargs: dict[str, Any] = {"api_key": self.api_key}
+                if self.base_url:
+                    kwargs["base_url"] = self.base_url
+                self._client = openai.OpenAI(**kwargs)
+            except ImportError:
+                raise ConfigurationError(
+                    "openai package not installed. Run: pip install openai"
+                )
+        return self._client
+
+    def generate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int = 1024,
+        temperature: float = 0.7,
+        conversation_history: Optional[list[dict[str, str]]] = None,
+    ) -> str:
+        """Generate response using OpenAI-compatible API."""
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": system_prompt},
+        ]
+        if conversation_history:
+            messages.extend(conversation_history)
+        messages.append({"role": "user", "content": user_prompt})
+        logger.debug("LLM request", extra={
+            "provider": "openai_compatible", "model": self.model,
+            "max_tokens": max_tokens, "temperature": temperature,
+            "message_count": len(messages),
+        })
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                messages=messages,
+            )
+        except Exception as e:
+            _handle_llm_exception(e, "OpenAI-compatible API")
+
+        if not response.choices:
+            raise LLMResponseError("API returned empty response (no choices)")
+
+        content = response.choices[0].message.content
+        return content if content is not None else ""
+
+    def get_model_name(self) -> str:
+        return self.model
+
+
+class GeminiAdapter(BaseLLMAdapter):
+    """
+    Google Gemini adapter.
+
+    Uses Gemini 2.0 Flash by default for speed and cost efficiency.
+    Set GOOGLE_API_KEY environment variable before use.
+    """
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = "gemini-2.0-flash",
+    ):
+        """
+        Initialize Gemini adapter.
+
+        Args:
+            api_key: Google API key (defaults to GOOGLE_API_KEY env var)
+            model: Model to use (default: gemini-2.0-flash)
+        """
+        self.api_key = api_key or os.environ.get("GOOGLE_API_KEY")
+        if not self.api_key:
+            raise LLMAPIKeyError(
+                "Google API key required. Set GOOGLE_API_KEY environment variable "
+                "or pass api_key parameter."
+            )
+        self.model = model
+        self._client: Any = None
+
+    @property
+    def client(self) -> Any:
+        """Lazy-load the Google GenAI client."""
+        if self._client is None:
+            try:
+                from google import genai
+                self._client = genai.Client(api_key=self.api_key)
+            except ImportError:
+                raise ConfigurationError(
+                    "google-genai package not installed. Run: pip install google-genai"
+                )
+        return self._client
+
+    def generate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int = 1024,
+        temperature: float = 0.7,
+        conversation_history: Optional[list[dict[str, str]]] = None,
+    ) -> str:
+        """Generate response using Gemini."""
+        from google.genai import types
+
+        contents: list[types.Content] = []
+        if conversation_history:
+            for msg in conversation_history:
+                role = "model" if msg["role"] == "assistant" else msg["role"]
+                contents.append(types.Content(
+                    role=role,
+                    parts=[types.Part(text=msg["content"])],
+                ))
+        contents.append(types.Content(
+            role="user",
+            parts=[types.Part(text=user_prompt)],
+        ))
+
+        config = types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            max_output_tokens=max_tokens,
+            temperature=temperature,
+        )
+        logger.debug("LLM request", extra={
+            "provider": "gemini", "model": self.model,
+            "max_tokens": max_tokens, "temperature": temperature,
+            "message_count": len(contents),
+        })
+        try:
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=contents,
+                config=config,
+            )
+        except Exception as e:
+            _handle_llm_exception(e, "Gemini API")
+
+        if not response.text:
+            raise LLMResponseError("Gemini returned empty response (no text)")
+
+        return response.text
+
+    def get_model_name(self) -> str:
+        return self.model
+
+
+class MistralAdapter(BaseLLMAdapter):
+    """
+    Mistral AI adapter.
+
+    Uses Mistral Small by default for cost efficiency.
+    Set MISTRAL_API_KEY environment variable before use.
+    """
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = "mistral-small-latest",
+    ):
+        """
+        Initialize Mistral adapter.
+
+        Args:
+            api_key: Mistral API key (defaults to MISTRAL_API_KEY env var)
+            model: Model to use (default: mistral-small-latest)
+        """
+        self.api_key = api_key or os.environ.get("MISTRAL_API_KEY")
+        if not self.api_key:
+            raise LLMAPIKeyError(
+                "Mistral API key required. Set MISTRAL_API_KEY environment variable "
+                "or pass api_key parameter."
+            )
+        self.model = model
+        self._client: Any = None
+
+    @property
+    def client(self) -> Any:
+        """Lazy-load the Mistral client."""
+        if self._client is None:
+            try:
+                from mistralai import Mistral
+                self._client = Mistral(api_key=self.api_key)
+            except ImportError:
+                raise ConfigurationError(
+                    "mistralai package not installed. Run: pip install mistralai"
+                )
+        return self._client
+
+    def generate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int = 1024,
+        temperature: float = 0.7,
+        conversation_history: Optional[list[dict[str, str]]] = None,
+    ) -> str:
+        """Generate response using Mistral."""
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": system_prompt},
+        ]
+        if conversation_history:
+            messages.extend(conversation_history)
+        messages.append({"role": "user", "content": user_prompt})
+        logger.debug("LLM request", extra={
+            "provider": "mistral", "model": self.model,
+            "max_tokens": max_tokens, "temperature": temperature,
+            "message_count": len(messages),
+        })
+        try:
+            response = self.client.chat.complete(
+                model=self.model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                messages=messages,
+            )
+        except Exception as e:
+            _handle_llm_exception(e, "Mistral API")
+
+        if not response.choices:
+            raise LLMResponseError("Mistral returned empty response (no choices)")
+
+        content = response.choices[0].message.content
+        return content if content is not None else ""
+
+    def get_model_name(self) -> str:
+        return self.model
+
+
+class OllamaAdapter(BaseLLMAdapter):
+    """
+    Ollama adapter for local models.
+
+    No API key required. Requires Ollama running locally.
+    Default host: http://localhost:11434
+    """
+
+    def __init__(
+        self,
+        model: str = "llama3.2",
+        host: Optional[str] = None,
+    ):
+        """
+        Initialize Ollama adapter.
+
+        Args:
+            model: Model to use (default: llama3.2)
+            host: Ollama host URL (defaults to OLLAMA_HOST env var or http://localhost:11434)
+        """
+        self.model = model
+        self.host = host or os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+        self._client: Any = None
+
+    @property
+    def client(self) -> Any:
+        """Lazy-load the Ollama client."""
+        if self._client is None:
+            try:
+                import ollama
+                self._client = ollama.Client(host=self.host)
+            except ImportError:
+                raise ConfigurationError(
+                    "ollama package not installed. Run: pip install ollama"
+                )
+        return self._client
+
+    def generate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int = 1024,
+        temperature: float = 0.7,
+        conversation_history: Optional[list[dict[str, str]]] = None,
+    ) -> str:
+        """Generate response using Ollama."""
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": system_prompt},
+        ]
+        if conversation_history:
+            messages.extend(conversation_history)
+        messages.append({"role": "user", "content": user_prompt})
+        logger.debug("LLM request", extra={
+            "provider": "ollama", "model": self.model,
+            "max_tokens": max_tokens, "temperature": temperature,
+            "message_count": len(messages),
+        })
+        try:
+            response = self.client.chat(
+                model=self.model,
+                messages=messages,
+                options={"temperature": temperature, "num_predict": max_tokens},
+            )
+        except Exception as e:
+            _handle_llm_exception(e, "Ollama API")
+
+        content = response.get("message", {}).get("content", "")
+        if not content:
+            raise LLMResponseError("Ollama returned empty response")
+
+        return content
+
+    def get_model_name(self) -> str:
+        return f"ollama/{self.model}"
+
+
 def create_adapter(
     provider: str = "anthropic",
     api_key: Optional[str] = None,
-    model: Optional[str] = None
+    model: Optional[str] = None,
+    base_url: Optional[str] = None,
 ) -> BaseLLMAdapter:
     """
     Factory function to create an LLM adapter.
-    
+
     Args:
-        provider: "anthropic", "openai", or "mock"
-        api_key: Optional API key (defaults to env var)
+        provider: Provider name — "anthropic", "openai", "gemini", "mistral",
+            "ollama", "groq", "openai_compatible", "mock", or "template"
+        api_key: Optional API key (defaults to provider-specific env var)
         model: Optional model override
-        
+        base_url: Optional base URL (for openai_compatible/groq providers)
+
     Returns:
         Configured LLM adapter
     """
     provider = provider.lower()
-    
+
     if provider == "anthropic":
-        kwargs = {"api_key": api_key}
+        kwargs: dict[str, Any] = {"api_key": api_key}
         if model:
             kwargs["model"] = model
         return AnthropicAdapter(**kwargs)
-    
+
     elif provider == "openai":
         kwargs = {"api_key": api_key}
         if model:
             kwargs["model"] = model
         return OpenAIAdapter(**kwargs)
-    
+
+    elif provider == "gemini":
+        kwargs = {"api_key": api_key}
+        if model:
+            kwargs["model"] = model
+        return GeminiAdapter(**kwargs)
+
+    elif provider == "mistral":
+        kwargs = {"api_key": api_key}
+        if model:
+            kwargs["model"] = model
+        return MistralAdapter(**kwargs)
+
+    elif provider == "ollama":
+        kwargs = {}
+        if model:
+            kwargs["model"] = model
+        if base_url:
+            kwargs["host"] = base_url
+        return OllamaAdapter(**kwargs)
+
+    elif provider == "groq":
+        kwargs = {
+            "api_key": api_key,
+            "api_key_env_var": "GROQ_API_KEY",
+            "base_url": base_url or "https://api.groq.com/openai/v1",
+        }
+        if model:
+            kwargs["model"] = model
+        else:
+            kwargs["model"] = "llama-3.3-70b-versatile"
+        return OpenAICompatibleAdapter(**kwargs)
+
+    elif provider == "openai_compatible":
+        kwargs = {"api_key": api_key}
+        if model:
+            kwargs["model"] = model
+        if base_url:
+            kwargs["base_url"] = base_url
+        return OpenAICompatibleAdapter(**kwargs)
+
     elif provider == "mock":
         return MockLLMAdapter()
-    
+
+    elif provider == "template":
+        return TemplateAdapter()
+
     else:
-        raise ValueError(f"Unknown provider: {provider}. Use 'anthropic', 'openai', or 'mock'")
+        supported = (
+            "'anthropic', 'openai', 'gemini', 'mistral', 'ollama', "
+            "'groq', 'openai_compatible', 'mock', 'template'"
+        )
+        raise ConfigurationError(
+            f"Unknown provider: {provider}. Supported: {supported}"
+        )
