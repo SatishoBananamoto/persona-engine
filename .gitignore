@@ -18,6 +18,7 @@ sim_log.txt
 htmlcov/
 .pytest_cache/
 .hypothesis/
+test_results/
 
 # Eval reports (generated, re-run to recreate)
 eval/report.json

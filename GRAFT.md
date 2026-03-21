@@ -7,7 +7,8 @@
 **Date started**: 2026-03-20
 **Date completed**: 2026-03-21
 **Status**: COMPLETE — all work merged into `main` (PR #3, 2026-03-21T03:12:17Z)
-**Current branch**: `main` (148 commits, v0.4.0)
+**Current branch**: `main` (v0.4.0)
+**Repo reorganized**: 2026-03-21. Root 27→10 files. Structure documented in `docs/REPO_STRUCTURE.md`.
 
 ### How to use this document
 
