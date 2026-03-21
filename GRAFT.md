@@ -465,8 +465,28 @@ engine = PersonaEngine.from_yaml("chef.yaml", prompt_strategy="prescriptive") # 
 - [ ] **PA-4: Implement LLMStrategy** — use Haiku/small model to convert IR dataclass into natural character direction. Input: IR fields as JSON. Output: 3-5 sentence character brief.
 - [ ] **PA-5: Rename current prompt_builder to PrescriptiveStrategy** — preserve for backward compat.
 - [ ] **PA-6: A/B test** — same persona, same prompt, all 3 strategies. Compare text quality.
-- [ ] **PA-7: Re-run BV-2 with DescriptiveStrategy** — the real test: personality markers without word lists.
+- [x] **PA-7: Re-run BV-2 with DescriptiveStrategy** — DONE. 7/10 (vs 9/10 prescriptive). 3 "failures" are ties at zero (both sides produced 0 markers — noise, not wrong direction). Strong signals preserved: N hedging 13 vs 8, E social 12 vs 6, E word count 412 vs 276, C certainty 2 vs 0. Personality emerges naturally without word lists. Needs larger sample for weak signals (A positive/negative emotion).
 - [ ] **PA-8: Consider A→directness topic sensitivity** — chef at 98% directness for off-topic. Directness may need modulation when competence is low.
+
+### Psychometric Grounding (trait descriptions)
+
+The 40 descriptions in `_TRAIT_POLES` (linguistic_markers.py) are directionally correct
+(textbook Big Five) but the specific wordings and intensity graduations are judgment calls,
+not sourced from validated instruments.
+
+**What needs to happen:**
+- [ ] **PG-1: Map each description to BFI-2 items.** Soto & John (2017) BFI-2 has 60 items
+  with validated phrasings for each trait facet. Compare our 40 descriptions against these
+  items. If our wording aligns with a validated item → grounded. If not → rewrite to match.
+  Source: Soto & John (2017), "The Next Big Five Inventory (BFI-2)", JPSP.
+- [ ] **PG-2: Cross-check against IPIP-NEO items.** IPIP-NEO has 300 items (free, public domain)
+  with more granular facet-level coverage. Useful for the intensity graduation (mild vs vivid
+  descriptions at different trait levels). Source: https://ipip.ori.org/
+- [ ] **PG-3: Validate intensity thresholds.** Our 4-level graduation (0.55/0.65/0.75/0.85)
+  has no empirical basis. BFI-2 norms provide percentile distributions that could inform
+  where "moderate" vs "strong" vs "very strong" thresholds should fall.
+- [ ] **PG-4: Re-run BV-2 after grounding.** Verify that psychometrically grounded descriptions
+  still produce personality-differentiated text.
 
 ### Other Pending
 
