@@ -151,10 +151,10 @@ class TestExceptionHierarchy:
             raise InputValidationError("test")
 
     def test_memory_subtree(self):
-        """MemoryError catches capacity and corruption."""
-        from persona_engine.exceptions import MemoryError as PEMemoryError
+        """PersonaMemoryError catches capacity and corruption."""
+        from persona_engine.exceptions import PersonaMemoryError
         for exc_cls in (MemoryCapacityError, MemoryCorruptionError):
-            with pytest.raises(PEMemoryError):
+            with pytest.raises(PersonaMemoryError):
                 raise exc_cls("test")
 
     def test_custom_exceptions_not_builtin(self):

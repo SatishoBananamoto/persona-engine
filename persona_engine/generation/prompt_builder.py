@@ -266,45 +266,42 @@ Generate your response now:
     def _describe_confidence(self, value: float) -> str:
         """Describe confidence level."""
         if value < 0.3:
-            return "low confidence, use hedging ('I think', 'maybe')"
+            return "you're not confident here — let that genuine uncertainty show naturally"
         elif value < 0.5:
-            return "moderate uncertainty, some hedging"
+            return "you have some thoughts but you're not fully sure — moderate uncertainty"
         elif value < 0.7:
-            return "reasonably confident, balanced assertions"
+            return "reasonably confident, you can assert your view while staying open"
         elif value < 0.9:
-            return "confident, clear assertions"
+            return "confident — you know what you're talking about, express that naturally"
         else:
-            return "very confident, authoritative statements"
+            return "very confident — speak with authority, this is your domain"
     
     def _describe_competence(self, value: float) -> str:
         """Describe competence level — controls vocabulary depth and content accuracy."""
         if value < 0.2:
             return (
-                "almost no familiarity with this topic. Use everyday language only. "
-                "It is acceptable to say 'I don't really know.' "
-                "Do NOT use domain-specific terminology correctly"
+                "this topic is outside your knowledge. You're a layperson here — "
+                "speak from everyday understanding, not expertise"
             )
         elif value < 0.4:
             return (
-                "surface-level awareness only. Use general language with occasional "
-                "terms picked up casually. Allow vagueness and minor inaccuracies. "
-                "Pivot to familiar topics when possible"
+                "you have surface-level awareness at best. You've heard of this "
+                "but couldn't explain it in depth. Lean on what you do know"
             )
         elif value < 0.6:
             return (
-                "moderate familiarity, possibly from adjacent experience. "
-                "Can discuss at a conceptual level but should NOT provide "
-                "detailed technical explanations"
+                "you have moderate familiarity, probably from adjacent experience. "
+                "You can discuss concepts but not technical details"
             )
         elif value < 0.8:
             return (
-                "knowledgeable. Can use domain terminology accurately and provide "
-                "substantive discussion, but may lack cutting-edge or specialized depth"
+                "you're knowledgeable here. You can discuss substantively and "
+                "use domain language naturally, though you're not cutting-edge"
             )
         else:
             return (
-                "highly competent. Full domain vocabulary, detailed knowledge, "
-                "can provide expert-level discussion"
+                "this is your domain. You have deep expertise and can discuss "
+                "at a professional level with full command of the subject"
             )
 
     def _format_claim_type(self, claim_type: KnowledgeClaimType) -> str:
@@ -314,7 +311,7 @@ Generate your response now:
             KnowledgeClaimType.DOMAIN_EXPERT: "You ARE an expert - can cite expertise and give authoritative answers",
             KnowledgeClaimType.PERSONAL_EXPERIENCE: "You have personal experience - can share first-hand insights",
             KnowledgeClaimType.COMMON_KNOWLEDGE: "General awareness only - speak from common knowledge",
-            KnowledgeClaimType.SPECULATIVE: "Limited knowledge - use 'I think', 'I'm not sure', hedge claims",
+            KnowledgeClaimType.SPECULATIVE: "Limited knowledge - you're speculating, not asserting. Let that show naturally",
             KnowledgeClaimType.NONE: "No knowledge - defer to others or admit uncertainty",
         }
         return descriptions.get(claim_type, claim_type.value)
@@ -324,7 +321,7 @@ Generate your response now:
         # Map actual UncertaintyAction enum values to descriptions
         descriptions = {
             UncertaintyAction.ANSWER: "State your view confidently",
-            UncertaintyAction.HEDGE: "Use hedging language ('I think', 'perhaps')",
+            UncertaintyAction.HEDGE: "Express your view but let your uncertainty show naturally",
             UncertaintyAction.ASK_CLARIFYING: "Ask clarifying questions before answering",
             UncertaintyAction.REFUSE: "Politely decline to answer",
         }

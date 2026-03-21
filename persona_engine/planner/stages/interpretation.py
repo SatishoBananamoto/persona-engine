@@ -66,12 +66,6 @@ class InterpretationStage:
             default_relevance=DEFAULT_TOPIC_RELEVANCE,
         )
 
-        # State evolution
-        p.state.evolve_state_post_turn(
-            conversation_length=context.turn_number,
-            topic_relevance=topic_relevance,
-        )
-
         # Intent analysis
         inferred_mode, inferred_goal, user_intent, needs_clarification = analyze_intent(
             user_input=context.user_input,

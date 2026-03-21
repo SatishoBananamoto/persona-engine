@@ -178,26 +178,31 @@ class TestEmpathyGapBias:
 
 
 class TestDunningKrugerBias:
-    """DK bias: overconfident when unknowledgeable (low-O + high-C)."""
+    """DK bias is disabled in bias_simulator (TF-001: double-counting fix).
 
-    def test_low_proficiency_triggers(self):
+    The DK effect is now handled solely by TraitInterpreter.get_confidence_modifier()
+    via dunning_kruger_confidence(). See docs/TRAIT_FLOW_ANALYSIS.md.
+    """
+
+    def test_dk_bias_disabled(self):
+        """DK bias should no longer fire from bias_simulator."""
         sim = _make_bias_sim(openness=0.2, conscientiousness=0.8)
         mods = sim.compute_modifiers("Tell me about quantum physics", proficiency=0.1)
         dk_mods = [m for m in mods if m.bias_type == BiasType.DUNNING_KRUGER]
-        assert len(dk_mods) == 1
-        assert dk_mods[0].modifier > 0  # Increases confidence
-
-    def test_high_proficiency_no_trigger(self):
-        sim = _make_bias_sim(openness=0.2, conscientiousness=0.8)
-        mods = sim.compute_modifiers("Tell me about my domain", proficiency=0.8)
-        dk_mods = [m for m in mods if m.bias_type == BiasType.DUNNING_KRUGER]
         assert len(dk_mods) == 0
 
-    def test_high_o_resists_dk(self):
-        sim = _make_bias_sim(openness=0.9, conscientiousness=0.3)
-        mods = sim.compute_modifiers("Tell me about something", proficiency=0.1)
-        dk_mods = [m for m in mods if m.bias_type == BiasType.DUNNING_KRUGER]
-        assert len(dk_mods) == 0
+    def test_dk_curve_in_trait_interpreter(self):
+        """DK effect should come from trait_interpreter instead."""
+        from persona_engine.behavioral.trait_interpreter import (
+            TraitInterpreter, dunning_kruger_confidence,
+        )
+        from persona_engine.schema.persona_schema import BigFiveTraits
+        # Low proficiency novice should get inflated confidence from DK curve
+        dk_conf = dunning_kruger_confidence(proficiency=0.1, neuroticism=0.3)
+        assert dk_conf > 0.1, "DK curve should inflate novice confidence"
+        # Expert should get slightly deflated confidence (humility)
+        dk_conf_expert = dunning_kruger_confidence(proficiency=0.85, neuroticism=0.3)
+        assert dk_conf_expert < 0.85, "DK curve should apply expert humility"
 
 
 class TestBiasOverrides:

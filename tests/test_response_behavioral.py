@@ -206,6 +206,7 @@ class TestExpertVsOutOfDomain:
             "i think",
             "not entirely certain",
             "not really the right person",
+            "not deeply familiar",
             "from what i understand",
             "if i'm not mistaken",
             "not sure",

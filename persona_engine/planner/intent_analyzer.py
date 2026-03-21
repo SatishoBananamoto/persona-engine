@@ -47,6 +47,7 @@ def analyze_intent(
     if current_mode is None:
         # Deterministic keyword matching (sorted for consistency)
         mode_keywords = {
+            InteractionMode.SMALL_TALK: ["weather", "weekend", "how are you", "how's it going", "what's up"],
             InteractionMode.SURVEY: ["survey", "questionnaire", "poll", "rating"],
             InteractionMode.CUSTOMER_SUPPORT: ["help", "support", "issue", "problem", "fix", "broken"],
             InteractionMode.INTERVIEW: ["interview", "hiring", "candidate", "position", "job"],

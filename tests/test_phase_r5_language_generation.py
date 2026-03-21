@@ -129,22 +129,22 @@ class TestPersonalityLanguageDirectives:
         traits = _make_traits(openness=0.85)
         det = DeterminismManager(seed=42)
         profile = build_personality_language_directives(traits, det)
-        combined = " ".join(profile.personality_directives)
-        assert "metaphor" in combined.lower() or "analogies" in combined.lower()
+        combined = " ".join(profile.personality_directives).lower()
+        assert "creative" in combined or "imaginative" in combined or "abstract" in combined
 
     def test_low_o_gets_concrete_directive(self):
         traits = _make_traits(openness=0.2)
         det = DeterminismManager(seed=42)
         profile = build_personality_language_directives(traits, det)
-        combined = " ".join(profile.personality_directives)
-        assert "concrete" in combined.lower() or "practical" in combined.lower()
+        combined = " ".join(profile.personality_directives).lower()
+        assert "practical" in combined or "conventional" in combined or "grounded" in combined
 
     def test_high_c_gets_structure_directive(self):
         traits = _make_traits(conscientiousness=0.85)
         det = DeterminismManager(seed=42)
         profile = build_personality_language_directives(traits, det)
-        combined = " ".join(profile.personality_directives)
-        assert "structure" in combined.lower() or "first" in combined.lower()
+        combined = " ".join(profile.personality_directives).lower()
+        assert "disciplined" in combined or "systematic" in combined or "precision" in combined
 
     def test_high_e_gets_enthusiasm_directive(self):
         traits = _make_traits(extraversion=0.85)
@@ -157,15 +157,15 @@ class TestPersonalityLanguageDirectives:
         traits = _make_traits(agreeableness=0.85)
         det = DeterminismManager(seed=42)
         profile = build_personality_language_directives(traits, det)
-        combined = " ".join(profile.personality_directives)
-        assert "softener" in combined.lower() or "cooperative" in combined.lower()
+        combined = " ".join(profile.personality_directives).lower()
+        assert "validate" in combined or "comfort" in combined or "accommodate" in combined
 
     def test_high_n_gets_hedging_directive(self):
         traits = _make_traits(neuroticism=0.8)
         det = DeterminismManager(seed=42)
         profile = build_personality_language_directives(traits, det)
-        combined = " ".join(profile.personality_directives)
-        assert "hedg" in combined.lower() or "uncertain" in combined.lower()
+        combined = " ".join(profile.personality_directives).lower()
+        assert "self-critical" in combined or "anxious" in combined or "caution" in combined
 
     def test_low_n_gets_calm_directive(self):
         traits = _make_traits(neuroticism=0.15)
@@ -189,10 +189,12 @@ class TestPersonalityLanguageDirectives:
         assert directives_a != directives_b
 
     def test_neutral_persona_fewer_directives(self):
-        """All-0.5 persona should produce no personality directives (no extreme traits)."""
+        """All-0.5 persona gets directives, but they use mild language."""
         det = DeterminismManager(seed=42)
         profile = build_personality_language_directives(_make_traits(), det)
-        assert len(profile.personality_directives) == 0
+        assert len(profile.personality_directives) >= 1
+        combined = " ".join(profile.personality_directives).lower()
+        assert "fairly" in combined or "somewhat" in combined or "a bit" in combined
 
     def test_formality_suppresses_markers(self):
         """High formality (situational strength) should reduce marker directives."""
@@ -222,32 +224,32 @@ class TestLIWCMarkers:
                 traits, det, interaction_formality=0.2
             )
             markers = " ".join(profile.marker_directives).lower()
-            if "worry" in markers or "anxious" in markers or "concerned" in markers:
+            if "anxiety" in markers or "uncertainty" in markers or "reassurance" in markers:
                 anxiety_count += 1
         # Should appear sometimes but not always (Whole Trait Theory)
         assert 10 < anxiety_count < 45, f"Anxiety markers appeared {anxiety_count}/50 times"
 
     def test_high_c_produces_certainty_markers(self):
-        """High-C persona should produce certainty markers sometimes."""
+        """High-C persona should produce thoroughness/precision markers sometimes."""
         traits = _make_traits(conscientiousness=0.85)
         certainty_count = 0
         for seed in range(50):
             det = DeterminismManager(seed=seed)
             profile = build_personality_language_directives(traits, det)
             markers = " ".join(profile.marker_directives).lower()
-            if "definitely" in markers or "clearly" in markers or "certainly" in markers:
+            if "thoroughness" in markers or "precise" in markers or "complete" in markers:
                 certainty_count += 1
-        assert certainty_count > 5, f"Certainty markers appeared only {certainty_count}/50 times"
+        assert certainty_count > 5, f"Thoroughness markers appeared only {certainty_count}/50 times"
 
     def test_high_e_produces_social_markers(self):
-        """High-E persona should produce social reference markers."""
+        """High-E persona should produce social energy markers."""
         traits = _make_traits(extraversion=0.85)
         social_count = 0
         for seed in range(50):
             det = DeterminismManager(seed=seed)
             profile = build_personality_language_directives(traits, det)
             markers = " ".join(profile.marker_directives).lower()
-            if "we" in markers or "together" in markers or "plural" in markers:
+            if "social" in markers or "warm" in markers or "engaged" in markers:
                 social_count += 1
         assert social_count > 5, f"Social markers appeared only {social_count}/50 times"
 

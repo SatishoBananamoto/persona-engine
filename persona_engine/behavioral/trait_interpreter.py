@@ -118,8 +118,9 @@ class TraitInterpreter:
         Returns:
             Verbosity enum
         """
-        # Phase R2: C verbosity ±0.1 → ±0.25 (high-C are observably more detailed)
-        adjusted = base_verbosity + (self.traits.conscientiousness - 0.5) * 0.5
+        # Phase R2: C verbosity (high-C are observably more detailed)
+        # E co-factor: extraverts tend toward slightly longer responses
+        adjusted = base_verbosity + (self.traits.conscientiousness - 0.5) * 0.5 + (self.traits.extraversion - 0.5) * 0.15
         adjusted = max(0.0, min(1.0, adjusted))
 
         if adjusted < 0.35:
@@ -149,9 +150,10 @@ class TraitInterpreter:
         High E: Proactively engages, initiates conversation
         Low E: More reactive, waits for prompts
 
-        Returns: Proactivity score (0-1)
+        Returns: Proactivity score (0.2-0.8)
         """
-        return self.traits.extraversion
+        # Floor/ceiling: even extreme introverts sometimes initiate
+        return 0.2 + self.traits.extraversion * 0.6
 
     def get_self_disclosure_modifier(self) -> float:
         """
@@ -162,8 +164,9 @@ class TraitInterpreter:
         """
         # Phase R2: Sigmoid-amplified E disclosure. Multiplier 0.45 chosen to
         # avoid swamping privacy clamp while producing ≥0.4 spread at extremes.
+        # N co-factor: high-N individuals disclose more via rumination/venting
         e_effect = trait_effect(self.traits.extraversion)
-        return (e_effect - 0.5) * 0.45
+        return (e_effect - 0.5) * 0.45 + self.traits.neuroticism * 0.1
 
     def influences_response_length_social(self) -> float:
         """
@@ -174,7 +177,8 @@ class TraitInterpreter:
 
     def get_enthusiasm_baseline(self) -> float:
         """Baseline enthusiasm level (influences tone selection)"""
-        return self.traits.extraversion
+        # Floor/ceiling: even introverts show some enthusiasm in their domain
+        return 0.2 + self.traits.extraversion * 0.5
 
     # ========================================================================
     # AGREEABLENESS → Behavior Mappings
@@ -210,8 +214,9 @@ class TraitInterpreter:
         return self.traits.agreeableness
 
     def influences_hedging_frequency(self) -> float:
-        """High A: Uses more hedging language"""
-        return self.traits.agreeableness * 0.6
+        """High A + high N: Uses more hedging language"""
+        # N co-factor: neurotic individuals hedge more (uncertainty/anxiety)
+        return min(0.8, self.traits.agreeableness * 0.6 + self.traits.neuroticism * 0.2)
 
     # ========================================================================
     # NEUROTICISM → Behavior Mappings
@@ -242,7 +247,9 @@ class TraitInterpreter:
         High N: More likely to use negative/anxious tones
         Returns bias toward negative tones (0-1)
         """
-        return self.traits.neuroticism * 0.7
+        # Tackman et al. (2023): N→negative emotion r≈.40; 0.5 multiplier
+        # keeps effective range aligned with literature
+        return self.traits.neuroticism * 0.5
 
     # ========================================================================
     # Multi-Trait Interactions
@@ -300,28 +307,45 @@ class TraitInterpreter:
 
     def get_confidence_modifier(self, domain_proficiency: float) -> float:
         """
-        Adjusts confidence based on traits + Dunning-Kruger curve.
+        Compute confidence from self-efficacy baseline + domain expertise.
 
-        Phase R2: C confidence ±0.05 → ±0.15, N penalty max -0.15 → -0.25.
-        Also applies Dunning-Kruger non-linear proficiency → confidence mapping.
+        Architecture (CF-1/2/3):
+        1. General self-efficacy: trait-derived baseline independent of domain
+        2. Domain confidence: DK curve applied to proficiency
+        3. Final = max(self_efficacy, domain_confidence) + bounded personality modifier
+        4. Total personality effect capped at ±0.10 (literature: ~5% variance)
 
         Args:
             domain_proficiency: Base proficiency (0-1)
 
         Returns:
-            Modified confidence
+            Modified confidence (0.1-0.95)
         """
-        # Phase R2: Apply Dunning-Kruger curve first
-        dk_confidence = dunning_kruger_confidence(domain_proficiency, self.traits.neuroticism)
+        # CF-1: General self-efficacy — a person's baseline confidence
+        # independent of domain expertise. High-E, high-C people are
+        # generally more self-assured; high-N less so.
+        E = self.traits.extraversion
+        C = self.traits.conscientiousness
+        N = self.traits.neuroticism
+        self_efficacy = 0.35 + E * 0.10 + C * 0.08 - N * 0.08
+        # Range: ~0.27 (low-E, low-C, high-N) to ~0.53 (high-E, high-C, low-N)
 
-        # Phase R2: C confidence ±0.05 → ±0.15
-        c_boost = (self.traits.conscientiousness - 0.5) * 0.3
-        # Phase R2: N penalty -0.15 → -0.25, with sigmoid for extreme amplification
-        n_effect = trait_effect(self.traits.neuroticism)
-        n_penalty = n_effect * 0.25
+        # CF-2: Domain confidence — DK curve maps proficiency to confidence
+        # This is a BONUS on top of self-efficacy for domain-relevant topics
+        dk_confidence = dunning_kruger_confidence(domain_proficiency, N)
 
-        adjusted = dk_confidence + c_boost - n_penalty
-        return max(0.1, min(0.95, adjusted))
+        # Use whichever is higher — domain expertise lifts confidence
+        # above self-efficacy, but never below it
+        base_confidence = max(self_efficacy, dk_confidence)
+
+        # CF-3: Bounded personality modifier — total trait effect on confidence
+        # capped at ±0.10 to match literature (~5% variance from personality)
+        c_modifier = (C - 0.5) * 0.12       # C boost: ±0.06
+        n_modifier = -(N - 0.5) * 0.08      # N penalty: ±0.04
+        personality_modifier = max(-0.10, min(0.10, c_modifier + n_modifier))
+
+        adjusted = base_confidence + personality_modifier
+        return max(0.10, min(0.95, adjusted))
 
     def get_trait_markers_for_validation(self) -> dict[str, Any]:
         """

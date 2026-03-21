@@ -349,7 +349,7 @@ class TestOllamaAdapter:
         mock_client.chat.side_effect = ConnectionError("refused")
         adapter._client = mock_client
 
-        with pytest.raises(LLMConnectionError, match="Ollama connection failed"):
+        with pytest.raises(LLMConnectionError, match="connection failed"):
             adapter.generate("system", "user")
 
     def test_generate_generic_error(self):

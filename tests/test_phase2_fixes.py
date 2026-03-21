@@ -376,7 +376,7 @@ class TestSaveLoadPersistence:
         save_path = tmp_path / "state.json"
         engine.save(str(save_path))
         data = json.loads(save_path.read_text())
-        assert data["version"] == 2
+        assert data["version"] == 3
 
     def test_load_v1_compat(self, tmp_path):
         """Loading a v1 save (no memory) should not crash."""
