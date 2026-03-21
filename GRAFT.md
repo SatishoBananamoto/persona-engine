@@ -508,6 +508,7 @@ Our current validation checks IR PARAMETER direction/distribution (Level 1). It 
 - [x] **BV-2: Full text behavioral validation** — DONE. 10 profiles x 3 prompts via Anthropic API. 9/10 direction checks pass. 1 failure is noise (A neg_emotion: 1 vs 0, both near zero). Strong signals: N hedging 1.7x, E social 4x, C certainty inf, C structure inf. Real LLM text aligns with Yarkoni. Report: `eval/bv2_report.json`.
 - [ ] **Layer Zero review** — Satish noted it hasn't been fine-tuned yet. Needs its own review pass for issues.
 - [x] **Directness distribution** — CHECKED. Healthy. Layer Zero 375 samples: mean=0.470, std=0.138, range=[0.23, 0.82], 0 floor/ceiling hits. Extreme A=0.05 + contentious → 0.971 is correct behavior (very disagreeable person challenged). No fix needed.
+- [x] **Baseline snapshot** — DONE. All current validation numbers saved with timestamp in `eval/baseline_snapshot_2026-03-21.json`. Compare future results against this after engine stabilizes.
 - [x] **Save/load persistence E2E** — DONE. 5 turns → save → load → continue. All v3 fields match (fatigue, mood, stress, engagement, stance_cache, prior_snapshot, anchor_stance). Stance cache survives round-trip (topic revisit after load returns cached stance). Post-load behavior continues correctly from saved state.
 - [ ] **PR #2 merge** — graft/merge-tier1 → claude/analyze-test-coverage-d93F4. All work done.
 - [ ] **Branch archival** — deferred until PR #2 merges and is verified.

@@ -20,7 +20,14 @@ htmlcov/
 .hypothesis/
 
 # Eval reports (generated, re-run to recreate)
-eval/*.json
+eval/report.json
+eval/benchmark_report.json
+eval/dynamic_report.json
+eval/correlation_report.json
+eval/bv2_report.json
+eval/e2e_report.json
+# Keep baseline snapshots (permanent reference)
+!eval/baseline_*.json
 
 # IDE
 .vscode/
