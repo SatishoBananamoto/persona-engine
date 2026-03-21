@@ -37,6 +37,7 @@ from persona_engine.planner.stages.stage_results import (
     InterpretationResult,
 )
 from persona_engine.planner.trace_context import TraceContext
+from persona_engine.schema.ir_schema import Verbosity
 
 if TYPE_CHECKING:
     from persona_engine.planner.turn_planner import ConversationContext, TurnPlanner
@@ -254,10 +255,47 @@ class BehavioralMetricsStage(MetricsMixin, StyleMixin, GuidanceMixin):
             ctx, verbosity_boost=interaction_modifiers.get("verbosity_boost", 0.0)
         )
 
+        # PA-8: Low competence prevents DETAILED verbosity — can't elaborate
+        # on topics you don't know. Same seed as directness: verbosity was
+        # personality-only, never received the competence signal.
+        if competence < 0.4 and verbosity == Verbosity.DETAILED:
+            ctx.enum(
+                source_type="state",
+                source_id="competence_verbosity",
+                target_field="communication_style.verbosity",
+                operation="override",
+                before=verbosity.value,
+                after=Verbosity.MEDIUM.value,
+                effect=f"Low competence ({competence:.2f}) prevents DETAILED — can't elaborate on unfamiliar topic",
+                weight=0.7,
+            )
+            verbosity = Verbosity.MEDIUM
+
         # Communication style (+ cross-turn smoothing)
         formality, directness = self.compute_communication_style(
             context.interaction_mode, ctx, trait_guidance=trait_guidance
         )
+
+        # PA-8: Competence modulation — low competence pulls directness toward
+        # neutral. Even a blunt person (low-A) is less forceful when they're
+        # out of their depth. The seed: directness was personality-only, never
+        # received the competence signal. This is the architectural fix.
+        if competence < 0.5:
+            competence_factor = competence / 0.5  # 0.0 at comp=0, 1.0 at comp=0.5
+            before_comp_dir = directness
+            directness = directness * competence_factor + 0.5 * (1 - competence_factor)
+            if abs(directness - before_comp_dir) > 0.001:
+                ctx.num(
+                    source_type="state",
+                    source_id="competence_modulation",
+                    target_field="communication_style.directness",
+                    operation="blend",
+                    before=before_comp_dir,
+                    after=directness,
+                    effect=f"Low competence ({competence:.2f}) pulls directness toward neutral",
+                    weight=0.7,
+                    reason=f"competence={competence:.2f} < 0.5 → factor={competence_factor:.2f}",
+                )
 
         # Phase R3: Apply interaction directness modifier
         if "directness" in interaction_modifiers:

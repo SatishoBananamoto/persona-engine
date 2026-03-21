@@ -69,6 +69,11 @@ persona.communication.directness (base)
   → cross-turn inertia smoothing
 ```
 
+**PA-8 fix:** Competence modulation added. Low competence (<0.5) pulls directness toward
+0.5 (neutral). Formula: `directness = directness * (comp/0.5) + 0.5 * (1 - comp/0.5)`.
+This means personality still shows (blunt person is still above-average direct) but not
+at full force on unfamiliar topics.
+
 **Watch:** Agreeableness influences directness through 2 paths (trait modifier + conflict
 avoidance). Combined effect for A=0.9 + contentious input: ~-0.335. By design (baseline
 vs. situational), but aggressive.

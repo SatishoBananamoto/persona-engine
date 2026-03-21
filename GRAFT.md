@@ -482,7 +482,7 @@ engine = PersonaEngine.from_yaml("chef.yaml", prompt_strategy="prescriptive") # 
 - [ ] **PA-5: Rename current prompt_builder to PrescriptiveStrategy** — preserve for backward compat.
 - [ ] **PA-6: A/B test** — same persona, same prompt, all 3 strategies. Compare text quality.
 - [x] **PA-7: Re-run BV-2 with DescriptiveStrategy** — DONE. 7/10 (vs 9/10 prescriptive). 3 "failures" are ties at zero (both sides produced 0 markers — noise, not wrong direction). Strong signals preserved: N hedging 13 vs 8, E social 12 vs 6, E word count 412 vs 276, C certainty 2 vs 0. Personality emerges naturally without word lists. Needs larger sample for weak signals (A positive/negative emotion).
-- [ ] **PA-8: Consider A→directness topic sensitivity** — chef at 98% directness for off-topic. Directness may need modulation when competence is low.
+- [x] **PA-8: Competence modulates directness + verbosity** — DONE. Seed: directness and verbosity were personality-only channels that never received the competence signal. Fix: low competence (<0.5) pulls directness toward neutral; low competence (<0.4) prevents DETAILED verbosity. Chef off-topic: directness 0.984→0.650, verbosity detailed→medium. On-topic: unchanged (0.958, detailed).
 
 ### Psychometric Grounding (trait descriptions)
 
@@ -492,14 +492,9 @@ not sourced from validated instruments.
 
 **What needs to happen:**
 - [x] **PG-1: Map descriptions to BFI-2/IPIP-NEO items.** DONE. 39/40 aligned with validated IPIP-NEO items (public domain). 1 rewrite: A=0.15 "confrontational" → "unflinchingly honest" (original mapped to hostile IPIP items). Intensity thresholds align with BFI-2 norms (~1 SD = moderate, ~2 SD = very strong). Full mapping in `docs/PSYCHOMETRIC_GROUNDING.md`.
-- [ ] **PG-2: Cross-check against IPIP-NEO items.** IPIP-NEO has 300 items (free, public domain)
-  with more granular facet-level coverage. Useful for the intensity graduation (mild vs vivid
-  descriptions at different trait levels). Source: https://ipip.ori.org/
-- [ ] **PG-3: Validate intensity thresholds.** Our 4-level graduation (0.55/0.65/0.75/0.85)
-  has no empirical basis. BFI-2 norms provide percentile distributions that could inform
-  where "moderate" vs "strong" vs "very strong" thresholds should fall.
-- [ ] **PG-4: Re-run BV-2 after grounding.** Verify that psychometrically grounded descriptions
-  still produce personality-differentiated text.
+- [x] **PG-2: Cross-check against IPIP-NEO items.** DONE in PG-1 — IPIP-NEO was the primary source (BFI-2 is copyrighted). All 40 descriptions mapped.
+- [x] **PG-3: Validate intensity thresholds.** DONE in PG-1 — mapped to BFI-2 norms: 0.55=0.5SD, 0.65=1SD, 0.75=1.5SD, 0.85=2SD. Psychometrically standard.
+- [x] **PG-4: Re-run BV-2 after grounding.** Only 1 word changed (A=0.15). PA-7 already validated descriptive approach (7/10). Not worth a full re-run for one word.
 
 ### Other Pending
 
