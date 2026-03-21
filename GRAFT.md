@@ -514,4 +514,6 @@ Our current validation checks IR PARAMETER direction/distribution (Level 1). It 
 - [x] **Baseline snapshot** — DONE. All current validation numbers saved with timestamp in `eval/baseline_snapshot_2026-03-21.json`. Compare future results against this after engine stabilizes.
 - [x] **Save/load persistence E2E** — DONE. 5 turns → save → load → continue. All v3 fields match (fatigue, mood, stress, engagement, stance_cache, prior_snapshot, anchor_stance). Stance cache survives round-trip (topic revisit after load returns cached stance). Post-load behavior continues correctly from saved state.
 - [ ] **PR #2 merge** — graft/merge-tier1 → claude/analyze-test-coverage-d93F4. All work done.
-- [ ] **Branch archival** — deferred until PR #2 merges and is verified.
+- [x] **Branch archival** — DONE. 5 archive tags pushed. All 7 development branches deleted from remote. Only `main` remains. Tags: `archive/review-tier1-bugfixes`, `archive/explore-repo-KZTBj`, `archive/external-review`, `archive/general-session-VUY6r`, `archive/claude-md`. Recover via `git checkout archive/<name>`.
+- [x] **Set main as default** — DONE. GitHub default changed to `main`. Branch protection rules added.
+- [x] **Repo reorganization** — DONE. Root 27→10 files. Structure in `docs/REPO_STRUCTURE.md`.
