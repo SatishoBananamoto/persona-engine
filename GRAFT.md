@@ -538,3 +538,62 @@ Our current validation checks IR PARAMETER direction/distribution (Level 1). It 
 - [x] **Branch archival** — DONE. 5 archive tags pushed. All 7 development branches deleted from remote. Only `main` remains. Tags: `archive/review-tier1-bugfixes`, `archive/explore-repo-KZTBj`, `archive/external-review`, `archive/general-session-VUY6r`, `archive/claude-md`. Recover via `git checkout archive/<name>`.
 - [x] **Set main as default** — DONE. GitHub default changed to `main`. Branch protection rules added.
 - [x] **Repo reorganization** — DONE. Root 27→10 files. Structure in `docs/REPO_STRUCTURE.md`.
+
+---
+
+## External Validation Study (from separate session, 2026-03-21)
+
+Another Claude Code session ran two studies comparing **IR-driven (persona-engine)** vs **prompt-only (vanilla LLM)** approaches. Results analyzed below.
+
+### Study 1: 20-Turn Conversation (Catherine Wei, Lawyer)
+
+Same persona, same 20 questions, same LLM (Claude Sonnet 4.6). Questions span in-domain (M&A law), boundary (crypto, AI), adversarial ("forget the formal stuff"), and callbacks (revisiting topics).
+
+**Raw files:** `eval_results.json`, `eval_results.csv`, `analysis.py`
+
+| Metric | Prompt-Only | IR-Driven | Winner |
+|--------|-------------|-----------|--------|
+| Mean words/turn | 331 | 85 | Context-dependent |
+| Total latency | 286s | 95s | **IR** (3x faster) |
+| Token growth T1→T20 | 36.1x | N/A (stateless) | **IR** |
+| Estimated cost | $0.42 | Lower | **IR** |
+| Character breaks | 1 | 0 | **IR** |
+| Formality under adversarial | Unknown | 0.850→0.859 (+1%) | **IR** (measurable + stable) |
+| Domain awareness | Not measurable | Competence drops 0.56→0.24 out-of-domain | **IR** |
+| Measurable parameters | 5/18 | 16/18 | **IR** |
+| Stance callback stability | Not measurable | Earn-out: -2% directness shift | **IR** |
+| Validation + citations | N/A | 20/20 pass, 866 citations | **IR** |
+
+**Key observation:** IR responses drop from 260 words (turn 1) to 14 words (turn 20). This is the fatigue system working — but it's TOO aggressive. By turn 13+, responses are so short that personality can barely express itself. The prompt-only approach maintains ~250-500 words throughout, giving personality more room to show.
+
+### Study 2: 10 Archetypes × 12 Scenarios (Personality Matching)
+
+10 personas (software engineer, nurse, entrepreneur, teacher, artist, police officer, social worker, chef, accountant, musician) rated on 12 personality scenarios (1-5 scale). Compared against expected ratings.
+
+**Raw file:** `validation_results.json`
+
+| Metric | Prompt-Only | IR-Driven | Winner |
+|--------|-------------|-----------|--------|
+| Overall correlation (r) | **0.681** | 0.576 | **Prompt** |
+| Overall MAE | **0.608** | 0.800 | **Prompt** |
+| Archetype wins | **6** | 3 | **Prompt** (ties: 1) |
+| Time | 148s | 263s | **Prompt** |
+
+**Prompt-only produces text that matches expected personality ratings more closely.**
+
+### Analysis: Why IR Scores Lower on Personality Matching
+
+The IR engine is better at controllability, measurement, consistency, and auditability. But it scores LOWER on whether the generated text matches expected personality. Three reasons:
+
+1. **Fatigue over-suppresses text.** IR responses get very short by mid-conversation. A 14-word answer can't express personality richly enough for a rater to score it. Prompt-only maintains 250+ words where personality has room.
+
+2. **The IR constrains too many dimensions simultaneously.** The LLM receives confidence, directness, formality, competence, stance, verbosity, tone, disclosure, behavioral directives, AND personality language all at once. With 30+ constraints, the LLM focuses on compliance rather than natural personality expression.
+
+3. **Prompt-only lets the LLM's own personality modeling shine.** When you just tell Claude "you are an introverted, analytical software engineer," Claude has strong internal models of what that sounds like. The IR approach overrides Claude's natural personality modeling with explicit parameter constraints.
+
+### Action Items from External Validation
+
+- [ ] **EV-1: Fatigue is too aggressive for multi-turn.** The verbosity threshold (0.5 fatigue, 0.15 engagement) causes responses to collapse by turn 7-8. For 20-turn conversations, this makes the persona non-functional. Options: (1) raise thresholds, (2) add a minimum word floor, (3) make fatigue rate configurable per conversation length.
+- [ ] **EV-2: Too many simultaneous constraints.** 30+ IR parameters overwhelm the LLM prompt. Consider: which constraints are essential vs which can be dropped without losing personality? Simplify the prompt to focus on the 5-6 most impactful parameters.
+- [ ] **EV-3: Compare with lighter IR.** Test a "thin IR" approach: only send stance + confidence + tone + verbosity to LLM (drop formality, directness, competence, disclosure numbers). Does personality matching improve?
+- [ ] **EV-4: The real comparison isn't IR vs prompt-only — it's IR+prompt.** The IR provides measurement and auditability that prompt-only can never have. The question is whether the IR can ALSO match prompt-only quality on personality expression. Not "which is better" but "can IR catch up on the one dimension where prompt wins?"
