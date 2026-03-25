@@ -509,7 +509,28 @@ Our current validation checks IR PARAMETER direction/distribution (Level 1). It 
 
 - [x] **BV-1: Linguistic markers proxy validation** — DONE. 10/10 profiles produce correct directives per Yarkoni (2010). High-trait profiles generate positive markers, low-trait profiles generate avoidance instructions. Both directionally correct. Initial keyword search showed 5 false negatives due to negation context ("avoid metaphors" matched "metaphor") — all confirmed correct on manual review.
 - [x] **BV-2: Full text behavioral validation** — DONE. 10 profiles x 3 prompts via Anthropic API. 9/10 direction checks pass. 1 failure is noise (A neg_emotion: 1 vs 0, both near zero). Strong signals: N hedging 1.7x, E social 4x, C certainty inf, C structure inf. Real LLM text aligns with Yarkoni. Report: `eval/bv2_report.json`.
-- [ ] **Layer Zero review** — Satish noted it hasn't been fine-tuned yet. Needs its own review pass for issues.
+- [ ] **Layer Zero review** — needs full review. Cultural prior test (2026-03-21) found 3 seed issues:
+
+  **Test:** Same input (nurse, age 35, seed 42), only location varies across 20 countries.
+  **Result:** 20 countries → only 7 unique trait profiles. 10/20 produce identical "western" persona.
+
+  **Seed 1: Only 6 culture regions** (`layer_zero/priors/data/culture_baselines.json`).
+  US/UK/Germany/France/Australia/Sweden/Canada/Italy all → "western." No within-region differentiation.
+
+  **Seed 2: Culture shifts are tiny** (±0.02-0.05 per trait, in `culture_baselines.json`).
+  After MAX_TOTAL_SHIFT=0.25 cap + mixing with occupation, cultural signal barely visible.
+
+  **Seed 3: Occupation prior dominates** (mapping_strength=0.6 vs culture ~0.42).
+  "Nurse" shift drowns cultural shift. All nurses worldwide converge to same traits.
+
+  **Sources in culture_baselines.json:** Schmitt et al. (2007), Inglehart-Welzel, Schwartz (2006).
+
+  **NOTE FOR FUTURE SESSIONS — independently verify before accepting this analysis:**
+  (1) Is the 6-region grouping too coarse? Literature supports finer (Nordic ≠ Mediterranean ≠ Anglo).
+  (2) Do shift magnitudes align with Schmitt et al. (2007) actual published data?
+  (3) Is MAX_TOTAL_SHIFT=0.25 suppressing legitimate cultural variation?
+  (4) Are there occupation-culture interaction effects (Japanese nurse vs Japanese engineer)?
+  (5) Run the same test with different occupations (not just nurse) to confirm occupation dominance.
 - [x] **Directness distribution** — CHECKED. Healthy. Layer Zero 375 samples: mean=0.470, std=0.138, range=[0.23, 0.82], 0 floor/ceiling hits. Extreme A=0.05 + contentious → 0.971 is correct behavior (very disagreeable person challenged). No fix needed.
 - [x] **Baseline snapshot** — DONE. All current validation numbers saved with timestamp in `eval/baseline_snapshot_2026-03-21.json`. Compare future results against this after engine stabilizes.
 - [x] **Save/load persistence E2E** — DONE. 5 turns → save → load → continue. All v3 fields match (fatigue, mood, stress, engagement, stance_cache, prior_snapshot, anchor_stance). Stance cache survives round-trip (topic revisit after load returns cached stance). Post-load behavior continues correctly from saved state.
