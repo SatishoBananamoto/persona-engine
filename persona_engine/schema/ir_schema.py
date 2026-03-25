@@ -517,6 +517,12 @@ class IntermediateRepresentation(BaseModel):
         "differentiated language generation"
     )
 
+    # Context classification (CC-1)
+    context_type: str = Field(
+        default="knowledge",
+        description="What kind of input drives the response: knowledge, opinion, social, emotional, personal, adversarial"
+    )
+
     # Metadata
     turn_id: str | None = Field(
         default=None,

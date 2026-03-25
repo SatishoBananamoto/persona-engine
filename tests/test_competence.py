@@ -259,47 +259,54 @@ class TestCompetenceComputation:
 
 
 class TestPromptBuilderCompetence:
-    """Test that prompt builder includes competence instructions."""
+    """Test that thin IR prompt includes context-appropriate framing.
+
+    EV-2/3: Prompt is now ~500 chars with SITUATION framing instead of
+    per-field labels. Competence is conveyed through confidence description
+    in the SITUATION section for knowledge contexts.
+    """
 
     @pytest.fixture
     def builder(self):
         return IRPromptBuilder()
 
-    def test_low_competence_prompt_says_no_terminology(self, builder):
-        """Low competence → prompt tells LLM not to use domain terms."""
+    def test_low_confidence_prompt_shows_uncertainty(self, builder):
+        """Low confidence → prompt communicates uncertainty."""
         ir = make_ir(competence=0.15, confidence=0.2)
         prompt = builder.build_generation_prompt(ir, "Tell me about quantum physics")
-        assert "layperson" in prompt.lower() or "everyday understanding" in prompt.lower()
+        assert "uncertain" in prompt.lower() or "not confident" in prompt.lower()
 
-    def test_surface_competence_prompt_says_vague(self, builder):
-        """Surface competence → allow vagueness."""
-        ir = make_ir(competence=0.3, confidence=0.3)
-        prompt = builder.build_generation_prompt(ir, "Tell me about quantum physics")
-        assert "surface" in prompt.lower() or "vagueness" in prompt.lower()
-
-    def test_moderate_competence_prompt_says_conceptual(self, builder):
-        """Moderate competence → conceptual level."""
+    def test_moderate_confidence_prompt_shows_moderate(self, builder):
+        """Moderate confidence → reasonable confidence level."""
         ir = make_ir(competence=0.5, confidence=0.5)
         prompt = builder.build_generation_prompt(ir, "Tell me about design")
-        assert "conceptual" in prompt.lower() or "moderate" in prompt.lower()
+        assert "reasonably" in prompt.lower() or "some thoughts" in prompt.lower()
 
-    def test_high_competence_prompt_says_knowledgeable(self, builder):
-        """High competence → full domain vocabulary."""
+    def test_high_confidence_prompt_shows_confidence(self, builder):
+        """High confidence → confident framing."""
         ir = make_ir(competence=0.75, confidence=0.8)
         prompt = builder.build_generation_prompt(ir, "Tell me about UX")
-        assert "knowledgeable" in prompt.lower() or "terminology" in prompt.lower()
+        assert "confident" in prompt.lower()
 
-    def test_expert_competence_prompt_says_expert(self, builder):
-        """Expert competence → expert-level discussion."""
+    def test_expert_confidence_prompt_shows_authority(self, builder):
+        """Very high confidence → authority framing."""
         ir = make_ir(competence=0.9, confidence=0.9)
         prompt = builder.build_generation_prompt(ir, "Tell me about UX heuristics")
-        assert "expert" in prompt.lower() or "highly competent" in prompt.lower()
+        assert "authority" in prompt.lower() or "confident" in prompt.lower()
 
-    def test_competence_appears_in_prompt(self, builder):
-        """COMPETENCE label should appear in generated prompt."""
+    def test_situation_framing_in_prompt(self, builder):
+        """SITUATION section should appear in generated prompt."""
         ir = make_ir(competence=0.5)
         prompt = builder.build_generation_prompt(ir, "Hi")
-        assert "COMPETENCE:" in prompt
+        assert "SITUATION:" in prompt
+
+    def test_thin_prompt_is_shorter(self, builder):
+        """Thin prompt should be substantially shorter than old format."""
+        ir = make_ir(competence=0.5, confidence=0.5)
+        prompt = builder.build_generation_prompt(ir, "Tell me about UX")
+        # Old prompt was ~3000 chars. Thin prompt should be well under 1000
+        # for a simple input without personality_language or safety constraints
+        assert len(prompt) < 1000
 
 
 # =============================================================================

@@ -10,6 +10,9 @@ from __future__ import annotations
 from typing import Any, TYPE_CHECKING
 
 from persona_engine.behavioral import MAX_BIAS_IMPACT
+from persona_engine.planner.context_classifier import (
+    ADVERSARIAL, EMOTIONAL, KNOWLEDGE, OPINION, PERSONAL, SOCIAL,
+)
 from persona_engine.planner.domain_detection import compute_domain_adjacency
 from persona_engine.planner.engine_config import DEFAULT_CONFIG
 from persona_engine.planner.trace_context import TraceContext, clamp01
@@ -101,18 +104,42 @@ class MetricsMixin:
         proficiency: float,
         ctx: TraceContext,
         memory_context: dict[str, Any] | None = None,
+        context_type: str = KNOWLEDGE,
     ) -> float:
         """Compute response confidence.
 
-        Sequence: base (proficiency) → trait → cognitive → authority bias → memory → bounds
+        CC-2: For knowledge contexts, confidence is proficiency-based (current behavior).
+        For non-knowledge contexts, confidence is personality-based — extroverts are
+        confident in opinions and social settings, low-N people are emotionally steady.
+
+        Sequence: base (source depends on context) → trait → cognitive → authority bias → memory → bounds
         """
         p = self.planner
+        bf = p.persona.psychology.big_five
+
+        # CC-2: Base confidence depends on context type
+        if context_type == KNOWLEDGE:
+            base = proficiency
+            base_label = f"Base confidence from domain proficiency ({proficiency:.2f})"
+        elif context_type == OPINION:
+            base = 0.35 + bf.extraversion * 0.15 + bf.conscientiousness * 0.08 - bf.neuroticism * 0.08
+            base_label = f"Opinion confidence from personality (E={bf.extraversion:.2f}, C={bf.conscientiousness:.2f}, N={bf.neuroticism:.2f})"
+        elif context_type == SOCIAL:
+            base = 0.30 + bf.extraversion * 0.20 - bf.neuroticism * 0.10
+            base_label = f"Social confidence from E/N (E={bf.extraversion:.2f}, N={bf.neuroticism:.2f})"
+        elif context_type == EMOTIONAL:
+            base = 0.40 - bf.neuroticism * 0.15 + bf.extraversion * 0.05
+            base_label = f"Emotional confidence from N/E (N={bf.neuroticism:.2f}, E={bf.extraversion:.2f})"
+        else:
+            # personal, adversarial — neutral baseline
+            base = 0.45
+            base_label = f"Neutral confidence baseline for '{context_type}' context"
 
         confidence = ctx.base(
-            field_name="confidence.proficiency_base",
+            field_name="confidence.context_base",
             target_field="response_structure.confidence",
-            value=proficiency,
-            effect=f"Base confidence from domain proficiency ({proficiency:.2f})"
+            value=base,
+            effect=base_label,
         )
 
         adjusted = p.traits.get_confidence_modifier(confidence)
@@ -212,12 +239,32 @@ class MetricsMixin:
         proficiency: float,
         persona_domains: list[dict],
         ctx: TraceContext,
+        context_type: str = KNOWLEDGE,
     ) -> float:
         """Compute how equipped the persona is to engage with this topic.
+
+        CC-2: For non-knowledge contexts, competence is neutral (0.5). Competence
+        is a domain expertise concept — it doesn't apply to "how would you handle
+        a party?" or "what's your opinion on remote work?"
 
         Sequence: direct match | adjacency fallback → openness modifier → clamp
         """
         p = self.planner
+
+        # CC-2: Non-knowledge contexts get neutral competence
+        if context_type != KNOWLEDGE:
+            competence = ctx.base(
+                field_name="competence.context_neutral",
+                target_field="response_structure.competence",
+                value=0.5,
+                effect=f"Neutral competence for '{context_type}' context (not a domain question)",
+            )
+            return clamp01(
+                ctx,
+                field_name="competence",
+                target_field="response_structure.competence",
+                value=competence,
+            )
 
         is_direct_match = any(
             kd.domain.lower() == domain.lower()

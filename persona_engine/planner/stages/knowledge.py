@@ -19,6 +19,7 @@ from persona_engine.behavioral.social_cognition import (
     AdaptationDirectives,
     SchemaEffect,
 )
+from persona_engine.planner.context_classifier import EMOTIONAL, KNOWLEDGE
 from persona_engine.planner.engine_config import DEFAULT_CONFIG
 from persona_engine.planner.stages.stage_results import (
     BehavioralMetricsResult,
@@ -72,6 +73,7 @@ class KnowledgeSafetyStage:
         confidence = metrics.confidence
         stance = metrics.stance
         rationale = metrics.rationale
+        context_type = foundation.context_type
 
         # Disclosure (+ cross-turn smoothing)
         disclosure_level = self.compute_disclosure(context.topic_signature, ctx)
@@ -143,24 +145,41 @@ class KnowledgeSafetyStage:
                 weight=0.6,
             )
 
-        # Uncertainty action
-        time_pressure = self.compute_time_pressure(
-            context.interaction_mode, context.turn_number, ctx
-        )
-        resolver_citations: list[Citation] = []
-        uncertainty_action = resolve_uncertainty_action(
-            proficiency=proficiency,
-            confidence=confidence,
-            risk_tolerance=p.cognitive.style.risk_tolerance,
-            need_for_closure=p.cognitive.style.need_for_closure,
-            time_pressure=time_pressure,
-            claim_policy_lookup_behavior=p.persona.claim_policy.lookup_behavior,
-            citations=resolver_citations,
-            stress=p.state.get_stress(),
-            fatigue=p.state.get_fatigue(),
-        )
-        for cite in resolver_citations:
-            ctx.citations.append(cite)
+        # CC-2: Uncertainty action and claim type routing by context
+        if context_type == KNOWLEDGE:
+            # Knowledge context: full uncertainty resolution pipeline
+            time_pressure = self.compute_time_pressure(
+                context.interaction_mode, context.turn_number, ctx
+            )
+            resolver_citations: list[Citation] = []
+            uncertainty_action = resolve_uncertainty_action(
+                proficiency=proficiency,
+                confidence=confidence,
+                risk_tolerance=p.cognitive.style.risk_tolerance,
+                need_for_closure=p.cognitive.style.need_for_closure,
+                time_pressure=time_pressure,
+                claim_policy_lookup_behavior=p.persona.claim_policy.lookup_behavior,
+                citations=resolver_citations,
+                stress=p.state.get_stress(),
+                fatigue=p.state.get_fatigue(),
+            )
+            for cite in resolver_citations:
+                ctx.citations.append(cite)
+
+            knowledge_claim_type = self.infer_claim_type(
+                proficiency, uncertainty_action, domain, user_input=context.user_input
+            )
+            claim_enum = KnowledgeClaimType(knowledge_claim_type)
+        else:
+            # Non-knowledge contexts: persona is speaking from personal
+            # experience/opinion, not claiming domain expertise.
+            claim_enum = KnowledgeClaimType.PERSONAL_EXPERIENCE
+
+            # Emotional + high-N: hedge (genuinely uncertain about feelings)
+            if context_type == EMOTIONAL and p.persona.psychology.big_five.neuroticism > 0.6:
+                uncertainty_action = UncertaintyAction.HEDGE
+            else:
+                uncertainty_action = UncertaintyAction.ANSWER
 
         ctx.enum(
             source_type="rule",
@@ -169,15 +188,10 @@ class KnowledgeSafetyStage:
             operation="set",
             before="none",
             after=uncertainty_action.value,
-            effect=f"Uncertainty action resolved: {uncertainty_action.value}",
+            effect=f"Uncertainty action resolved: {uncertainty_action.value} (context={context_type})",
             weight=1.0,
         )
 
-        # Claim type
-        knowledge_claim_type = self.infer_claim_type(
-            proficiency, uncertainty_action, domain, user_input=context.user_input
-        )
-        claim_enum = KnowledgeClaimType(knowledge_claim_type)
         ctx.enum(
             source_type="rule",
             source_id="claim_type_inference",
@@ -185,7 +199,7 @@ class KnowledgeSafetyStage:
             operation="set",
             before="none",
             after=claim_enum.value,
-            effect=f"Knowledge claim type inferred: {claim_enum.value}",
+            effect=f"Knowledge claim type: {claim_enum.value} (context={context_type})",
             weight=1.0,
         )
 

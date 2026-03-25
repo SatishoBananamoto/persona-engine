@@ -267,8 +267,13 @@ class TestDirectivesInIRAndPrompt:
             "High-openness persona should have personality language directives"
         )
 
-    def test_behavioral_directives_in_generation_prompt(self):
-        """IR behavioral_directives should be included in the IRPromptBuilder prompt."""
+    def test_personality_conveyed_in_generation_prompt(self):
+        """IR personality should be conveyed in the generation prompt.
+
+        EV-2/3: Thin prompt conveys personality through CHARACTER section
+        (from personality_language) rather than listing all behavioral
+        directives verbatim.
+        """
         from persona_engine.generation.prompt_builder import IRPromptBuilder
 
         data = make_persona_data(openness=0.9, agreeableness=0.9, extraversion=0.9)
@@ -284,10 +289,9 @@ class TestDirectivesInIRAndPrompt:
             behavioral_directives=ir.behavioral_directives,
         )
 
-        found_any = any(d in prompt for d in ir.behavioral_directives)
-        assert found_any, (
-            f"Behavioral directives should appear in generation prompt. "
-            f"Directives: {ir.behavioral_directives[:3]}"
+        # Thin prompt should have CHARACTER and SITUATION sections
+        assert "CHARACTER:" in prompt or "SITUATION:" in prompt, (
+            "Generation prompt should contain personality framing"
         )
 
     def test_personality_language_in_generation_prompt(self):

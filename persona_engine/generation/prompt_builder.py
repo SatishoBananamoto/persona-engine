@@ -89,115 +89,79 @@ Do NOT break character or acknowledge that you are an AI.
         memory_context: dict | None = None,
         behavioral_directives: list[str] | None = None,
     ) -> str:
-        """
-        Build the generation prompt with IR constraints.
+        """Build a thin, context-appropriate generation prompt.
 
-        Args:
-            ir: The Intermediate Representation with behavioral constraints
-            user_input: The user's message to respond to
-            persona: Optional persona for additional context
-            memory_context: Optional memory context from MemoryManager
-            behavioral_directives: Optional personality-driven behavioral directives
-                from TraitGuidance and CognitiveGuidance
+        EV-2/3: ~500 chars instead of ~3000. Three sections:
+        CHARACTER (from personality_language), SITUATION (context-dependent),
+        RESPONSE (tone + verbosity + stance + safety).
 
-        Returns:
-            User prompt with generation constraints
+        The full IR is still stored for measurement/auditability. Only
+        the LLM prompt is simplified.
         """
-        # Escape user input to prevent prompt injection — delimit clearly
         safe_input = user_input.replace("```", "` ` `")
-        prompt = f"""USER MESSAGE (respond to this):
-```
-{safe_input}
-```
+        parts: list[str] = []
 
-"""
-        # Memory context section (if available)
+        # User message
+        parts.append(f"USER MESSAGE:\n```\n{safe_input}\n```")
+
+        # Memory context (keep — it's real context, not constraint noise)
         if memory_context:
             memory_lines = self._format_memory_context(memory_context)
             if memory_lines:
-                prompt += f"""=== WHAT YOU REMEMBER ABOUT THIS USER ===
+                parts.append(f"WHAT YOU REMEMBER:\n{memory_lines}")
 
-{memory_lines}
-
-"""
-
-        prompt += """=== RESPONSE CONSTRAINTS (FOLLOW EXACTLY) ===
-
-"""
-        # Communication style
-        style = ir.communication_style
-        prompt += f"""TONE: {self._format_tone(style.tone)}
-FORMALITY: {self._format_float(style.formality)} ({self._describe_formality(style.formality)})
-DIRECTNESS: {self._format_float(style.directness)} ({self._describe_directness(style.directness)})
-VERBOSITY: {self._format_verbosity(style.verbosity)}
-
-"""
-        # Response structure
-        structure = ir.response_structure
-        prompt += f"""CONFIDENCE: {self._format_float(structure.confidence)} ({self._describe_confidence(structure.confidence)})
-COMPETENCE: {self._format_float(structure.competence)} ({self._describe_competence(structure.competence)})
-"""
-        if structure.stance:
-            prompt += f"""YOUR STANCE ON THIS TOPIC: {structure.stance}
-"""
-        if structure.rationale:
-            prompt += f"""REASONING BASIS: {structure.rationale}
-"""
-        
-        # Knowledge and uncertainty
-        knowledge = ir.knowledge_disclosure
-        prompt += f"""
-KNOWLEDGE CLAIM TYPE: {self._format_claim_type(knowledge.knowledge_claim_type)}
-"""
-        if knowledge.uncertainty_action:
-            prompt += f"""UNCERTAINTY HANDLING: {self._format_uncertainty(knowledge.uncertainty_action)}
-"""
-        
-        # Safety constraints
-        safety = ir.safety_plan
-        if safety.blocked_topics:
-            prompt += f"""
-TOPICS TO AVOID: {', '.join(safety.blocked_topics)}
-"""
-        if safety.clamped_fields:
-            prompt += f"""CLAMPED BEHAVIORAL LIMITS: {len(safety.clamped_fields)} fields clamped
-"""
-        
-        # Personality-driven behavioral directives (Phase R1)
-        if behavioral_directives:
-            prompt += """
-=== PERSONALITY-DRIVEN BEHAVIOR ===
-
-"""
-            for i, directive in enumerate(behavioral_directives, 1):
-                prompt += f"{i}. {directive}\n"
-            prompt += "\n"
-
-        # Personality-specific language directives (Phase R5)
+        # CHARACTER — personality description (from PA-3 descriptive directives)
         personality_language = ir.personality_language
         if personality_language:
-            prompt += """=== LANGUAGE STYLE (personality-grounded) ===
+            char_desc = " ".join(personality_language[:3])  # top 3 directives
+            parts.append(f"CHARACTER: {char_desc}")
 
-"""
-            for directive in personality_language:
-                prompt += f"- {directive}\n"
-            prompt += "\n"
+        # SITUATION — context-dependent framing
+        parts.append(f"SITUATION: {self._situation_framing(ir)}")
 
-        prompt += """
-=== GENERATION INSTRUCTIONS ===
+        # RESPONSE — minimal behavioral cues
+        style = ir.communication_style
+        response_parts = [
+            self._format_tone(style.tone),
+            self._format_verbosity(style.verbosity),
+        ]
+        if ir.response_structure.stance:
+            response_parts.append(f"Your position: {ir.response_structure.stance}")
 
-1. Respond as the persona would naturally respond
-2. Match the TONE and FORMALITY exactly
-3. Respect the VERBOSITY constraint (word count matters)
-4. If uncertain, use the UNCERTAINTY HANDLING approach
-5. Stay consistent with YOUR STANCE if one is provided
-6. Never exceed the knowledge claim type (don't claim expertise if speculative)
-7. Follow the PERSONALITY-DRIVEN BEHAVIOR directives above (if any)
-8. Match the LANGUAGE STYLE directives for word choice and phrasing (if any)
+        parts.append(f"RESPONSE STYLE: {'. '.join(response_parts)}.")
 
-Generate your response now:
-"""
-        return prompt
+        # Safety (always include — non-negotiable)
+        safety = ir.safety_plan
+        if safety.cannot_claim:
+            parts.append(f"DO NOT CLAIM: {', '.join(safety.cannot_claim)}")
+        if safety.must_avoid:
+            parts.append(f"AVOID: {', '.join(safety.must_avoid)}")
+        if safety.blocked_topics:
+            parts.append(f"BLOCKED TOPICS: {', '.join(safety.blocked_topics)}")
+
+        parts.append("Respond naturally as this person.")
+        return "\n\n".join(parts)
+
+    def _situation_framing(self, ir: IntermediateRepresentation) -> str:
+        """Generate context-appropriate situation framing for the LLM."""
+        context_type = ir.context_type
+        structure = ir.response_structure
+
+        if context_type == "knowledge":
+            conf_desc = self._describe_confidence(structure.confidence)
+            return f"You're being asked a knowledge question. {conf_desc}."
+        elif context_type == "opinion":
+            return "Someone's asking your opinion. Share what you genuinely think."
+        elif context_type == "social":
+            return "You're in a social situation. React naturally as yourself."
+        elif context_type == "emotional":
+            return "Someone's checking in on how you're feeling. Be authentic."
+        elif context_type == "personal":
+            return "Someone's asking about you personally. Share what feels right."
+        elif context_type == "adversarial":
+            return "Your view is being challenged. Stay in character and hold your ground."
+        else:
+            return self._describe_confidence(structure.confidence)
     
     def _format_tone(self, tone: Tone) -> str:
         """Format tone enum to readable description."""

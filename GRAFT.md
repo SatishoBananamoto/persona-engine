@@ -4,7 +4,7 @@
 > Updated before every step, after every step. If it's not here, it didn't happen.
 
 **Current branch**: `main` (v0.4.0)
-**Last session**: 2026-03-20 to 2026-03-21 ("The Graft")
+**Last session**: 2026-03-25 (Context Classifier + Thin IR Prompt)
 **Repo**: Clean. 10 root files. Only `main` branch. 5 archive tags.
 
 ---
@@ -13,22 +13,37 @@
 
 **Read this section first. 30 seconds. Then decide what to work on.**
 
-### #1 Priority: Context Classifier (CC-1/2/3)
+### What just happened (2026-03-25)
 
-The IR pipeline treats EVERY input as a knowledge query. 10 of 15 issues found this
-session (66%) trace to this one gap. A party question gets "KNOWLEDGE CLAIM: speculative"
-and "UNCERTAINTY: let uncertainty show." This is the architectural fix that replaces
-5 band-aids we applied.
+Context Classifier (CC-1/2/3) and Thin IR Prompt (EV-2/3) implemented. The pipeline
+now classifies inputs into 6 types (knowledge, opinion, social, emotional, personal,
+adversarial) and routes processing accordingly. Non-knowledge inputs no longer get
+nonsensical domain proficiency assessments, speculative claim types, or competence scores.
 
-**Plan:** `docs/PLAN_CONTEXT_CLASSIFIER.md` (exact files, routing table, code skeleton)
-**Effort:** One session. 7 files to change.
-**Validation:** Re-run `eval/fair_comparison.py` after fix (CC-5).
+**Files changed (10):**
+- `planner/context_classifier.py` — NEW. Keyword-based classifier (~120 lines)
+- `planner/stages/interpretation.py` — Calls classifier, skips domain detection for non-knowledge
+- `planner/stages/behavioral_metrics.py` — Confidence from personality (not proficiency) for non-knowledge; neutral competence (0.5) for non-knowledge
+- `planner/stages/behavioral_style.py` — Social + high-E amplifies verbosity
+- `planner/stages/behavioral.py` — Passes context_type; PA-8 gated to knowledge-only
+- `planner/stages/knowledge.py` — claim_type=personal_experience + uncertainty=answer for non-knowledge
+- `planner/stages/stage_results.py` — Added context_type field
+- `planner/stages/finalization.py` — Wires context_type into IR
+- `schema/ir_schema.py` — Added context_type field to IR
+- `generation/prompt_builder.py` — Thin IR prompt: CHARACTER + SITUATION + RESPONSE (~500 chars)
+
+**Tests:** 2886 passed, 0 failures. 28 new tests, 10 updated for prompt format.
+
+### #1 Priority: Validate context classifier with fair comparison (CC-5)
+
+Re-run `eval/fair_comparison.py` to see if context-aware IR beats prompt-only on
+BOTH Claude and GPT-4o. This is the real test of whether the architecture fix works.
 
 ### Other pending (lower priority)
 
 | Item | Prefix | Where documented |
 |------|--------|-----------------|
-| Thin IR prompt (send 500 chars to LLM, not 3000) | EV-2/3 | This file, "External Validation" section |
+| Remove band-aids after CC-5 validates | CC-6 | This file, "Context Classification" section |
 | Prompt strategy toggle (prescriptive/descriptive/llm) | PA-1/2/4/5/6 | This file, "Prompt Architecture" section |
 | Layer Zero review (cultural priors too coarse) | — | This file, "Behavioral Validation" section |
 | Keyword coverage (hardcoded word lists) | — | This file, "Other Pending" section |
@@ -36,9 +51,8 @@ and "UNCERTAINTY: let uncertainty show." This is the architectural fix that repl
 
 ### What NOT to do
 
-- Don't fix individual IR parameters without reading the context classifier plan first — most parameter issues are symptoms of the missing classifier
-- Don't run BV-2 or fair comparison BEFORE implementing CC-1/2/3 — results will be confounded by the same issue
-- Don't touch Layer Zero until the core engine is fixed
+- Don't remove band-aids (CF-1, PA-8) until CC-5 validates — they're harmless no-ops for correctly classified inputs
+- Don't touch Layer Zero until the core engine is validated
 - Don't skip GRAFT.md updates — EVER
 
 ### How we work
@@ -53,7 +67,9 @@ and "UNCERTAINTY: let uncertainty show." This is the architectural fix that repl
 | File | What it contains |
 |------|-----------------|
 | `GRAFT.md` | This file. All decisions, progress, findings, pending items. |
-| `docs/PLAN_CONTEXT_CLASSIFIER.md` | Detailed plan for the #1 priority fix. |
+| `docs/PLAN_CONTEXT_CLASSIFIER.md` | Original plan for context classifier. |
+| `persona_engine/planner/context_classifier.py` | The classifier implementation. |
+| `tests/test_context_classifier.py` | 28 tests for classifier + routing. |
 | `docs/TRAIT_FLOW_ANALYSIS.md` | Per-field modifier chains + known issues (TF-*). |
 | `docs/PIPELINE_FLOWCHARTS.md` | Mermaid diagrams of pipeline + trait fan-outs. |
 | `docs/VALIDATION_SOURCES.md` | Papers, datasets, benchmark profiles. |
@@ -62,17 +78,17 @@ and "UNCERTAINTY: let uncertainty show." This is the architectural fix that repl
 | `docs/REPO_STRUCTURE.md` | What files go where and why. |
 | `eval/baseline_snapshot_2026-03-21.json` | Performance baseline to compare against. |
 
-### Current validation scores (baseline)
+### Current validation scores
 
 ```
-Unit tests:     2649/2649
-L1 static:      10/10
-L1 dynamic:     15/15
-L1 correlation: 10/10 (212 personas)
-L2 text (BV-2): 7/10 (descriptive directives)
-E2E:            3/3
-Psychometric:   39/40 IPIP-NEO aligned
-Fair comparison: Claude IR 14-11, GPT-4o Prompt 16-9
+Unit tests:     2886/2886 (was 2649 — 28 new context tests, fixture expansion)
+L1 static:      10/10 (unchanged)
+L1 dynamic:     15/15 (unchanged)
+L1 correlation: 10/10 (212 personas, unchanged)
+L2 text (BV-2): 7/10 (unchanged — needs re-run with CC)
+E2E:            3/3 (unchanged)
+Psychometric:   39/40 IPIP-NEO aligned (unchanged)
+Fair comparison: Pending re-run (CC-5)
 ```
 
 ---
@@ -669,8 +685,8 @@ The IR engine is better at controllability, measurement, consistency, and audita
 **Design review:** `docs/EXTERNAL_VALIDATION_REVIEW.md` — Study 2 has methodological flaws that systematically disadvantage IR (state accumulation across scenarios, over-engineered for rating task, subjective expected ratings). Results should be interpreted with these caveats.
 
 - [ ] **EV-1: Fatigue is too aggressive for multi-turn.** The verbosity threshold (0.5 fatigue, 0.15 engagement) causes responses to collapse by turn 7-8. For 20-turn conversations, this makes the persona non-functional. Options: (1) raise thresholds, (2) add a minimum word floor, (3) make fatigue rate configurable per conversation length.
-- [ ] **EV-2: Too many simultaneous constraints.** 30+ IR parameters overwhelm the LLM prompt. Consider: which constraints are essential vs which can be dropped without losing personality? Simplify the prompt to focus on the 5-6 most impactful parameters.
-- [ ] **EV-3: Compare with lighter IR.** Test a "thin IR" approach: only send stance + confidence + tone + verbosity to LLM (drop formality, directness, competence, disclosure numbers). Does personality matching improve?
+- [x] **EV-2: Too many simultaneous constraints.** DONE (2026-03-25). Thin IR prompt: CHARACTER + SITUATION + RESPONSE (~500 chars). Full IR still stored for measurement. Old 30+ constraint format replaced.
+- [x] **EV-3: Compare with lighter IR.** DONE (2026-03-25). Implemented as the new default in `prompt_builder.py`. Thin prompt sends context-appropriate situation framing + tone + verbosity + stance (if present). Needs CC-5 to validate improvement.
 - [ ] **EV-4: The real comparison isn't IR vs prompt-only — it's IR+prompt.** The IR provides measurement and auditability that prompt-only can never have. The question is whether the IR can ALSO match prompt-only quality on personality expression. Not "which is better" but "can IR catch up on the one dimension where prompt wins?"
 
 ### Fair Comparison Study (this session, 2026-03-21)
@@ -768,11 +784,11 @@ elif context_type == "adversarial":
 
 ### Action Items
 
-- [ ] **CC-1: Build context classifier.** Keyword-based first (simple), can upgrade to embedding/LLM later. Input: user_input string. Output: context type. Place: top of `interpretation.py` Stage 2.
-- [ ] **CC-2: Route pipeline by context.** Skip competence/claim/uncertainty for non-knowledge contexts. Amplify relevant personality traits per context type.
-- [ ] **CC-3: Context-aware verbosity.** High-E + social context → more verbose (not less). High-N + emotional context → more hedging. Context should modulate verbosity, not just personality + fatigue.
-- [ ] **CC-4: Context-aware stance.** Social situations don't need value-driven stances. Personal questions should use memory/disclosure, not Schwartz values.
-- [ ] **CC-5: Re-run fair comparison after context classifier.** The real test: does context-aware IR beat prompt-only on BOTH Claude and GPT-4o?
-- [ ] **CC-6: Remove band-aids.** Once CC-1/2/3/4 are in place, the self-efficacy baseline (CF-1) and competence modulation (PA-8) may become unnecessary. The equations should produce correct values because they receive correct context, not because we added guardrails.
+- [x] **CC-1: Build context classifier.** DONE (2026-03-25). Keyword-based, 6 types: knowledge, opinion, social, emotional, personal, adversarial. File: `planner/context_classifier.py`. 21 unit tests.
+- [x] **CC-2: Route pipeline by context.** DONE (2026-03-25). Confidence from personality for non-knowledge. Neutral competence (0.5). claim_type=personal_experience. uncertainty=answer. PA-8 gated to knowledge-only. 7 integration tests.
+- [x] **CC-3: Context-aware verbosity.** DONE (2026-03-25). Social + high-E → verbosity boost. Emotional + high-N → uncertainty=hedge.
+- [ ] **CC-4: Context-aware stance.** Social situations don't need value-driven stances. Personal questions should use memory/disclosure, not Schwartz values. DEFERRED — stance generator still runs for all contexts. Lower priority than CC-5 validation.
+- [ ] **CC-5: Re-run fair comparison after context classifier.** The real test: does context-aware IR beat prompt-only on BOTH Claude and GPT-4o? Requires API keys.
+- [ ] **CC-6: Remove band-aids.** Once CC-5 validates, remove self-efficacy baseline (CF-1) and competence modulation (PA-8). Keep until validation confirms classifier works.
 
 **Full plan:** `docs/PLAN_CONTEXT_CLASSIFIER.md` — 6 phases from context classifier to multi-persona market research panels. Phases 1-3 are immediate (fix architecture). Phases 4-6 are product roadmap (enable segment-based market research use case like consumer product testing).

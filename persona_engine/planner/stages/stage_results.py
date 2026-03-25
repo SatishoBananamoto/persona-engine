@@ -29,6 +29,7 @@ class InterpretationResult:
     user_intent: str
     needs_clarification: bool
     policy_modifications: dict[str, Any]
+    context_type: str = "knowledge"  # CC-1: what kind of input drives the response
     # Injected by orchestrator after foundation stage
     memory_context: dict[str, Any] = field(default_factory=dict)
 

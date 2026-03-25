@@ -369,20 +369,20 @@ class TestPromptBuilderIntegration:
             user_input="What do you think?",
             behavioral_directives=ir.behavioral_directives,
         )
-        assert "PERSONALITY-DRIVEN BEHAVIOR" in prompt
+        # EV-2/3: Thin prompt puts personality in CHARACTER section
+        assert "CHARACTER:" in prompt or "RESPONSE STYLE:" in prompt
 
-    def test_prompt_without_directives_no_section(self):
-        """Prompt with no directives should NOT have personality section header."""
+    def test_prompt_without_directives_has_situation(self):
+        """Prompt always has SITUATION framing even without directives."""
         from persona_engine.generation.prompt_builder import IRPromptBuilder
         ir = _generate_ir(make_persona_data())
         builder = IRPromptBuilder()
-        # Force empty directives
         prompt = builder.build_generation_prompt(
             ir=ir,
             user_input="What do you think?",
             behavioral_directives=None,
         )
-        assert "=== PERSONALITY-DRIVEN BEHAVIOR ===" not in prompt
+        assert "SITUATION:" in prompt
 
 
 # ============================================================================

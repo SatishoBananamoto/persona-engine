@@ -426,15 +426,16 @@ class TestPipelineIntegration:
         # but the IR should be generated successfully
         assert ir.response_structure.stance is not None
 
-    def test_prompt_builder_includes_language_section(self):
-        """Prompt builder should include LANGUAGE STYLE section when directives exist."""
+    def test_prompt_builder_includes_character_section(self):
+        """Prompt builder should include CHARACTER section when directives exist."""
         from persona_engine.generation.prompt_builder import IRPromptBuilder
         data = make_persona_data(openness=0.9, extraversion=0.85, neuroticism=0.1)
         ir = _generate_ir(data, "Tell me about engineering")
         builder = IRPromptBuilder()
         prompt = builder.build_generation_prompt(ir, "Tell me about engineering")
         if ir.personality_language:
-            assert "LANGUAGE STYLE" in prompt
+            # EV-2/3: Thin prompt puts personality in CHARACTER section
+            assert "CHARACTER:" in prompt
 
 
 # ============================================================================

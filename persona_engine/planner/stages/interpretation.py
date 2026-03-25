@@ -1,5 +1,6 @@
 """
-Stage 2: Interpretation — topic relevance, bias, state evolution, intent, domain, expert eligibility.
+Stage 2: Interpretation — context classification, topic relevance, bias,
+state evolution, intent, domain, expert eligibility.
 """
 
 from __future__ import annotations
@@ -7,6 +8,7 @@ from __future__ import annotations
 import logging
 from typing import Any, TYPE_CHECKING
 
+from persona_engine.planner.context_classifier import KNOWLEDGE, classify_context
 from persona_engine.planner.domain_detection import (
     compute_topic_relevance,
     detect_domain,
@@ -39,6 +41,19 @@ class InterpretationStage:
     ) -> InterpretationResult:
         """Run the interpretation stage."""
         p = self.planner
+
+        # CC-1: Context classification — FIRST, before anything else
+        context_type = classify_context(context.user_input)
+        ctx.add_basic_citation(
+            source_type="rule",
+            source_id="context_classifier",
+            effect=f"Input classified as '{context_type}'",
+            weight=1.0,
+        )
+        logger.debug(
+            "Context classified",
+            extra={"context_type": context_type, "input": context.user_input[:50]},
+        )
 
         # Topic relevance
         persona_domains: list[dict] = []
@@ -76,9 +91,23 @@ class InterpretationStage:
         context.interaction_mode = inferred_mode
         context.goal = inferred_goal
 
-        # Domain + proficiency
-        domain = context.domain or self.detect_domain(context.user_input, ctx=ctx)
-        proficiency = self.get_domain_proficiency(domain)
+        # CC-2: Domain detection — skip for non-knowledge contexts
+        if context_type == KNOWLEDGE:
+            domain = context.domain or self.detect_domain(context.user_input, ctx=ctx)
+            proficiency = self.get_domain_proficiency(domain)
+        else:
+            # Non-knowledge inputs: domain detection is irrelevant.
+            # Set neutral defaults so downstream stages don't produce
+            # nonsensical competence/claim values.
+            domain = context.domain or "general"
+            proficiency = DEFAULT_CONFIG.default_proficiency
+            ctx.add_basic_citation(
+                source_type="rule",
+                source_id="context_domain_skip",
+                effect=f"Non-knowledge context '{context_type}' — domain detection skipped",
+                weight=1.0,
+            )
+
         ctx.add_basic_citation(
             source_type="state",
             source_id="domain_proficiency",
@@ -86,16 +115,20 @@ class InterpretationStage:
             weight=1.0,
         )
 
-        # Expert eligibility
-        is_domain_specific = any(
-            kd.domain.lower() == domain.lower() for kd in p.persona.knowledge_domains
-        )
-        expert_threshold = getattr(p.persona.claim_policy, "expert_threshold", EXPERT_THRESHOLD)
-        expert_allowed = is_domain_specific and (proficiency >= expert_threshold)
+        # Expert eligibility — only meaningful for knowledge contexts
+        if context_type == KNOWLEDGE:
+            is_domain_specific = any(
+                kd.domain.lower() == domain.lower() for kd in p.persona.knowledge_domains
+            )
+            expert_threshold = getattr(p.persona.claim_policy, "expert_threshold", EXPERT_THRESHOLD)
+            expert_allowed = is_domain_specific and (proficiency >= expert_threshold)
+        else:
+            expert_allowed = False
+
         ctx.add_basic_citation(
             source_type="rule",
             source_id="expert_eligibility",
-            effect=f"Expert allowed: {expert_allowed} (is_domain={is_domain_specific}, prof={proficiency:.2f}, thresh={expert_threshold:.2f})",
+            effect=f"Expert allowed: {expert_allowed} (context={context_type})",
             weight=1.0,
         )
 
@@ -131,6 +164,7 @@ class InterpretationStage:
             user_intent=user_intent,
             needs_clarification=needs_clarification,
             policy_modifications=policy_modifications,
+            context_type=context_type,
         )
 
     def detect_domain(self, user_input: str, ctx: TraceContext | None = None) -> str:

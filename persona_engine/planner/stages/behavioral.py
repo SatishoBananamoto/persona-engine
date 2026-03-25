@@ -23,6 +23,7 @@ from persona_engine.behavioral.social_cognition import (
     detect_schema_relevance,
     infer_user_model,
 )
+from persona_engine.planner.context_classifier import KNOWLEDGE
 from persona_engine.planner.domain_detection import detect_evidence_strength
 from persona_engine.planner.engine_config import DEFAULT_CONFIG
 from persona_engine.planner.stages.behavioral_guidance import (
@@ -80,6 +81,7 @@ class BehavioralMetricsStage(MetricsMixin, StyleMixin, GuidanceMixin):
         domain = foundation.domain
         proficiency = foundation.proficiency
         persona_domains = foundation.persona_domains
+        context_type = foundation.context_type
 
         # Elasticity (early for stance cache logic)
         elasticity = self.compute_elasticity(proficiency, ctx)
@@ -122,7 +124,7 @@ class BehavioralMetricsStage(MetricsMixin, StyleMixin, GuidanceMixin):
         )
 
         # Confidence (+ cross-turn smoothing)
-        confidence = self.compute_confidence(proficiency, ctx, memory_context=foundation.memory_context)
+        confidence = self.compute_confidence(proficiency, ctx, memory_context=foundation.memory_context, context_type=context_type)
         if p._prior_snapshot:
             before_smooth = confidence
             confidence = _smooth(p._prior_snapshot.confidence, confidence, CROSS_TURN_INERTIA)
@@ -139,7 +141,7 @@ class BehavioralMetricsStage(MetricsMixin, StyleMixin, GuidanceMixin):
                     reason=f"inertia={CROSS_TURN_INERTIA}",
                 )
 
-        competence = self.compute_competence(domain, proficiency, persona_domains, ctx)
+        competence = self.compute_competence(domain, proficiency, persona_domains, ctx, context_type=context_type)
 
         # Cross-turn inertia smoothing — competence
         if p._prior_snapshot:
@@ -252,13 +254,14 @@ class BehavioralMetricsStage(MetricsMixin, StyleMixin, GuidanceMixin):
 
         tone = self.select_tone(ctx, trait_guidance=trait_guidance)
         verbosity = self.compute_verbosity(
-            ctx, verbosity_boost=interaction_modifiers.get("verbosity_boost", 0.0)
+            ctx, verbosity_boost=interaction_modifiers.get("verbosity_boost", 0.0),
+            context_type=context_type,
         )
 
         # PA-8: Low competence prevents DETAILED verbosity — can't elaborate
-        # on topics you don't know. Same seed as directness: verbosity was
-        # personality-only, never received the competence signal.
-        if competence < 0.4 and verbosity == Verbosity.DETAILED:
+        # on topics you don't know. CC-2: Only applies for knowledge contexts.
+        # For opinions/social/emotional, verbosity should follow personality.
+        if context_type == KNOWLEDGE and competence < 0.4 and verbosity == Verbosity.DETAILED:
             ctx.enum(
                 source_type="state",
                 source_id="competence_verbosity",
@@ -277,10 +280,9 @@ class BehavioralMetricsStage(MetricsMixin, StyleMixin, GuidanceMixin):
         )
 
         # PA-8: Competence modulation — low competence pulls directness toward
-        # neutral. Even a blunt person (low-A) is less forceful when they're
-        # out of their depth. The seed: directness was personality-only, never
-        # received the competence signal. This is the architectural fix.
-        if competence < 0.5:
+        # neutral. CC-2: Only for knowledge contexts. For opinions/social/emotional,
+        # directness should follow personality regardless of domain competence.
+        if context_type == KNOWLEDGE and competence < 0.5:
             competence_factor = competence / 0.5  # 0.0 at comp=0, 1.0 at comp=0.5
             before_comp_dir = directness
             directness = directness * competence_factor + 0.5 * (1 - competence_factor)

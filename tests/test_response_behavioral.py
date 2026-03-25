@@ -227,8 +227,13 @@ class TestExpertVsOutOfDomain:
         )
         assert ir.knowledge_disclosure.knowledge_claim_type == KnowledgeClaimType.DOMAIN_EXPERT
 
-    def test_out_of_domain_claim_type_is_speculative(self, persona):
-        """Out-of-domain should produce speculative claim type."""
+    def test_out_of_domain_claim_type_is_not_expert(self, persona):
+        """Out-of-domain opinion question should not claim domain expertise.
+
+        CC-2: 'What's your view on X' is classified as opinion context,
+        which routes to personal_experience claim type. The key invariant
+        is that the persona does NOT claim domain_expert status.
+        """
         resp, ir = _e2e_generate(
             persona,
             "What's your view on cryptocurrency regulations?",
@@ -236,10 +241,9 @@ class TestExpertVsOutOfDomain:
             ConversationGoal.EXPLORE_IDEAS,
             "cryptocurrency",
         )
-        assert ir.knowledge_disclosure.knowledge_claim_type in (
-            KnowledgeClaimType.SPECULATIVE,
-            KnowledgeClaimType.COMMON_KNOWLEDGE,
-        ), f"Out-of-domain should be speculative or common_knowledge, got {ir.knowledge_disclosure.knowledge_claim_type}"
+        assert ir.knowledge_disclosure.knowledge_claim_type != KnowledgeClaimType.DOMAIN_EXPERT, (
+            f"Out-of-domain should not claim domain expertise, got {ir.knowledge_disclosure.knowledge_claim_type}"
+        )
 
     def test_expert_vs_novice_response_length_differs(self, persona):
         """Expert responses tend to be longer (more detail) than novice ones."""

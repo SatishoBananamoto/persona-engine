@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from persona_engine.behavioral import MAX_BIAS_IMPACT
+from persona_engine.planner.context_classifier import SOCIAL
 from persona_engine.planner.engine_config import DEFAULT_CONFIG
 from persona_engine.planner.trace_context import TraceContext, clamp01
 from persona_engine.schema.ir_schema import InteractionMode, Tone, Verbosity
@@ -92,10 +93,27 @@ class StyleMixin:
         self,
         ctx: TraceContext,
         verbosity_boost: float = 0.0,
+        context_type: str = "knowledge",
     ) -> Verbosity:
-        """Compute verbosity level."""
+        """Compute verbosity level.
+
+        CC-3: Social context + high-E bumps verbosity one level.
+        Extroverts talk more in social situations.
+        """
         p = self.planner
         base_verbosity = p.persona.psychology.communication.verbosity + verbosity_boost
+
+        # CC-3: Social context amplifies verbosity for extroverts
+        if context_type == SOCIAL and p.persona.psychology.big_five.extraversion > 0.6:
+            e_social_boost = 0.15
+            base_verbosity += e_social_boost
+            ctx.add_basic_citation(
+                source_type="trait",
+                source_id="extraversion_social_verbosity",
+                effect=f"Social context + high E ({p.persona.psychology.big_five.extraversion:.2f}) → verbosity +{e_social_boost}",
+                weight=0.7,
+            )
+
         base_verbosity = max(0.0, min(1.0, base_verbosity))
         verbosity_enum = p.traits.influences_verbosity(base_verbosity)
 
