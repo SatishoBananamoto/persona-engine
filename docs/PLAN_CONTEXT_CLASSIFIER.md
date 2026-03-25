@@ -1,293 +1,160 @@
-# Plan: Context Classifier + Opinion Mode
+# Plan: Context Classifier
 
-> Use case: Coca-Cola wants to test how different customer segments react to products.
-> "18-24 urban health-conscious" should respond DIFFERENTLY from "55-65 suburban traditional"
-> — and the responses should be CLOSE to what real humans in those segments would say.
+> The IR pipeline treats every input as a knowledge query. 10 of 15 issues found
+> in this session (66%) trace to this single root cause. This plan fixes it.
 
-## What the engine currently does wrong for this use case
+## The Problem
 
-User asks a persona: "What do you think about our new zero-sugar cola?"
+Ask a persona: "You're at a party where you know nobody. What do you do?"
 
-Current pipeline:
+Current pipeline output:
 ```
-detect_domain("zero-sugar cola") → domain="food" or "general"
-compute_competence(proficiency=0.3) → competence=0.15
-knowledge_claim_type → "speculative"
-uncertainty_handling → "let uncertainty show"
-stance → "I value autonomy and the freedom to choose my own approach"
-confidence → 0.42
+CONFIDENCE: 42%         ← based on domain proficiency. Parties aren't a domain.
+KNOWLEDGE CLAIM: speculative  ← nobody "speculates" about socializing.
+STANCE: "I value autonomy"    ← Schwartz values for a party question?
+UNCERTAINTY: "let it show"    ← uncertain about... going to a party?
+COMPETENCE: 16%         ← not a competence question.
 ```
 
-This is absurd. A consumer has OPINIONS about cola — they don't "speculate" about it.
-They don't need "domain proficiency" to know if they like a drink. Their response should
-come from their VALUES, LIFESTYLE, and PERSONALITY — not from expertise assessment.
+The pipeline only has one mode: **assess topic expertise and constrain accordingly.**
+It doesn't know the difference between a knowledge question, a social situation,
+an emotional check-in, or an opinion request.
 
-## What it should do
+## The Fix: Context Classifier (core architecture)
 
-```
-classify_context("What do you think about our new zero-sugar cola?")
-→ context_type = "opinion_preference"
+A classifier at the top of Stage 2 (Interpretation) that routes processing.
+This is a CORE architecture fix — not tied to any specific use case.
 
-# Skip: domain proficiency, competence, knowledge claim, uncertainty
-# Use: personality traits, values, lifestyle, age/generation, habits
+### Phase 1: Build Classifier (CC-1)
 
-Route to opinion mode:
-  - Stance from VALUES + LIFESTYLE (not domain expertise)
-    "I'm trying to cut sugar, so I'd definitely try it" (health-conscious)
-    "I don't trust zero-sugar stuff, tastes artificial" (traditional)
-  - Confidence from EXTRAVERSION + OPENNESS (not proficiency)
-    High-E: strong opinion, shares freely
-    Low-E: reserved, needs prompting
-  - No "speculative" or "uncertain" — opinions aren't speculation
-  - Verbosity from personality + engagement (not fatigue + domain)
-```
-
-## The Plan (6 phases)
-
-### Phase 1: Context Classifier (CC-1/CC-2)
-
-**What:** A classifier at the top of Stage 2 that categorizes user input.
-
-**Where:** `persona_engine/planner/stages/interpretation.py`, before any domain detection.
+**Where:** `persona_engine/planner/stages/interpretation.py`, before domain detection.
 
 **Categories:**
 
-| Context Type | Examples | What should drive response |
+| Context Type | Examples | What drives the response |
 |---|---|---|
-| `knowledge` | "Explain quantum entanglement" | Domain proficiency, competence, claim type, uncertainty |
-| `opinion` | "What do you think about Coke Zero?" | Values, lifestyle, personality, preferences |
-| `social` | "You're at a party with strangers" | E/A traits, social cognition, mood |
-| `emotional` | "How are you feeling about the layoffs?" | N trait, mood state, disclosure |
-| `personal` | "Tell me about your morning routine" | Memory, lifestyle, disclosure, habits |
-| `adversarial` | "You're wrong, defend yourself" | Character stability, formality hold |
-| `purchase` | "Would you buy this? How much would you pay?" | Values, income sensitivity, risk tolerance, brand loyalty |
+| `knowledge` | "Explain quantum entanglement", "How does photosynthesis work?" | Domain proficiency, competence, claim type, uncertainty |
+| `opinion` | "What do you think about X?", "Your view on Y?" | Values, personality, preferences |
+| `social` | "You're at a party", "How would you introduce yourself?" | E/A traits, social cognition |
+| `emotional` | "How are you feeling?", "Are you worried about this?" | N trait, mood state, disclosure |
+| `personal` | "Tell me about your routine", "What do you enjoy?" | Memory, lifestyle, disclosure |
+| `adversarial` | "You're wrong", "Defend your position" | Character stability, formality |
 
-**Implementation:** Start with keyword-based (fast, deterministic, no LLM cost):
+**Implementation:** Keyword-based first (deterministic, no cost). Can upgrade to
+embedding or LLM classifier later.
 
 ```python
 def classify_context(user_input: str) -> str:
     lower = user_input.lower()
 
-    # Purchase/preference signals
-    if any(w in lower for w in ["buy", "purchase", "pay", "price", "worth",
-                                  "try", "switch", "prefer", "choose"]):
-        return "purchase"
-
-    # Opinion signals
-    if any(w in lower for w in ["think about", "your view", "opinion",
-                                  "feel about", "what about", "how about"]):
-        return "opinion"
-
-    # Social signals
-    if any(w in lower for w in ["party", "meeting", "dinner", "event",
-                                  "introduce", "stranger", "group"]):
-        return "social"
-
-    # Emotional signals
-    if any(w in lower for w in ["feeling", "worried", "happy", "stressed",
-                                  "anxious", "excited", "upset"]):
-        return "emotional"
-
-    # Personal signals
-    if any(w in lower for w in ["your routine", "your morning", "your day",
-                                  "tell me about yourself", "your life"]):
-        return "personal"
-
-    # Adversarial signals
-    if any(w in lower for w in ["you're wrong", "defend", "prove",
+    if any(w in lower for w in ["you're wrong", "defend", "prove it",
                                   "disagree", "challenge"]):
         return "adversarial"
 
-    # Default: knowledge (current behavior)
-    return "knowledge"
+    if any(w in lower for w in ["feeling", "worried", "happy", "stressed",
+                                  "anxious", "excited", "how are you"]):
+        return "emotional"
+
+    if any(w in lower for w in ["your routine", "your morning", "your life",
+                                  "about yourself", "what do you enjoy"]):
+        return "personal"
+
+    if any(w in lower for w in ["party", "dinner", "event", "meeting someone",
+                                  "introduce", "stranger", "group of people"]):
+        return "social"
+
+    if any(w in lower for w in ["think about", "your view", "opinion on",
+                                  "feel about", "what about", "how about",
+                                  "would you", "do you prefer"]):
+        return "opinion"
+
+    return "knowledge"  # default: current behavior
 ```
 
-**Can upgrade later** to embedding-based or LLM-based classification.
-
----
+Same limitation as other keyword systems — finite list, will miss edge cases.
+Upgrade path: embedding similarity against category exemplars.
 
 ### Phase 2: Pipeline Routing (CC-2)
 
-**What:** Each context type routes to a different processing mode in the behavioral pipeline.
+**What changes per context type:**
 
-**Changes to `interpretation.py` and `behavioral.py`:**
+| Field | knowledge | opinion | social | emotional | personal | adversarial |
+|---|---|---|---|---|---|---|
+| Domain detection | YES | skip | skip | skip | skip | skip |
+| Competence | compute | 0.5 (neutral) | 0.5 | 0.5 | 0.5 | hold current |
+| Claim type | compute | personal_opinion | personal_experience | personal_experience | personal_experience | hold current |
+| Uncertainty | compute | "answer" | "answer" | varies by N | "answer" | "answer" |
+| Confidence source | proficiency + DK | personality (E, N) | E trait | mood + N | baseline | hold current |
+| Stance source | values + domain | values + personality | personality | mood + values | memory | hold current |
+| Verbosity modifier | standard | standard | E amplified | standard | standard | standard |
+| Directness modifier | competence-modulated | personality-only | personality-only | N-modulated | personality-only | hold current |
 
-```python
-context_type = classify_context(user_input)
+**Key change:** For non-knowledge contexts, confidence comes from PERSONALITY
+(high-E → confident opinions, low-N → confident in social settings), not from
+domain proficiency. This eliminates the self-efficacy band-aid (CF-1) at the source.
 
-if context_type == "knowledge":
-    # Current pipeline — unchanged
-    proficiency = compute_proficiency(domain)
-    competence = compute_competence(domain, proficiency)
-    claim_type = infer_claim_type(proficiency)
-    uncertainty = resolve_uncertainty(proficiency, confidence)
+### Phase 3: Thin IR Prompt (EV-2/EV-3)
 
-elif context_type in ("opinion", "purchase"):
-    # Opinion mode — personality-driven, no expertise
-    proficiency = None  # not relevant
-    competence = 0.5    # everyone has opinions
-    claim_type = "personal_opinion"  # new type
-    uncertainty = "answer"  # opinions aren't uncertain
-    # Confidence from personality, not proficiency:
-    confidence = 0.4 + E * 0.3 + (1 - N) * 0.2  # range 0.4-0.9
-    # Stance from values + lifestyle, not domain expertise
+**What:** Simplify what we send to the LLM. Keep full IR for measurement.
 
-elif context_type == "social":
-    # Social mode — E/A/N driven
-    proficiency = None
-    competence = 0.5
-    claim_type = "personal_experience"
-    uncertainty = "answer"
-    confidence = 0.3 + E * 0.4  # extroverts confident socially
-    # Verbosity: high-E → more verbose (opposite of current)
-    # Directness: personality-only (no competence modulation)
+**Current:** ~3,000 characters, 30+ constraints, 8 generation rules.
 
-elif context_type == "emotional":
-    # Emotional mode — N/mood driven
-    proficiency = None
-    competence = 0.5
-    claim_type = "personal_experience"
-    # Disclosure amplified
-    # N trait heavily influences response style
-    # Mood state matters more than usual
+**Proposed:** ~500 characters. Three sections:
 
-elif context_type == "personal":
-    # Personal mode — memory + disclosure
-    # Pull from memory context
-    # High disclosure
-    # Lifestyle/habits drive response
-
-elif context_type == "adversarial":
-    # Adversarial mode — hold character
-    # Maintain formality
-    # Don't break character
-    # Confidence and directness hold steady
 ```
+CHARACTER: [interpolated personality description from _TRAIT_POLES]
+
+SITUATION: [context-appropriate framing]
+  knowledge: "You're being asked about [domain]. Your expertise: [level]."
+  opinion: "Someone's asking your opinion."
+  social: "You're in a social situation."
+  emotional: "Someone's checking in on how you're feeling."
+
+RESPONSE: [tone], [verbosity hint]. Respond naturally as this person.
+```
+
+The full IR (confidence=0.42, directness=0.67, formality=0.36...) is still
+computed and stored for measurement/auditability. It's just not dumped into
+the LLM prompt where it overwhelms natural expression.
 
 ---
 
-### Phase 3: Thin IR for Text Generation (EV-2/EV-3)
+## After the Core Fix: Use-Case Extensions
 
-**What:** Simplify the prompt sent to the LLM. Currently 3,000+ characters of constraints. Reduce to ~500 characters.
+These are SEPARATE from the architecture fix. Each is a product decision.
 
-**Current prompt (30+ constraints):**
-```
-TONE: professional and composed
-FORMALITY: 36%
-DIRECTNESS: 67%
-VERBOSITY: BRIEF
-CONFIDENCE: 42%
-COMPETENCE: 57%
-STANCE: I value autonomy...
-REASONING: self_direction value...
-KNOWLEDGE CLAIM: speculative
-UNCERTAINTY: let uncertainty show
-CLAMPED LIMITS: 1
-PERSONALITY BEHAVIOR: 2 directives
-LANGUAGE STYLE: 2 paragraphs
-GENERATION INSTRUCTIONS: 8 rules
-```
+| Extension | What it enables | Depends on |
+|---|---|---|
+| Segment-aware Layer Zero | Market research, consumer testing | Phase 1-3 + schema additions |
+| Multi-persona panel | Focus group simulation | Layer Zero + orchestration |
+| Purchase behavior mode | "Would you buy this?" with price sensitivity | Phase 2 + schema additions |
+| Conversation replay | Re-run same conversation with different persona | Save/load v3 + determinism |
+| Human evaluation framework | Blind comparison: persona vs real human | Phase 1-3 + evaluation protocol |
 
-**Thin IR prompt (~500 chars):**
-```
-CHARACTER: You're practical, organized, and reserved. You speak plainly
-and don't waste words. You're fairly calm and not easily rattled.
-
-CONTEXT: Someone's asking your opinion about a product.
-
-TONE: neutral and straightforward
-YOUR TAKE: [stance if relevant]
-
-Respond naturally as this person would. 2-4 sentences.
-```
-
-The full IR is still computed for measurement/auditability. Only the PROMPT is thinned.
+Each of these can be planned independently once the core architecture is fixed.
 
 ---
 
-### Phase 4: Segment-Aware Layer Zero
+## Priority
 
-**What:** Layer Zero should generate personas from SEGMENT descriptions, not just occupations.
+```
+NOW:     Phase 1 (classifier) → Phase 2 (routing) → Phase 3 (thin IR)
+         One session. Fixes 66% of known issues.
 
-**Current Layer Zero input:**
-```python
-layer_zero.mint(occupation="nurse", age=35, location="Chicago")
+THEN:    Re-run fair comparison (CC-5). Validate IR beats prompt-only
+         on BOTH Claude and GPT-4o when context is correct.
+
+LATER:   Use-case extensions based on product direction.
 ```
 
-**Needed for market research:**
-```python
-layer_zero.mint(
-    segment="18-24 urban health-conscious college student",
-    # or structured:
-    age_range=(18, 24),
-    lifestyle=["health-conscious", "fitness-focused", "social-media-active"],
-    income_level="low-medium",
-    brand_preferences={"beverages": "kombucha, sparkling water"},
-    values_emphasis={"health": 0.9, "social_image": 0.7, "price_sensitive": 0.8},
-)
-```
+## Files to Change
 
-**New persona schema fields needed:**
-- `lifestyle: list[str]` — lifestyle descriptors
-- `consumption_habits: dict` — category → preferences
-- `price_sensitivity: float` — 0-1
-- `brand_loyalty: float` — 0-1 (high = sticks with known brands)
-- `trend_sensitivity: float` — 0-1 (high = follows trends)
-- `health_consciousness: float` — 0-1
-
-These influence opinion/purchase mode responses directly.
-
----
-
-### Phase 5: Validate Against Real Market Research
-
-**What:** Compare engine output against real human segment responses.
-
-**Method:**
-1. Find published market research with known segment profiles + their responses
-2. Create matching personas in persona-engine
-3. Ask the same questions
-4. Compare response themes, sentiment, and key phrases
-
-**Sources for real data:**
-- Published consumer surveys (Pew Research, Nielsen)
-- Academic consumer behavior studies
-- A/B test: Satish (or testers) answer as themselves, compare against their modeled persona
-
----
-
-### Phase 6: Multi-Persona Panel
-
-**What:** Run multiple personas through the same question simultaneously and aggregate.
-
-```python
-# Coke product test across segments
-segments = [
-    {"name": "Health Millennial", "age": 24, "lifestyle": ["health-conscious"]},
-    {"name": "Traditional Boomer", "age": 58, "lifestyle": ["traditional", "brand-loyal"]},
-    {"name": "Budget Parent", "age": 35, "lifestyle": ["budget-conscious", "family-first"]},
-    {"name": "Trendy GenZ", "age": 19, "lifestyle": ["trend-following", "social-media"]},
-]
-
-question = "Coca-Cola is launching a new zero-sugar cola with added vitamins. Would you try it? Why or why not?"
-
-for segment in segments:
-    personas = layer_zero.mint(**segment, count=10)  # 10 per segment
-    responses = [engine.chat(question) for engine in engines]
-    # Aggregate: sentiment, key themes, purchase intent
-```
-
----
-
-## Priority Order
-
-| Phase | Effort | Impact | Dependencies |
-|-------|--------|--------|-------------|
-| **Phase 1: Context classifier** | Small (1 file, keyword-based) | Fixes 66% of known issues | None |
-| **Phase 2: Pipeline routing** | Medium (interpretation.py + behavioral.py) | Makes IR appropriate for non-knowledge Qs | Phase 1 |
-| **Phase 3: Thin IR prompt** | Small (prompt_builder.py) | Improves text quality across all models | None (can parallelize) |
-| Phase 4: Segment Layer Zero | Large (schema + Layer Zero + priors) | Enables market research use case | Phase 1+2 |
-| Phase 5: Real data validation | Medium (research + eval scripts) | Proves accuracy | Phase 4 |
-| Phase 6: Multi-persona panel | Medium (orchestration layer) | Production use case | Phase 4+5 |
-
-**Phases 1-3 are immediate. Phases 4-6 are the product roadmap.**
+| File | Change |
+|------|--------|
+| `interpretation.py` | Add `classify_context()`, call before domain detection, pass to downstream |
+| `behavioral.py` | Route metrics computation based on context type |
+| `behavioral_metrics.py` | Confidence from personality for non-knowledge contexts |
+| `behavioral_style.py` | Verbosity: E-amplified for social contexts |
+| `knowledge.py` | Skip claim type / uncertainty for non-knowledge contexts |
+| `prompt_builder.py` | Thin IR: context-appropriate framing, fewer constraints |
+| `stage_results.py` | Add `context_type` field to `InterpretationResult` |
