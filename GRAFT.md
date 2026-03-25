@@ -703,3 +703,5 @@ elif context_type == "adversarial":
 - [ ] **CC-4: Context-aware stance.** Social situations don't need value-driven stances. Personal questions should use memory/disclosure, not Schwartz values.
 - [ ] **CC-5: Re-run fair comparison after context classifier.** The real test: does context-aware IR beat prompt-only on BOTH Claude and GPT-4o?
 - [ ] **CC-6: Remove band-aids.** Once CC-1/2/3/4 are in place, the self-efficacy baseline (CF-1) and competence modulation (PA-8) may become unnecessary. The equations should produce correct values because they receive correct context, not because we added guardrails.
+
+**Full plan:** `docs/PLAN_CONTEXT_CLASSIFIER.md` — 6 phases from context classifier to multi-persona market research panels. Phases 1-3 are immediate (fix architecture). Phases 4-6 are product roadmap (enable segment-based market research use case like consumer product testing).
