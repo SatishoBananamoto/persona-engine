@@ -593,6 +593,8 @@ The IR engine is better at controllability, measurement, consistency, and audita
 
 ### Action Items from External Validation
 
+**Design review:** `docs/EXTERNAL_VALIDATION_REVIEW.md` — Study 2 has methodological flaws that systematically disadvantage IR (state accumulation across scenarios, over-engineered for rating task, subjective expected ratings). Results should be interpreted with these caveats.
+
 - [ ] **EV-1: Fatigue is too aggressive for multi-turn.** The verbosity threshold (0.5 fatigue, 0.15 engagement) causes responses to collapse by turn 7-8. For 20-turn conversations, this makes the persona non-functional. Options: (1) raise thresholds, (2) add a minimum word floor, (3) make fatigue rate configurable per conversation length.
 - [ ] **EV-2: Too many simultaneous constraints.** 30+ IR parameters overwhelm the LLM prompt. Consider: which constraints are essential vs which can be dropped without losing personality? Simplify the prompt to focus on the 5-6 most impactful parameters.
 - [ ] **EV-3: Compare with lighter IR.** Test a "thin IR" approach: only send stance + confidence + tone + verbosity to LLM (drop formality, directness, competence, disclosure numbers). Does personality matching improve?
