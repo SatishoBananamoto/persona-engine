@@ -3,16 +3,87 @@
 > This file is the SINGLE SOURCE OF TRUTH for persona-engine development.
 > Updated before every step, after every step. If it's not here, it didn't happen.
 
-**Session**: Persona Engine's — The Graft
-**Date started**: 2026-03-20
-**Date completed**: 2026-03-21
-**Status**: COMPLETE — all work merged into `main` (PR #3, 2026-03-21T03:12:17Z)
 **Current branch**: `main` (v0.4.0)
-**Repo reorganized**: 2026-03-21. Root 27→10 files. Structure documented in `docs/REPO_STRUCTURE.md`.
+**Last session**: 2026-03-20 to 2026-03-21 ("The Graft")
+**Repo**: Clean. 10 root files. Only `main` branch. 5 archive tags.
 
-### How to use this document
+---
 
-Read this FIRST when starting any persona-engine session. Find "Pending" sections, pick highest-priority chunk, do it, update this doc, commit.
+## NEXT SESSION — START HERE
+
+**Read this section first. 30 seconds. Then decide what to work on.**
+
+### #1 Priority: Context Classifier (CC-1/2/3)
+
+The IR pipeline treats EVERY input as a knowledge query. 10 of 15 issues found this
+session (66%) trace to this one gap. A party question gets "KNOWLEDGE CLAIM: speculative"
+and "UNCERTAINTY: let uncertainty show." This is the architectural fix that replaces
+5 band-aids we applied.
+
+**Plan:** `docs/PLAN_CONTEXT_CLASSIFIER.md` (exact files, routing table, code skeleton)
+**Effort:** One session. 7 files to change.
+**Validation:** Re-run `eval/fair_comparison.py` after fix (CC-5).
+
+### Other pending (lower priority)
+
+| Item | Prefix | Where documented |
+|------|--------|-----------------|
+| Thin IR prompt (send 500 chars to LLM, not 3000) | EV-2/3 | This file, "External Validation" section |
+| Prompt strategy toggle (prescriptive/descriptive/llm) | PA-1/2/4/5/6 | This file, "Prompt Architecture" section |
+| Layer Zero review (cultural priors too coarse) | — | This file, "Behavioral Validation" section |
+| Keyword coverage (hardcoded word lists) | — | This file, "Other Pending" section |
+| Fatigue too aggressive for 20-turn | EV-1 | This file, "External Validation" section |
+
+### What NOT to do
+
+- Don't fix individual IR parameters without reading the context classifier plan first — most parameter issues are symptoms of the missing classifier
+- Don't run BV-2 or fair comparison BEFORE implementing CC-1/2/3 — results will be confounded by the same issue
+- Don't touch Layer Zero until the core engine is fixed
+- Don't skip GRAFT.md updates — EVER
+
+### How we work
+
+- **Chunk by chunk.** Pick one item. Do it. Test it. Update GRAFT.md. Commit. Repeat.
+- **Find the seed.** Don't patch symptoms. Trace to the root cause before fixing.
+- **Test before declaring victory.** Run unit tests + relevant eval suite after every change.
+- **Document for future sessions.** If you discovered something, write it down. If it's not in GRAFT.md, the next session doesn't know it happened.
+
+### Key reference files
+
+| File | What it contains |
+|------|-----------------|
+| `GRAFT.md` | This file. All decisions, progress, findings, pending items. |
+| `docs/PLAN_CONTEXT_CLASSIFIER.md` | Detailed plan for the #1 priority fix. |
+| `docs/TRAIT_FLOW_ANALYSIS.md` | Per-field modifier chains + known issues (TF-*). |
+| `docs/PIPELINE_FLOWCHARTS.md` | Mermaid diagrams of pipeline + trait fan-outs. |
+| `docs/VALIDATION_SOURCES.md` | Papers, datasets, benchmark profiles. |
+| `docs/PSYCHOMETRIC_GROUNDING.md` | IPIP-NEO mapping for trait descriptions. |
+| `docs/EXTERNAL_VALIDATION_REVIEW.md` | Design review of external IR vs prompt study. |
+| `docs/REPO_STRUCTURE.md` | What files go where and why. |
+| `eval/baseline_snapshot_2026-03-21.json` | Performance baseline to compare against. |
+
+### Current validation scores (baseline)
+
+```
+Unit tests:     2649/2649
+L1 static:      10/10
+L1 dynamic:     15/15
+L1 correlation: 10/10 (212 personas)
+L2 text (BV-2): 7/10 (descriptive directives)
+E2E:            3/3
+Psychometric:   39/40 IPIP-NEO aligned
+Fair comparison: Claude IR 14-11, GPT-4o Prompt 16-9
+```
+
+---
+
+### How to use the rest of this document
+
+Scroll down for detailed history. The sections below cover everything done in the
+session — completed items, decision log, findings, and detailed pending items with
+context. Use the prefix legend to find specific categories.
+
+**Action item prefixes:**
 
 **Action item prefixes:**
 
