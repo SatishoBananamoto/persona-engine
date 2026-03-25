@@ -25,6 +25,8 @@ Read this FIRST when starting any persona-engine session. Find "Pending" section
 | **G-** | Coverage Gaps | G1: extreme value testing |
 | **BV-** | Behavioral Validation | BV-2: real LLM text analysis |
 | **E2E** | End-to-end tests | E2E: multi-turn conversation |
+| **EV-** | External Validation | EV-1: fatigue too aggressive |
+| **CC-** | Context Classification | CC-1: add context classifier to pipeline |
 
 ---
 
@@ -534,7 +536,7 @@ Our current validation checks IR PARAMETER direction/distribution (Level 1). It 
 - [x] **Directness distribution** — CHECKED. Healthy. Layer Zero 375 samples: mean=0.470, std=0.138, range=[0.23, 0.82], 0 floor/ceiling hits. Extreme A=0.05 + contentious → 0.971 is correct behavior (very disagreeable person challenged). No fix needed.
 - [x] **Baseline snapshot** — DONE. All current validation numbers saved with timestamp in `eval/baseline_snapshot_2026-03-21.json`. Compare future results against this after engine stabilizes.
 - [x] **Save/load persistence E2E** — DONE. 5 turns → save → load → continue. All v3 fields match (fatigue, mood, stress, engagement, stance_cache, prior_snapshot, anchor_stance). Stance cache survives round-trip (topic revisit after load returns cached stance). Post-load behavior continues correctly from saved state.
-- [ ] **PR #2 merge** — graft/merge-tier1 → claude/analyze-test-coverage-d93F4. All work done.
+- [x] **PR #2 merge** — DONE. Merged 2026-03-21. PR #3 merged analyze-test-coverage → main.
 - [x] **Branch archival** — DONE. 5 archive tags pushed. All 7 development branches deleted from remote. Only `main` remains. Tags: `archive/review-tier1-bugfixes`, `archive/explore-repo-KZTBj`, `archive/external-review`, `archive/general-session-VUY6r`, `archive/claude-md`. Recover via `git checkout archive/<name>`.
 - [x] **Set main as default** — DONE. GitHub default changed to `main`. Branch protection rules added.
 - [x] **Repo reorganization** — DONE. Root 27→10 files. Structure in `docs/REPO_STRUCTURE.md`.
@@ -599,3 +601,105 @@ The IR engine is better at controllability, measurement, consistency, and audita
 - [ ] **EV-2: Too many simultaneous constraints.** 30+ IR parameters overwhelm the LLM prompt. Consider: which constraints are essential vs which can be dropped without losing personality? Simplify the prompt to focus on the 5-6 most impactful parameters.
 - [ ] **EV-3: Compare with lighter IR.** Test a "thin IR" approach: only send stance + confidence + tone + verbosity to LLM (drop formality, directness, competence, disclosure numbers). Does personality matching improve?
 - [ ] **EV-4: The real comparison isn't IR vs prompt-only — it's IR+prompt.** The IR provides measurement and auditability that prompt-only can never have. The question is whether the IR can ALSO match prompt-only quality on personality expression. Not "which is better" but "can IR catch up on the one dimension where prompt wins?"
+
+### Fair Comparison Study (this session, 2026-03-21)
+
+Designed to fix the 8 flaws in the external study: fresh engine per scenario, same text task, no rating extraction, text marker comparison via Empath (194-category LIWC alternative).
+
+**Empath analysis — trait differentiation (who produces bigger high-vs-low personality differences?):**
+
+| Trait | Claude: Prompt | Claude: IR | GPT-4o: Prompt | GPT-4o: IR |
+|-------|---------------|------------|---------------|------------|
+| Extraversion | 1 | **6** | 3 | **4** |
+| Neuroticism | **3** | 2 | **4** | 1 |
+| Agreeableness | **5** | 1 | 3 | 3 |
+| Conscientiousness | **2** | 1 | **3** | 0 |
+| Openness | 0 | **4** | **3** | 1 |
+| **TOTAL** | **11** | **14** | **16** | **9** |
+
+**Key findings:**
+- IR wins on Claude (14-11), prompt wins on GPT-4o (16-9). **IR is model-dependent.**
+- IR dominates E and O on both models (cognitive/engagement traits).
+- Prompt dominates N and A on both models (emotional/interpersonal traits).
+- IR's constraint-heavy prompt works with Claude (designed for it) but hurts with GPT-4o.
+
+**Files:** `eval/fair_comparison.py`, `eval/fair_comparison_openai.py`
+**Design review:** `docs/EXTERNAL_VALIDATION_REVIEW.md`
+
+---
+
+## #1 Architectural Finding: Missing Context Classification
+
+> Discovered 2026-03-21. Traced back through all 15 session findings.
+> **10 out of 15 issues (66%) trace to this single root cause.**
+
+### The problem
+
+The IR pipeline treats EVERY user input as a **knowledge query**. It runs the same pipeline regardless of whether the input is:
+- "What do you think about quantum physics?" (knowledge question)
+- "You're at a party where you know nobody" (social situation)
+- "How are you feeling tonight?" (emotional check-in)
+- "A friend asks for a favor" (interpersonal dilemma)
+
+For non-knowledge inputs, the pipeline produces nonsensical constraints:
+- CONFIDENCE: 42% for an extrovert at a party (based on domain proficiency)
+- KNOWLEDGE CLAIM: "speculative" for socializing
+- STANCE: "I value autonomy" for a party scenario
+- UNCERTAINTY: "let uncertainty show" for going to a party
+- VERBOSITY: BRIEF for an extrovert in a social setting
+
+### What it caused (10 of 15 findings)
+
+```
+"Everything is a knowledge query"
+          │
+    ┌─────┼─────┬────────────┬──────────────┬────────────────┐
+    │     │     │            │              │                │
+    ▼     ▼     ▼            ▼              ▼                ▼
+  Low    Wrong  Wrong       Wrong          Wrong            IR loses
+  conf   stance claim type  uncertainty    verbosity        on A/N
+  for    for    for social  for social     for E in         traits
+  all    social situations  situations     social           (both
+  Qs     Qs                                context          models)
+    │
+    ▼
+Band-aids applied:
+CF-1 self-efficacy    (not fixed)  (not fixed)  (not fixed)   PA-8
+```
+
+### The fixes we applied were band-aids
+
+| Fix applied | What it patched | Root cause |
+|---|---|---|
+| CF-1/2/3/4: self-efficacy baseline | Low confidence on non-knowledge Qs | Missing context: social Qs don't need domain proficiency |
+| PA-8: competence → directness | Chef 98% direct on off-topic | Missing context: opinion Qs aren't competence Qs |
+| Descriptive directives | Prescriptive word lists | Helped, but doesn't fix wrong constraints being sent |
+
+### What's needed: Context Classifier (CC-1)
+
+A classifier at the top of Stage 2 (Interpretation) that routes processing:
+
+```python
+context_type = classify_context(user_input)
+# → "knowledge" | "social" | "emotional" | "personal" | "adversarial"
+
+if context_type == "knowledge":
+    # current pipeline — domain, competence, claim type, uncertainty
+elif context_type == "social":
+    # skip competence/claim/uncertainty, amplify E/A, use personality directly
+elif context_type == "emotional":
+    # emphasize mood/N, disclosure, skip domain proficiency
+elif context_type == "personal":
+    # high disclosure, memory context, skip expertise assessment
+elif context_type == "adversarial":
+    # maintain character, resist, keep formality
+```
+
+### Action Items
+
+- [ ] **CC-1: Build context classifier.** Keyword-based first (simple), can upgrade to embedding/LLM later. Input: user_input string. Output: context type. Place: top of `interpretation.py` Stage 2.
+- [ ] **CC-2: Route pipeline by context.** Skip competence/claim/uncertainty for non-knowledge contexts. Amplify relevant personality traits per context type.
+- [ ] **CC-3: Context-aware verbosity.** High-E + social context → more verbose (not less). High-N + emotional context → more hedging. Context should modulate verbosity, not just personality + fatigue.
+- [ ] **CC-4: Context-aware stance.** Social situations don't need value-driven stances. Personal questions should use memory/disclosure, not Schwartz values.
+- [ ] **CC-5: Re-run fair comparison after context classifier.** The real test: does context-aware IR beat prompt-only on BOTH Claude and GPT-4o?
+- [ ] **CC-6: Remove band-aids.** Once CC-1/2/3/4 are in place, the self-efficacy baseline (CF-1) and competence modulation (PA-8) may become unnecessary. The equations should produce correct values because they receive correct context, not because we added guardrails.
