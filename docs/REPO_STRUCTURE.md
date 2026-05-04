@@ -16,7 +16,9 @@ persona-engine/
 ├── CODE_OF_CONDUCT.md               # Community standards
 ├── ARCHITECTURE.md                  # Engine architecture overview
 ├── ARCHITECTURE-layer-zero.md       # Layer Zero architecture
-├── GRAFT.md                         # Operation tracker (active reference)
+├── .graft                           # Pointer to the active branch tracker
+├── GRAFT.md                         # Historical/mainline operation tracker
+├── kai_graft.md                     # Active tracker for research-ir-market-wedge
 │
 ├── persona_engine/                  # Core engine source
 │   ├── __init__.py
@@ -175,4 +177,6 @@ These files were deleted from the repository (not moved):
 | CODE_OF_CONDUCT.md | Community standard |
 | ARCHITECTURE.md | Core architecture — important for understanding |
 | ARCHITECTURE-layer-zero.md | Layer Zero architecture — paired with above |
-| GRAFT.md | Active operation tracker — still referenced across sessions |
+| GRAFT.md | Historical/mainline operation tracker |
+| kai_graft.md | Active operation tracker for `research-ir-market-wedge` |
+| .graft | Pointer file naming the active tracker |

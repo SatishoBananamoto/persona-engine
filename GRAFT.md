@@ -1,5 +1,9 @@
 # The Graft — Operation Tracker
 
+> Branch note (2026-05-04): active work for `research-ir-market-wedge`
+> is tracked in `kai_graft.md`. `.graft` points to that file on this branch.
+> Treat this file as historical/mainline context unless the branch is promoted.
+
 > This file is the SINGLE SOURCE OF TRUTH for persona-engine development.
 > Updated before every step, after every step. If it's not here, it didn't happen.
 
