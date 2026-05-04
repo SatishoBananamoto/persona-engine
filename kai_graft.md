@@ -55,21 +55,18 @@ Source of truth for this branch:
 - `kai_graft.md` tracks active branch work
 - `GRAFT.md` remains historical/mainline context
 
-### Current Chunk: Exit gate and handoff
+### Current Chunk: Next decision
 
 Intent:
-Run final repo checks and hand off the branch state without hiding the remaining
-dirty inherited artifacts.
+Decide the next branch slice after the first ResearchIR implementation.
 
 Files expected:
-- planner/schema/generation ResearchIR plumbing
-- eval/product_value harness files
-- targeted tests
-- docs and tracker updates
+- no files touched until the next chunk is chosen
 
-Verification:
-- exit gate before handoff
-- repo status confirms only inherited/unrelated files remain dirty
+Options:
+- Attack the remaining segment-differentiation gate in the template smoke.
+- Run a live/human review pass before changing generation again.
+- Clean/archive inherited eval artifacts if they are no longer useful.
 
 ---
 
@@ -187,3 +184,23 @@ Staging boundary:
 Verification after commit:
 - `git status --short --branch` shows branch `research-ir-market-wedge` with
   only inherited/unrelated dirty files remaining.
+
+### 2026-05-04 - Chunk 4 - Exit gate
+
+Status: completed
+
+Command:
+- `bash /home/satishocoin/.codex/skills/done/scripts/exit_gate.sh /home/satishocoin/persona-engine`
+
+Result:
+- Active tracker resolved through `.graft` to `kai_graft.md`.
+- Recent commits visible: `1d7a593`, `7bd18ca`, `5412637`.
+- Remaining dirty state is inherited/unrelated: `GRAFT.md`, root eval scripts/results,
+  experiment artifacts, and historical `eval/product_value/results_haiku_*` output folders.
+
+Cleared for handoff:
+- Code/docs/tests for the current ResearchIR slice are committed.
+- Verification evidence is recorded in this tracker.
+- No history-bearing files were deleted.
+- Product-value smoke did not produce a fake proceed signal; it still fails the
+  segment-differentiation gate.
