@@ -8,13 +8,18 @@ from __future__ import annotations
 import logging
 from typing import Any, TYPE_CHECKING
 
-from persona_engine.planner.context_classifier import KNOWLEDGE, classify_context
+from persona_engine.planner.context_classifier import (
+    ENTERPRISE_RESEARCH,
+    KNOWLEDGE,
+    classify_context,
+)
 from persona_engine.planner.domain_detection import (
     compute_topic_relevance,
     detect_domain,
 )
 from persona_engine.planner.engine_config import DEFAULT_CONFIG
 from persona_engine.planner.intent_analyzer import analyze_intent
+from persona_engine.planner.research_ir import build_research_ir
 from persona_engine.planner.stages.stage_results import InterpretationResult
 from persona_engine.planner.trace_context import TraceContext
 
@@ -91,6 +96,10 @@ class InterpretationStage:
         context.interaction_mode = inferred_mode
         context.goal = inferred_goal
 
+        research = None
+        if context_type == ENTERPRISE_RESEARCH:
+            research = build_research_ir(p.persona, context.user_input, ctx=ctx)
+
         # CC-2: Domain detection — skip for non-knowledge contexts
         if context_type == KNOWLEDGE:
             domain = context.domain or self.detect_domain(context.user_input, ctx=ctx)
@@ -165,6 +174,7 @@ class InterpretationStage:
             needs_clarification=needs_clarification,
             policy_modifications=policy_modifications,
             context_type=context_type,
+            research=research,
         )
 
     def detect_domain(self, user_input: str, ctx: TraceContext | None = None) -> str:

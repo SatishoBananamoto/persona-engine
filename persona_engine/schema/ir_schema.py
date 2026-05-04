@@ -456,6 +456,79 @@ class SafetyPlan(BaseModel):
 
 
 # ============================================================================
+# Research IR Extension
+# ============================================================================
+
+ResearchFocus = Literal[
+    "policy_reaction",
+    "adoption_blockers",
+    "trust_conditions",
+    "workaround_risk",
+    "general_research",
+]
+
+ClaimBasis = Literal[
+    "direct_workflow_experience",
+    "adjacent_professional_experience",
+    "general_workplace_experience",
+    "low_basis",
+]
+
+
+class ResearchIR(BaseModel):
+    """Compact contract for enterprise research simulation turns."""
+
+    focus: ResearchFocus = Field(
+        default="general_research",
+        description="Primary research signal requested by the turn",
+    )
+
+    stakeholder_role: str = Field(
+        default="stakeholder",
+        description="Persona's simulated stakeholder role for this research turn",
+    )
+
+    workflow_exposure: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="How directly the persona's work is exposed to the rollout",
+    )
+
+    claim_basis: ClaimBasis = Field(
+        default="general_workplace_experience",
+        description="Evidence boundary for this simulated stakeholder response",
+    )
+
+    likely_objections: list[str] = Field(
+        default_factory=list,
+        description="Likely objections this stakeholder segment would surface",
+    )
+
+    trust_conditions: list[str] = Field(
+        default_factory=list,
+        description="Conditions that would make adoption more credible",
+    )
+
+    adoption_blockers: list[str] = Field(
+        default_factory=list,
+        description="Operational blockers that could prevent adoption",
+    )
+
+    workaround_risk: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Risk that stakeholders comply superficially or route around the rollout",
+    )
+
+    evidence_boundary: str = Field(
+        default="simulated stakeholder hypothesis",
+        description="Plain-language boundary on what the simulation can claim",
+    )
+
+
+# ============================================================================
 # Main IR Model
 # ============================================================================
 
@@ -520,7 +593,12 @@ class IntermediateRepresentation(BaseModel):
     # Context classification (CC-1)
     context_type: str = Field(
         default="knowledge",
-        description="What kind of input drives the response: knowledge, opinion, social, emotional, personal, adversarial"
+        description="What kind of input drives the response: knowledge, opinion, social, emotional, personal, adversarial, enterprise_research"
+    )
+
+    research: ResearchIR | None = Field(
+        default=None,
+        description="Optional compact enterprise research contract for simulated stakeholder turns"
     )
 
     # Metadata

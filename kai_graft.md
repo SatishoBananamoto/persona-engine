@@ -55,29 +55,23 @@ Source of truth for this branch:
 - `kai_graft.md` tracks active branch work
 - `GRAFT.md` remains historical/mainline context
 
-### Current Chunk: Tracker Stabilization
+### Current Chunk: Verification and diff review
 
 Intent:
-Create a branch-local tracker and make the active tracker unambiguous before behavior changes.
+Prove the ResearchIR branch slice with targeted tests, template eval, and a
+clean diff review before widening the product surface.
 
 Files expected:
-- `kai_graft.md`
-- `.graft`
-- `GRAFT.md`
-- `docs/REPO_STRUCTURE.md`
+- planner/schema/generation ResearchIR plumbing
+- eval/product_value harness files
+- targeted tests
+- docs and tracker updates
 
 Verification:
-- `git status --short --branch`
-- `sed -n l .graft`
-- `git diff --name-status`
-
-### Next Chunk
-
-Harden `eval/product_value/run_eval.py` before adding ResearchIR:
-- fail closed when required baselines/negative controls are missing
-- separate output quality, trace correctness, causal sensitivity, safety, and segment specificity
-- fix overlapping competence bands and raw forbidden-marker matching
-- make negative controls invalid by construction
+- compile changed Python files
+- targeted classifier and product-value tests
+- offline template eval smoke
+- exit gate before handoff
 
 ---
 
@@ -99,3 +93,81 @@ Verification:
 - `git status --short --branch` showed branch `research-ir-market-wedge`.
 - `sed -n l .graft` showed `kai_graft.md$`.
 - `git diff --cached --name-status` showed only tracker/doc files staged for the first commit.
+
+### 2026-05-04 - Chunk 1 - Eval gate hardening
+
+Status: completed
+
+Intent:
+Stop incomplete or trace-presence-only eval runs from producing a proceed signal.
+
+Files changed:
+- `eval/product_value/run_eval.py`
+- `tests/test_product_value_eval.py`
+
+Changes:
+- Added required-method matrix validation.
+- Made proceed gates depend on matrix completeness.
+- Split trace presence from trace correctness.
+- Changed product/causal scoring so bad IR is not rewarded just for citations.
+- Made competence bands non-overlapping.
+- Added negation-aware forbidden-marker matching.
+- Added report matrix status and `--run-type`.
+
+Verification:
+- `python3 -m compileall eval/product_value/run_eval.py`
+- `python3 -m pytest -q tests/test_product_value_eval.py` -> 6 passed
+- `python3 -m eval.product_value.run_eval --backend template --repeats 1 --out /tmp/codex-persona-eval-hardening` -> `proceed_signal: false`, `matrix_complete: true`
+- `python3 -m eval.product_value.run_eval --backend template --methods schema_driven --repeats 1 --out /tmp/codex-persona-eval-partial` -> `proceed_signal: false`, `matrix_complete: false`
+
+Next:
+Add `enterprise_research` context and compact optional `ResearchIR`.
+
+### 2026-05-04 - Chunk 2 - Enterprise research context and ResearchIR
+
+Status: completed
+
+Intent:
+Add the smallest useful enterprise rollout-risk contract without replacing the
+generic persona IR.
+
+Files changed:
+- `persona_engine/planner/context_classifier.py`
+- `persona_engine/planner/research_ir.py`
+- `persona_engine/schema/ir_schema.py`
+- `persona_engine/planner/stages/interpretation.py`
+- `persona_engine/planner/stages/behavioral.py`
+- `persona_engine/planner/stages/behavioral_metrics.py`
+- `persona_engine/planner/stages/knowledge.py`
+- `persona_engine/planner/stages/finalization.py`
+- `persona_engine/generation/prompt_builder.py`
+- `persona_engine/generation/llm_adapter.py`
+- `persona_engine/__init__.py`
+- `persona_engine/schema/__init__.py`
+- `tests/test_context_classifier.py`
+- `tests/test_product_value_eval.py`
+- `docs/ir_reference.md`
+- `docs/PIPELINE_FLOWCHARTS.md`
+- `docs/REPO_STRUCTURE.md`
+- `eval/product_value/README.md`
+
+Changes:
+- Added `enterprise_research` context detection gated on workplace actor,
+  rollout/tool language, and research/adoption intent.
+- Added optional `ResearchIR` with focus, stakeholder role, workflow exposure,
+  claim basis, likely objections, trust conditions, adoption blockers,
+  workaround risk, and evidence boundary.
+- Routed ResearchIR through interpretation, behavioral confidence/competence,
+  knowledge claim boundaries, final IR assembly, prompt generation, template
+  generation, and eval serialization.
+- Enterprise research responses now remain stakeholder hypotheses and do not
+  become `domain_expert` claims by default.
+
+Verification:
+- `python3 -m compileall persona_engine/planner/research_ir.py persona_engine/schema/ir_schema.py persona_engine/planner/context_classifier.py persona_engine/planner/stages/interpretation.py persona_engine/planner/stages/behavioral.py persona_engine/planner/stages/behavioral_metrics.py persona_engine/planner/stages/knowledge.py persona_engine/planner/stages/finalization.py persona_engine/generation/prompt_builder.py persona_engine/generation/llm_adapter.py eval/product_value/run_eval.py`
+- `python3 -m pytest -q tests/test_context_classifier.py tests/test_product_value_eval.py` -> 42 passed, 12 warnings
+- `python3 -m eval.product_value.run_eval --backend template --repeats 1 --out /tmp/codex-persona-research-ir` -> matrix complete, correct IR beats prompt-only/no-IR/negative controls, proceed signal remains false because segment differentiation did not beat prompt-only in the template smoke
+
+Next:
+Review diffs/staging boundaries and commit the eval + ResearchIR chunk without
+sweeping inherited dirty files.

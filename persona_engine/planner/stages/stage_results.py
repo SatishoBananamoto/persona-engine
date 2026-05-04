@@ -12,6 +12,7 @@ from typing import Any
 
 from persona_engine.schema.ir_schema import (
     KnowledgeClaimType,
+    ResearchIR,
     Tone,
     UncertaintyAction,
     Verbosity,
@@ -30,6 +31,7 @@ class InterpretationResult:
     needs_clarification: bool
     policy_modifications: dict[str, Any]
     context_type: str = "knowledge"  # CC-1: what kind of input drives the response
+    research: ResearchIR | None = None
     # Injected by orchestrator after foundation stage
     memory_context: dict[str, Any] = field(default_factory=dict)
 

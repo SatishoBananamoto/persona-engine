@@ -70,11 +70,11 @@ flowchart TD
 
     POST[/"evolve_state_post_turn<br/>mood drift, fatigue, stress decay,<br/>engagement, noise"/]
 
-    OUTPUT[/"IntermediateRepresentation<br/>conversation_frame, response_structure,<br/>communication_style, knowledge_disclosure,<br/>citations, safety_plan, memory_ops,<br/>behavioral_directives, personality_language"/]
+    OUTPUT[/"IntermediateRepresentation<br/>conversation_frame, response_structure,<br/>communication_style, knowledge_disclosure,<br/>context_type, optional research,<br/>citations, safety_plan, memory_ops,<br/>behavioral_directives, personality_language"/]
 
     INPUT --> S1
     S1 -->|"TraceContext, turn_seed,<br/>MemoryOps, memory_context"| S2
-    S2 -->|"InterpretationResult<br/>topic_relevance, domain, proficiency,<br/>expert_allowed, user_intent,<br/>bias_modifiers on planner"| S3
+    S2 -->|"InterpretationResult<br/>topic_relevance, domain, proficiency,<br/>expert_allowed, user_intent,<br/>context_type, optional research,<br/>bias_modifiers on planner"| S3
     S3 -->|"BehavioralMetricsResult<br/>elasticity, stance, confidence,<br/>competence, tone, verbosity,<br/>formality, directness,<br/>trait/cognitive guidance,<br/>adaptation, schema_effect"| S4
     S4 -->|"KnowledgeSafetyResult<br/>disclosure_level,<br/>uncertainty_action,<br/>claim_type"| S5
     S5 --> OUTPUT

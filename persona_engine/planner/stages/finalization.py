@@ -214,6 +214,7 @@ class FinalizationStage:
             behavioral_directives=behavioral_directives,
             personality_language=personality_language,
             context_type=foundation.context_type,
+            research=foundation.research,
             turn_id=f"{context.conversation_id}_turn_{context.turn_number}",
             seed=turn_seed,
         )

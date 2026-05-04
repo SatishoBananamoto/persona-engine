@@ -30,6 +30,7 @@ from persona_engine.schema.ir_schema import (
     InteractionMode,
     IntermediateRepresentation,
     KnowledgeAndDisclosure,
+    ResearchIR,
     ResponseStructure,
     Tone,
     UncertaintyAction,
@@ -67,6 +68,7 @@ __all__ = [
     "ResponseStructure",
     "CommunicationStyle",
     "KnowledgeAndDisclosure",
+    "ResearchIR",
     # IR enums
     "InteractionMode",
     "ConversationGoal",

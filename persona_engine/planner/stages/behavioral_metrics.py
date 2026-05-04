@@ -11,13 +11,14 @@ from typing import Any, TYPE_CHECKING
 
 from persona_engine.behavioral import MAX_BIAS_IMPACT
 from persona_engine.planner.context_classifier import (
-    ADVERSARIAL, EMOTIONAL, KNOWLEDGE, OPINION, PERSONAL, SOCIAL,
+    ADVERSARIAL, EMOTIONAL, ENTERPRISE_RESEARCH, KNOWLEDGE, OPINION, PERSONAL, SOCIAL,
 )
 from persona_engine.planner.domain_detection import compute_domain_adjacency
 from persona_engine.planner.engine_config import DEFAULT_CONFIG
 from persona_engine.planner.trace_context import TraceContext, clamp01
 
 if TYPE_CHECKING:
+    from persona_engine.schema.ir_schema import ResearchIR
     from persona_engine.planner.turn_planner import TurnPlanner
 
 # Config aliases
@@ -105,6 +106,7 @@ class MetricsMixin:
         ctx: TraceContext,
         memory_context: dict[str, Any] | None = None,
         context_type: str = KNOWLEDGE,
+        research: "ResearchIR | None" = None,
     ) -> float:
         """Compute response confidence.
 
@@ -130,6 +132,17 @@ class MetricsMixin:
         elif context_type == EMOTIONAL:
             base = 0.40 - bf.neuroticism * 0.15 + bf.extraversion * 0.05
             base_label = f"Emotional confidence from N/E (N={bf.neuroticism:.2f}, E={bf.extraversion:.2f})"
+        elif context_type == ENTERPRISE_RESEARCH and research:
+            base = (
+                0.35
+                + research.workflow_exposure * 0.35
+                + bf.conscientiousness * 0.08
+                - bf.neuroticism * 0.08
+            )
+            base_label = (
+                "Enterprise research confidence from workflow exposure "
+                f"({research.workflow_exposure:.2f}) and C/N"
+            )
         else:
             # personal, adversarial — neutral baseline
             base = 0.45
@@ -142,18 +155,41 @@ class MetricsMixin:
             effect=base_label,
         )
 
-        adjusted = p.traits.get_confidence_modifier(confidence)
-        confidence = ctx.num(
-            source_type="trait",
-            source_id="confidence_traits",
-            target_field="response_structure.confidence",
-            operation="add",
-            before=confidence,
-            after=adjusted,
-            effect="Traits adjust confidence (conscientiousness/neuroticism)",
-            weight=0.8,
-            reason=f"C={p.persona.psychology.big_five.conscientiousness:.2f}, N={p.persona.psychology.big_five.neuroticism:.2f}"
-        )
+        if context_type == KNOWLEDGE:
+            # Knowledge: full modifier chain (self-efficacy + DK curve + personality)
+            adjusted = p.traits.get_confidence_modifier(confidence)
+            confidence = ctx.num(
+                source_type="trait",
+                source_id="confidence_traits",
+                target_field="response_structure.confidence",
+                operation="add",
+                before=confidence,
+                after=adjusted,
+                effect="Traits adjust confidence (self-efficacy + DK + C/N)",
+                weight=0.8,
+                reason=f"C={bf.conscientiousness:.2f}, N={bf.neuroticism:.2f}"
+            )
+        else:
+            # CC-6: Non-knowledge — personality base is already context-specific.
+            # Apply ONLY the bounded C/N modifier (CF-3), not the full
+            # self-efficacy + DK chain which would override our base.
+            c_mod = (bf.conscientiousness - 0.5) * 0.12   # ±0.06
+            n_mod = -(bf.neuroticism - 0.5) * 0.08        # ±0.04
+            personality_mod = max(-0.10, min(0.10, c_mod + n_mod))
+            if abs(personality_mod) > 0.001:
+                before_mod = confidence
+                confidence = confidence + personality_mod
+                ctx.num(
+                    source_type="trait",
+                    source_id="confidence_personality_mod",
+                    target_field="response_structure.confidence",
+                    operation="add",
+                    before=before_mod,
+                    after=confidence,
+                    effect=f"Bounded personality modifier: {personality_mod:+.3f}",
+                    weight=0.6,
+                    reason=f"C={bf.conscientiousness:.2f}, N={bf.neuroticism:.2f}, context={context_type}",
+                )
 
         adjusted2 = p.cognitive.get_confidence_adjustment(confidence)
         confidence = ctx.num(
@@ -240,6 +276,7 @@ class MetricsMixin:
         persona_domains: list[dict],
         ctx: TraceContext,
         context_type: str = KNOWLEDGE,
+        research: "ResearchIR | None" = None,
     ) -> float:
         """Compute how equipped the persona is to engage with this topic.
 
@@ -251,7 +288,24 @@ class MetricsMixin:
         """
         p = self.planner
 
-        # CC-2: Non-knowledge contexts get neutral competence
+        if context_type == ENTERPRISE_RESEARCH and research:
+            competence = ctx.base(
+                field_name="competence.research_workflow_exposure",
+                target_field="response_structure.competence",
+                value=research.workflow_exposure,
+                effect=(
+                    "Enterprise research competence from direct workflow "
+                    f"exposure ({research.workflow_exposure:.2f})"
+                ),
+            )
+            return clamp01(
+                ctx,
+                field_name="competence",
+                target_field="response_structure.competence",
+                value=competence,
+            )
+
+        # CC-2: Other non-knowledge contexts get neutral competence
         if context_type != KNOWLEDGE:
             competence = ctx.base(
                 field_name="competence.context_neutral",

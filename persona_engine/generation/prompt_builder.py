@@ -119,6 +119,9 @@ Do NOT break character or acknowledge that you are an AI.
         # SITUATION — context-dependent framing
         parts.append(f"SITUATION: {self._situation_framing(ir)}")
 
+        if ir.research:
+            parts.append(f"RESEARCH SIGNAL: {self._research_signal(ir)}")
+
         # RESPONSE — minimal behavioral cues
         style = ir.communication_style
         response_parts = [
@@ -160,8 +163,29 @@ Do NOT break character or acknowledge that you are an AI.
             return "Someone's asking about you personally. Share what feels right."
         elif context_type == "adversarial":
             return "Your view is being challenged. Stay in character and hold your ground."
+        elif context_type == "enterprise_research":
+            return (
+                "You're responding as a plausible workplace stakeholder in an "
+                "internal research simulation. Surface adoption risks without "
+                "claiming measured market evidence."
+            )
         else:
             return self._describe_confidence(structure.confidence)
+
+    def _research_signal(self, ir: IntermediateRepresentation) -> str:
+        """Format compact enterprise research signal for generation."""
+        research = ir.research
+        if not research:
+            return ""
+        objections = ", ".join(research.likely_objections[:3])
+        blockers = ", ".join(research.adoption_blockers[:3])
+        trust = ", ".join(research.trust_conditions[:3])
+        return (
+            f"role={research.stakeholder_role}; focus={research.focus}; "
+            f"basis={research.claim_basis}; exposure={research.workflow_exposure:.2f}; "
+            f"objections={objections}; trust_conditions={trust}; "
+            f"blockers={blockers}; boundary={research.evidence_boundary}"
+        )
     
     def _format_tone(self, tone: Tone) -> str:
         """Format tone enum to readable description."""
@@ -610,6 +634,29 @@ def build_ir_prompt(
     claim_prompt = CLAIM_TYPE_PROMPTS.get(kd.knowledge_claim_type.value, "")
     if claim_prompt:
         content_parts.append(claim_prompt)
+
+    if ir.research:
+        research = ir.research
+        content_parts.append(
+            "Research simulation boundary: "
+            f"{research.evidence_boundary}. Speak as a {research.stakeholder_role} "
+            f"from {research.claim_basis}."
+        )
+        if research.likely_objections:
+            content_parts.append(
+                "Surface likely objections: "
+                + ", ".join(research.likely_objections[:3])
+            )
+        if research.trust_conditions:
+            content_parts.append(
+                "Name trust conditions: "
+                + ", ".join(research.trust_conditions[:3])
+            )
+        if research.adoption_blockers:
+            content_parts.append(
+                "Name adoption blockers: "
+                + ", ".join(research.adoption_blockers[:3])
+            )
 
     sections.append(
         "RESPONSE GUIDANCE:\n" + "\n".join(f"- {p}" for p in content_parts)

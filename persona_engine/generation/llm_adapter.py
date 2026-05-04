@@ -405,6 +405,9 @@ class TemplateAdapter(BaseLLMAdapter):
         if verbosity != "brief" and rationale:
             parts.append(f"This is because {rationale[0].lower()}{rationale[1:]}.")
 
+        if ir.research:
+            parts.extend(self._research_sentences(ir.research))
+
         # 4. Uncertainty action
         if uncertainty == "ask_clarifying":
             parts.append("Could you tell me more about what specifically you'd like to know?")
@@ -436,6 +439,32 @@ class TemplateAdapter(BaseLLMAdapter):
                 text += "."
 
         return text
+
+    @staticmethod
+    def _research_sentences(research: Any) -> list[str]:
+        """Render enterprise research fields in the rule-based backend."""
+        sentences = [
+            (
+                "For this rollout, my concerns would center on "
+                + ", ".join(research.likely_objections[:3])
+                + "."
+            ),
+            (
+                "I would trust it more if there were "
+                + ", ".join(research.trust_conditions[:3])
+                + "."
+            ),
+            (
+                "The adoption blockers are "
+                + ", ".join(research.adoption_blockers[:3])
+                + "."
+            ),
+            (
+                f"The workaround risk feels about {research.workaround_risk:.2f}, "
+                f"and I would treat this as {research.evidence_boundary}."
+            ),
+        ]
+        return sentences
 
     @staticmethod
     def _formalize(text: str) -> str:

@@ -19,7 +19,11 @@ from persona_engine.behavioral.social_cognition import (
     AdaptationDirectives,
     SchemaEffect,
 )
-from persona_engine.planner.context_classifier import EMOTIONAL, KNOWLEDGE
+from persona_engine.planner.context_classifier import (
+    EMOTIONAL,
+    ENTERPRISE_RESEARCH,
+    KNOWLEDGE,
+)
 from persona_engine.planner.engine_config import DEFAULT_CONFIG
 from persona_engine.planner.stages.stage_results import (
     BehavioralMetricsResult,
@@ -170,6 +174,18 @@ class KnowledgeSafetyStage:
                 proficiency, uncertainty_action, domain, user_input=context.user_input
             )
             claim_enum = KnowledgeClaimType(knowledge_claim_type)
+        elif context_type == ENTERPRISE_RESEARCH and foundation.research:
+            # Enterprise research contexts simulate a stakeholder hypothesis.
+            # They should not promote the persona to domain expert by default.
+            if foundation.research.claim_basis == "low_basis":
+                claim_enum = KnowledgeClaimType.SPECULATIVE
+            else:
+                claim_enum = KnowledgeClaimType.PERSONAL_EXPERIENCE
+
+            if foundation.research.workflow_exposure >= 0.45:
+                uncertainty_action = UncertaintyAction.ANSWER
+            else:
+                uncertainty_action = UncertaintyAction.HEDGE
         else:
             # Non-knowledge contexts: persona is speaking from personal
             # experience/opinion, not claiming domain expertise.

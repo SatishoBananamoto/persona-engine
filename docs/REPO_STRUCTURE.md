@@ -1,6 +1,6 @@
 # Repository Structure
 
-> Last updated: 2026-03-21
+> Last updated: 2026-05-04
 
 ## Current Structure (post-reorganization)
 
@@ -45,6 +45,7 @@ persona-engine/
 │   │   ├── stance_generator.py      # Compositional stance generation
 │   │   ├── intent_analyzer.py       # Intent + mode detection
 │   │   ├── domain_detection.py      # Domain + proficiency scoring
+│   │   ├── research_ir.py           # Enterprise rollout-risk ResearchIR builder
 │   │   ├── domain_registry.py       # Domain keyword registry
 │   │   ├── trace_context.py         # Citation trail
 │   │   ├── engine_config.py         # Pipeline configuration
@@ -87,7 +88,7 @@ persona-engine/
 │       ├── big_five.py              # Occupation → Big Five mapping
 │       └── values.py                # Schwartz value generation
 │
-├── tests/                           # Test suite (2,649 tests)
+├── tests/                           # Test suite
 ├── personas/                        # 12 shipped persona YAML files
 ├── examples/                        # 11 usage examples
 ├── benchmarks/                      # Performance benchmarks
@@ -95,6 +96,7 @@ persona-engine/
 │   └── calibration_report.txt       # Psych literature calibration
 │
 ├── eval/                            # Validation suites
+│   ├── product_value/               # Enterprise research product-value gate
 │   ├── persona_eval.py              # 5 statistical suites (scipy)
 │   ├── benchmark_profiles.py        # 8-profile direction checks
 │   ├── dynamic_validation.py        # 15 multi-turn checks

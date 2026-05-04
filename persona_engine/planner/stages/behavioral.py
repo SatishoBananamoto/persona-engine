@@ -124,7 +124,13 @@ class BehavioralMetricsStage(MetricsMixin, StyleMixin, GuidanceMixin):
         )
 
         # Confidence (+ cross-turn smoothing)
-        confidence = self.compute_confidence(proficiency, ctx, memory_context=foundation.memory_context, context_type=context_type)
+        confidence = self.compute_confidence(
+            proficiency,
+            ctx,
+            memory_context=foundation.memory_context,
+            context_type=context_type,
+            research=foundation.research,
+        )
         if p._prior_snapshot:
             before_smooth = confidence
             confidence = _smooth(p._prior_snapshot.confidence, confidence, CROSS_TURN_INERTIA)
@@ -141,7 +147,14 @@ class BehavioralMetricsStage(MetricsMixin, StyleMixin, GuidanceMixin):
                     reason=f"inertia={CROSS_TURN_INERTIA}",
                 )
 
-        competence = self.compute_competence(domain, proficiency, persona_domains, ctx, context_type=context_type)
+        competence = self.compute_competence(
+            domain,
+            proficiency,
+            persona_domains,
+            ctx,
+            context_type=context_type,
+            research=foundation.research,
+        )
 
         # Cross-turn inertia smoothing — competence
         if p._prior_snapshot:

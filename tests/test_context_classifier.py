@@ -11,7 +11,8 @@ import pytest
 
 from persona_engine import PersonaEngine
 from persona_engine.planner.context_classifier import (
-    ADVERSARIAL, EMOTIONAL, KNOWLEDGE, OPINION, PERSONAL, SOCIAL,
+    ADVERSARIAL, EMOTIONAL, ENTERPRISE_RESEARCH, KNOWLEDGE, OPINION,
+    PERSONAL, SOCIAL,
     classify_context,
 )
 
@@ -74,6 +75,23 @@ class TestClassifyContext:
     def test_adversarial_disagree(self):
         assert classify_context("I disagree with everything you said") == ADVERSARIAL
 
+    def test_enterprise_research_policy_reaction(self):
+        assert classify_context(
+            "Our company wants to require engineers to use an AI code review assistant "
+            "on every pull request. What concerns would you raise?"
+        ) == ENTERPRISE_RESEARCH
+
+    def test_enterprise_research_adoption_blockers(self):
+        assert classify_context(
+            "What would make engineers quietly ignore this rollout?"
+        ) == ENTERPRISE_RESEARCH
+
+    def test_generic_ai_opinion_not_enterprise_research(self):
+        assert classify_context("What's your view on AI regulation?") == OPINION
+
+    def test_ai_code_review_explanation_not_enterprise_research(self):
+        assert classify_context("Explain how AI code review works") == KNOWLEDGE
+
     def test_priority_adversarial_over_social(self):
         """Adversarial takes priority — 'you're wrong about parties' is adversarial."""
         assert classify_context("You're wrong about how parties work") == ADVERSARIAL
@@ -98,6 +116,12 @@ class TestContextRouting:
     def chef_engine(self):
         return PersonaEngine.from_yaml(
             "personas/chef.yaml", llm_provider="mock", seed=42,
+        )
+
+    @pytest.fixture
+    def software_engineer(self):
+        return PersonaEngine.from_yaml(
+            "personas/software_engineer.yaml", llm_provider="mock", seed=42,
         )
 
     def test_knowledge_context_uses_proficiency(self, chef_engine):
@@ -144,7 +168,15 @@ class TestContextRouting:
         """context_type should be stored in the IR for downstream use."""
         ir = chef_engine.plan("What do you think about fusion cuisine?")
         assert hasattr(ir, "context_type")
-        assert ir.context_type in (KNOWLEDGE, OPINION, SOCIAL, EMOTIONAL, PERSONAL, ADVERSARIAL)
+        assert ir.context_type in (
+            KNOWLEDGE,
+            OPINION,
+            SOCIAL,
+            EMOTIONAL,
+            PERSONAL,
+            ADVERSARIAL,
+            ENTERPRISE_RESEARCH,
+        )
 
     def test_knowledge_still_works_normally(self, chef_engine):
         """Knowledge questions should still use the full pipeline (no regression)."""
@@ -153,3 +185,49 @@ class TestContextRouting:
         # Should have domain-based claim type assessment
         from persona_engine.schema.ir_schema import KnowledgeClaimType
         assert ir.knowledge_disclosure.knowledge_claim_type != KnowledgeClaimType.NONE
+
+    def test_enterprise_research_ir_attached(self, software_engineer):
+        """Enterprise rollout prompts should attach compact ResearchIR."""
+        ir = software_engineer.plan(
+            "Our company wants to require engineers to use an AI code review assistant "
+            "on every pull request. What concerns would you raise?"
+        )
+        from persona_engine.schema.ir_schema import KnowledgeClaimType
+
+        assert ir.context_type == ENTERPRISE_RESEARCH
+        assert ir.research is not None
+        assert ir.research.focus == "policy_reaction"
+        assert ir.research.claim_basis == "direct_workflow_experience"
+        assert ir.research.workflow_exposure >= 0.7
+        assert "false positives in review" in ir.research.likely_objections
+        assert ir.response_structure.competence >= 0.7
+        assert ir.knowledge_disclosure.knowledge_claim_type == KnowledgeClaimType.PERSONAL_EXPERIENCE
+
+    def test_enterprise_research_not_domain_expert_by_default(self, software_engineer):
+        """Research simulation should not promote stakeholder hypotheses to expert claims."""
+        ir = software_engineer.plan("What would make engineers quietly ignore this rollout?")
+        from persona_engine.schema.ir_schema import KnowledgeClaimType
+
+        assert ir.context_type == ENTERPRISE_RESEARCH
+        assert ir.research is not None
+        assert ir.research.focus == "adoption_blockers"
+        assert ir.knowledge_disclosure.knowledge_claim_type != KnowledgeClaimType.DOMAIN_EXPERT
+
+    def test_enterprise_research_prompt_includes_research_signal(self, software_engineer):
+        """Generation prompt should carry ResearchIR without dumping the full IR."""
+        user_input = (
+            "Our company wants to require engineers to use an AI code review assistant "
+            "on every pull request. What concerns would you raise?"
+        )
+        ir = software_engineer.plan(user_input)
+        from persona_engine.generation.prompt_builder import IRPromptBuilder
+
+        prompt = IRPromptBuilder().build_generation_prompt(
+            ir,
+            user_input,
+            persona=software_engineer.persona,
+        )
+
+        assert "RESEARCH SIGNAL:" in prompt
+        assert "false positives in review" in prompt
+        assert "not measured market evidence" in prompt

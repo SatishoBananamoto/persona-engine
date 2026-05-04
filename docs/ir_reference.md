@@ -26,6 +26,17 @@ IntermediateRepresentation
 │   ├── disclosure_level      # 0-1: how much to share
 │   ├── uncertainty_action    # answer | hedge | refuse | ask_clarifying
 │   └── knowledge_claim_type  # domain_expert | personal_experience | ...
+├── context_type              # knowledge | opinion | ... | enterprise_research
+├── research                  # Optional ResearchIR for enterprise research turns
+│   ├── focus                 # policy_reaction | adoption_blockers | ...
+│   ├── stakeholder_role
+│   ├── workflow_exposure     # 0-1: directness of rollout exposure
+│   ├── claim_basis           # direct/adjacent/general/low basis
+│   ├── likely_objections
+│   ├── trust_conditions
+│   ├── adoption_blockers
+│   ├── workaround_risk
+│   └── evidence_boundary
 ├── citations                 # Full audit trail of every decision
 ├── safety_plan               # Invariant constraints, must_avoid
 ├── memory_ops
@@ -99,6 +110,28 @@ What to do when the persona doesn't know the answer:
 | `hedge` | Moderate proficiency, acknowledges limits |
 | `refuse` | Low proficiency, persona can't speak to this |
 | `ask_clarifying` | Needs more info before responding |
+
+### research (ResearchIR | None)
+
+Enterprise rollout-risk prompts attach a compact `ResearchIR` alongside the
+generic persona IR. This branch uses it for internal research simulation, not
+for broad market prediction.
+
+`ResearchIR` captures:
+
+- `focus`: what the researcher is asking for, such as `policy_reaction`,
+  `adoption_blockers`, `trust_conditions`, or `workaround_risk`.
+- `stakeholder_role`: the persona's work role.
+- `workflow_exposure`: how directly the rollout touches that role's work.
+- `claim_basis`: whether the answer is based on simulated direct workflow
+  experience, adjacent professional experience, general workplace experience,
+  or a low-basis hypothesis.
+- `likely_objections`, `trust_conditions`, and `adoption_blockers`: compact
+  research signals for follow-up human interviews.
+- `workaround_risk`: likelihood of superficial compliance or routing around
+  the rollout.
+- `evidence_boundary`: a plain-language reminder that the output is simulated
+  stakeholder signal, not measured market evidence.
 
 ## Citations
 
