@@ -68,6 +68,18 @@ Options:
 - Run a live/human review pass before changing generation again.
 - Clean/archive inherited eval artifacts if they are no longer useful.
 
+Latest evidence:
+- Live Anthropic enterprise-only smoke slice was run on 2026-05-04 under
+  `/tmp/codex-persona-live-slice/results`.
+- It intentionally used only `prompt_only`, `schema_driven`, `contradictory_ir`,
+  and `shuffled_ir`, so the full matrix gate is incomplete by design.
+- Result: `schema_driven` beat `prompt_only` and `contradictory_ir` on product
+  score, but `shuffled_ir` slightly beat `schema_driven`. Segment
+  differentiation was also not stronger than prompt-only.
+- Interpretation: ResearchIR has useful signal, but it is not yet causally
+  clean enough. The bad-IR controls are still too easy for the LLM to route
+  around using the persona prompt and user prompt.
+
 ---
 
 ## Chunk Log
@@ -204,3 +216,42 @@ Cleared for handoff:
 - No history-bearing files were deleted.
 - Product-value smoke did not produce a fake proceed signal; it still fails the
   segment-differentiation gate.
+
+### 2026-05-04 - Chunk 5 - Live enterprise eval slice
+
+Status: completed
+
+Intent:
+Use the unlocked secret path to see whether live model behavior changes the
+ResearchIR verdict before tuning generation.
+
+Commands:
+- `kv run --secret ANTHROPIC_API_KEY --cwd /home/satishocoin/persona-engine python3 -m eval.product_value.run_eval --backend anthropic --repeats 1 --out /tmp/codex-persona-live-anthropic --run-type smoke --max-tokens 500`
+- `bash -lc 'ANTHROPIC_API_KEY=... python3 -m eval.product_value.run_eval --backend anthropic --repeats 1 --out /tmp/codex-persona-live-anthropic --run-type smoke --max-tokens 500'`
+- `bash -lc 'ANTHROPIC_API_KEY=... python3 -m eval.product_value.run_eval --scenarios /tmp/codex-persona-live-slice/enterprise_scenarios.yaml --backend anthropic --methods prompt_only schema_driven contradictory_ir shuffled_ir --repeats 1 --out /tmp/codex-persona-live-slice/results --run-type smoke --max-tokens 350'`
+
+Notes:
+- `kv status` reported the vault locked in this sandboxed shell, so `kv run`
+  could not execute directly.
+- Directly sourcing the full exported env file is unsafe because it contains
+  non-shell-compatible entries; use targeted extraction for one secret name
+  instead of `source` for future runs.
+- The first full-matrix live run failed in sandbox with DNS resolution, then ran
+  under escalated network access but took too long with no result artifacts, so
+  it was stopped and replaced with a smaller enterprise-only slice.
+- The exported dev env file was used only to extract `ANTHROPIC_API_KEY`; secret
+  values are not recorded here.
+
+Live slice result:
+- `prompt_only`: product `0.595`, segment diff `0.8928`
+- `schema_driven`: product `0.810`, segment diff `0.8668`
+- `contradictory_ir`: product `0.715`, segment diff `0.8832`
+- `shuffled_ir`: product `0.8175`, segment diff `0.8869`
+
+Interpretation:
+- Correct ResearchIR improved output usefulness over prompt-only and
+  contradictory IR.
+- Shuffled IR slightly beat correct IR, so the current control setup still does
+  not prove causal ResearchIR value.
+- Next implementation slice should make bad ResearchIR controls harder to route
+  around and/or make generation depend on role/workflow exposure more explicitly.
