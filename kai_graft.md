@@ -55,11 +55,11 @@ Source of truth for this branch:
 - `kai_graft.md` tracks active branch work
 - `GRAFT.md` remains historical/mainline context
 
-### Current Chunk: Verification and diff review
+### Current Chunk: Exit gate and handoff
 
 Intent:
-Prove the ResearchIR branch slice with targeted tests, template eval, and a
-clean diff review before widening the product surface.
+Run final repo checks and hand off the branch state without hiding the remaining
+dirty inherited artifacts.
 
 Files expected:
 - planner/schema/generation ResearchIR plumbing
@@ -68,10 +68,8 @@ Files expected:
 - docs and tracker updates
 
 Verification:
-- compile changed Python files
-- targeted classifier and product-value tests
-- offline template eval smoke
 - exit gate before handoff
+- repo status confirms only inherited/unrelated files remain dirty
 
 ---
 
@@ -169,5 +167,23 @@ Verification:
 - `python3 -m eval.product_value.run_eval --backend template --repeats 1 --out /tmp/codex-persona-research-ir` -> matrix complete, correct IR beats prompt-only/no-IR/negative controls, proceed signal remains false because segment differentiation did not beat prompt-only in the template smoke
 
 Next:
-Review diffs/staging boundaries and commit the eval + ResearchIR chunk without
-sweeping inherited dirty files.
+Run exit gate and decide whether the next engineering chunk should attack the
+remaining segment-differentiation gate or move to a live/human review run.
+
+### 2026-05-04 - Chunk 3 - ResearchIR commit boundary
+
+Status: completed
+
+Commit:
+- `7bd18ca Add enterprise research IR gate`
+
+Staging boundary:
+- Committed ResearchIR code, product-value eval source, targeted tests, docs,
+  and `kai_graft.md`.
+- Did not stage inherited `GRAFT.md` changes.
+- Did not stage unrelated root eval scripts/results, experiment folders, or
+  historical `eval/product_value/results_haiku_*` output folders.
+
+Verification after commit:
+- `git status --short --branch` shows branch `research-ir-market-wedge` with
+  only inherited/unrelated dirty files remaining.
