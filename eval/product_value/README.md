@@ -68,7 +68,9 @@ ANTHROPIC_API_KEY=... python3 -m eval.product_value.run_eval --backend anthropic
 Agent-safe KV run:
 
 ```bash
-kv run --capability api:anthropic --max-calls 400 -- \
+kv grant approve --capability api:anthropic --max-calls 400 -- \
+  python3 -m eval.product_value.run_eval --backend anthropic --repeats 3
+kv run --capability api:anthropic -- \
   python3 -m eval.product_value.run_eval --backend anthropic --repeats 3
 ```
 

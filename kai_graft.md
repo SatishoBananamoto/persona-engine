@@ -136,9 +136,11 @@ Validation so far:
   raw-key-or-KV-capability guidance
 
 Next step:
-- Run one live KV-backed Anthropic smoke with `kv run --capability
-  api:anthropic --max-calls N -- python3 -m eval.product_value.run_eval ...`
-  from a user-approved/unlocked KV surface.
+- Run one live KV-backed Anthropic smoke from a user-approved/unlocked KV
+  surface: first approve with `kv grant approve --capability api:anthropic
+  --max-calls N -- python3 -m eval.product_value.run_eval ...`, then execute
+  with `kv run --capability api:anthropic -- python3 -m
+  eval.product_value.run_eval ...`.
 
 ### 2026-05-04 - Chunk 0 - Branch and tracker
 

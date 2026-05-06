@@ -168,7 +168,8 @@ When running generated or agent-authored scripts, prefer KV capability mode so
 the script receives `KV_CAP_TOKEN`, not `ANTHROPIC_API_KEY`:
 
 ```bash
-kv run --capability api:anthropic --max-calls 20 -- python3 your_script.py
+kv grant approve --capability api:anthropic --max-calls 20 -- python3 your_script.py
+kv run --capability api:anthropic -- python3 your_script.py
 ```
 
 ## Error Handling
