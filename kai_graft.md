@@ -55,18 +55,30 @@ Source of truth for this branch:
 - `kai_graft.md` tracks active branch work
 - `GRAFT.md` remains historical/mainline context
 
-### Current Chunk: Next decision
+### Current Chunk: Brokered KV Anthropic pilot
 
 Intent:
-Decide the next branch slice after the first ResearchIR implementation.
+Pilot the new `kv-secrets` script-native capability path in PersonaEngine so
+Anthropic-backed scripts can run with a scoped `KV_CAP_TOKEN` instead of a raw
+`ANTHROPIC_API_KEY`.
 
 Files expected:
-- no files touched until the next chunk is chosen
+- `persona_engine/generation/llm_adapter.py`
+- `eval/product_value/run_eval.py`
+- `tests/test_response_generation.py`
+- `tests/test_product_value_eval.py`
+- `docs/sdk_guide.md`
+- `eval/product_value/README.md`
+- `kai_graft.md`
 
-Options:
-- Attack the remaining segment-differentiation gate in the template smoke.
-- Run a live/human review pass before changing generation again.
-- Clean/archive inherited eval artifacts if they are no longer useful.
+Acceptance:
+- Existing `AnthropicAdapter(model=...)` keeps raw-key compatibility.
+- If `ANTHROPIC_API_KEY` is absent but `KV_CAP_TOKEN` is scoped to
+  `api:anthropic`, PersonaEngine calls Anthropic through `kv.cap_client`.
+- Wrong-provider capability tokens do not satisfy Anthropic setup.
+- Product-value eval `--backend anthropic` accepts either raw env key or KV
+  capability mode.
+- Tests prove the brokered path without real provider keys.
 
 Latest evidence:
 - Live Anthropic enterprise-only smoke slice was run on 2026-05-04 under
@@ -79,10 +91,54 @@ Latest evidence:
 - Interpretation: ResearchIR has useful signal, but it is not yet causally
   clean enough. The bad-IR controls are still too easy for the LLM to route
   around using the persona prompt and user prompt.
+- Brokered KV adapter pilot targeted tests pass locally:
+  `python3 -m compileall persona_engine/generation/llm_adapter.py
+  eval/product_value/run_eval.py tests/test_response_generation.py
+  tests/test_product_value_eval.py` and `python3 -m pytest -q
+  tests/test_response_generation.py::TestLLMAdapterErrorHandling
+  tests/test_product_value_eval.py`.
 
 ---
 
 ## Chunk Log
+
+### 2026-05-06 - Chunk 6 - Brokered KV Anthropic pilot
+
+Status: completed
+
+Intent:
+Make PersonaEngine usable from `kv run --capability api:anthropic` without
+requiring generated scripts to receive `ANTHROPIC_API_KEY`.
+
+Changes:
+- `AnthropicAdapter` now uses `kv.cap_client.api_call()` when no raw key is
+  present and the process has a matching KV Anthropic capability token.
+- The KV-backed path exposes a tiny Anthropic-compatible `.messages.create()`
+  client shape so existing adapter and eval code can stay mostly unchanged.
+- Product-value eval now accepts either `ANTHROPIC_API_KEY` or
+  `kv run --capability api:anthropic` for `--backend anthropic`.
+- SDK/eval docs now show KV capability mode as the agent-safe run path.
+
+Validation so far:
+- `python3 -m compileall persona_engine/generation/llm_adapter.py
+  eval/product_value/run_eval.py tests/test_response_generation.py
+  tests/test_product_value_eval.py`
+- `python3 -m pytest -q
+  tests/test_response_generation.py::TestLLMAdapterErrorHandling
+  tests/test_product_value_eval.py` -> 14 passed, 1 existing warning
+- `python3 -m pytest -q
+  tests/test_response_generation.py::TestLLMAdapterErrorHandling
+  tests/test_product_value_eval.py tests/test_multi_provider_adapters.py` -> 65
+  passed, 1 existing warning
+- `env -u ANTHROPIC_API_KEY -u KV_CAP_TOKEN -u KV_CAPABILITY python3 -m
+  eval.product_value.run_eval --backend anthropic --methods prompt_only
+  --repeats 1 --out /tmp/codex-persona-kv-missing-check` exits with the new
+  raw-key-or-KV-capability guidance
+
+Next step:
+- Run one live KV-backed Anthropic smoke with `kv run --capability
+  api:anthropic --max-calls N -- python3 -m eval.product_value.run_eval ...`
+  from a user-approved/unlocked KV surface.
 
 ### 2026-05-04 - Chunk 0 - Branch and tracker
 

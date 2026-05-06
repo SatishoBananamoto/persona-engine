@@ -65,6 +65,18 @@ Live Anthropic run:
 ANTHROPIC_API_KEY=... python3 -m eval.product_value.run_eval --backend anthropic --repeats 3
 ```
 
+Agent-safe KV run:
+
+```bash
+kv run --capability api:anthropic --max-calls 400 -- \
+  python3 -m eval.product_value.run_eval --backend anthropic --repeats 3
+```
+
+In KV capability mode, the eval process receives `KV_CAP_TOKEN`; the raw
+Anthropic key stays with the local KV daemon.
+The default decision-shaped Anthropic eval needs about 312 provider calls, so
+the example uses a 400-call budget.
+
 Outputs are written to `eval/product_value/results/`:
 
 - `raw_results.json`

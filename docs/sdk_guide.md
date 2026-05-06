@@ -145,7 +145,7 @@ planner = TurnPlanner(
 |---------|----------|-----------------|
 | `template` | Development, testing, deterministic output | No |
 | `mock` | Unit tests, prompt inspection | No |
-| `anthropic` | Production with Claude | Yes |
+| `anthropic` | Production with Claude | Yes, or a scoped KV capability token |
 | `openai` | Production with GPT | Yes |
 
 ```python
@@ -157,11 +157,18 @@ gen = ResponseGenerator(persona=persona)
 # Mock (for testing)
 gen = create_response_generator(persona=persona, provider="mock")
 
-# Anthropic (requires ANTHROPIC_API_KEY env var)
+# Anthropic (requires ANTHROPIC_API_KEY env var, or run through KV)
 gen = create_response_generator(persona=persona, provider="anthropic")
 
 # OpenAI (requires OPENAI_API_KEY env var)
 gen = create_response_generator(persona=persona, provider="openai")
+```
+
+When running generated or agent-authored scripts, prefer KV capability mode so
+the script receives `KV_CAP_TOKEN`, not `ANTHROPIC_API_KEY`:
+
+```bash
+kv run --capability api:anthropic --max-calls 20 -- python3 your_script.py
 ```
 
 ## Error Handling

@@ -23,7 +23,7 @@ from typing import Any
 import yaml  # type: ignore[import-untyped]
 
 from persona_engine import PersonaEngine
-from persona_engine.generation.llm_adapter import AnthropicAdapter
+from persona_engine.generation.llm_adapter import AnthropicAdapter, has_kv_api_capability
 from persona_engine.schema.ir_schema import (
     IntermediateRepresentation,
     KnowledgeClaimType,
@@ -580,9 +580,7 @@ def generate_method_results(
     }
     anthropic_client = None
     if backend == "anthropic":
-        import anthropic
-
-        anthropic_client = anthropic.Anthropic()
+        anthropic_client = AnthropicAdapter(model=model).client
 
     for scenario in scenarios:
         engine_provider = "template" if backend == "template" else "anthropic"
@@ -1154,8 +1152,15 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    if args.backend == "anthropic" and not os.environ.get("ANTHROPIC_API_KEY"):
-        raise SystemExit("ANTHROPIC_API_KEY is required for --backend anthropic")
+    if (
+        args.backend == "anthropic"
+        and not os.environ.get("ANTHROPIC_API_KEY")
+        and not has_kv_api_capability("anthropic")
+    ):
+        raise SystemExit(
+            "ANTHROPIC_API_KEY or kv run --capability api:anthropic is required "
+            "for --backend anthropic"
+        )
 
     scenarios = load_scenarios(args.scenarios)
     catalog = build_ir_catalog(scenarios)

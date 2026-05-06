@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from eval.product_value.run_eval import (
     band_match,
+    call_anthropic,
     decision_gates,
     format_ir_block,
     format_rich_ir_block,
@@ -135,3 +136,31 @@ def test_eval_serializes_research_ir_contract() -> None:
     assert "false positives in review" in compact
     assert '"research"' in rich
     assert "not measured market evidence" in rich
+
+
+def test_product_eval_call_anthropic_accepts_kv_backed_client() -> None:
+    """The eval harness can use an Anthropic-shaped KV client without raw keys."""
+    from types import SimpleNamespace
+
+    class _Messages:
+        def create(self, **kwargs):
+            assert kwargs["model"] == "claude-test"
+            assert kwargs["messages"][-1]["content"] == "hello"
+            return SimpleNamespace(
+                content=[SimpleNamespace(text="brokered response")],
+                usage=SimpleNamespace(input_tokens=12, output_tokens=5),
+            )
+
+    client = SimpleNamespace(messages=_Messages())
+
+    text, usage, elapsed = call_anthropic(
+        client,
+        "system",
+        [{"role": "user", "content": "hello"}],
+        "claude-test",
+        50,
+    )
+
+    assert text == "brokered response"
+    assert usage == {"input_tokens": 12, "output_tokens": 5}
+    assert elapsed >= 0

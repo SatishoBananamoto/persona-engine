@@ -11,8 +11,10 @@ This module handles all LLM API interactions for the Response Generator.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+import importlib
 from typing import TYPE_CHECKING, Any, Optional
 import os
+from types import SimpleNamespace
 
 from persona_engine.exceptions import (
     ConfigurationError,
@@ -59,6 +61,105 @@ def _handle_llm_exception(e: Exception, provider: str) -> None:
     raise LLMResponseError(f"{provider} error ({type(e).__name__}): {e}") from e
 
 
+def has_kv_api_capability(provider: str) -> bool:
+    """Return true when this process has a scoped KV API capability token.
+
+    This is intentionally lightweight: the daemon remains the authority and
+    validates the real token scope before any provider secret is loaded.
+    """
+    if not os.environ.get("KV_CAP_TOKEN"):
+        return False
+    capability = os.environ.get("KV_CAPABILITY")
+    return not capability or capability == f"api:{provider.lower()}"
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _anthropic_message_from_body(body: Any) -> Any:
+    """Convert a brokered Anthropic JSON body into the SDK shape used here."""
+    if not isinstance(body, dict):
+        raise LLMResponseError("KV Anthropic API returned a non-object response")
+
+    content = body.get("content") or []
+    if not isinstance(content, list):
+        raise LLMResponseError("KV Anthropic API returned malformed content")
+
+    blocks = [
+        SimpleNamespace(**block) if isinstance(block, dict) else block
+        for block in content
+    ]
+    usage_body = body.get("usage") if isinstance(body.get("usage"), dict) else {}
+    usage = SimpleNamespace(
+        input_tokens=_safe_int(usage_body.get("input_tokens")),
+        output_tokens=_safe_int(usage_body.get("output_tokens")),
+    )
+    return SimpleNamespace(content=blocks, usage=usage, raw=body)
+
+
+def _kv_api_call(provider: str, path: str, body: dict[str, Any]) -> Any:
+    try:
+        cap_client = importlib.import_module("kv.cap_client")
+    except ImportError as exc:
+        raise ConfigurationError(
+            "kv.cap_client is required for brokered KV API calls. "
+            "Install kv-secrets or run this from an environment where kv is importable."
+        ) from exc
+
+    try:
+        return cap_client.api_call(provider, path, body=body)
+    except Exception as exc:
+        error_name = type(exc).__name__
+        if error_name in {"DaemonUnavailable"}:
+            raise LLMConnectionError(f"KV daemon unavailable for {provider}: {exc}") from exc
+        if error_name in {
+            "MissingCapabilityToken",
+            "CapabilityDenied",
+            "CapabilityEnvironmentError",
+            "CapabilityExhausted",
+        }:
+            raise LLMAPIKeyError(f"KV capability denied {provider} API call: {exc}") from exc
+        _handle_llm_exception(exc, f"KV {provider} API")
+
+
+class _KVAnthropicMessages:
+    def create(
+        self,
+        *,
+        model: str,
+        max_tokens: int,
+        system: str | None,
+        messages: list[dict[str, str]],
+        temperature: float | None = None,
+        **extra: Any,
+    ) -> Any:
+        body: dict[str, Any] = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "messages": messages,
+        }
+        if system is not None:
+            body["system"] = system
+        if temperature is not None:
+            body["temperature"] = temperature
+        body.update(extra)
+
+        response = _kv_api_call("anthropic", "/v1/messages", body)
+        response_body = getattr(response, "body", None)
+        return _anthropic_message_from_body(response_body)
+
+
+class _KVAnthropicClient:
+    """Small Anthropic SDK-compatible client backed by kv.cap_client."""
+
+    def __init__(self) -> None:
+        self.messages = _KVAnthropicMessages()
+
+
 class BaseLLMAdapter(ABC):
     """Abstract base class for LLM adapters."""
 
@@ -98,7 +199,9 @@ class AnthropicAdapter(BaseLLMAdapter):
     Anthropic Claude adapter.
     
     Uses Claude 3.5 Sonnet by default for best quality/cost balance.
-    Set ANTHROPIC_API_KEY environment variable before use.
+    Set ANTHROPIC_API_KEY environment variable before use, or run inside
+    ``kv run --capability api:anthropic`` to broker calls without exposing the
+    raw key to the script.
     """
     
     def __init__(
@@ -110,14 +213,18 @@ class AnthropicAdapter(BaseLLMAdapter):
         Initialize Anthropic adapter.
         
         Args:
-            api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env var)
+            api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env var).
+                If omitted and a KV Anthropic capability token is present, calls
+                are brokered through ``kv.cap_client`` instead.
             model: Model to use (default: claude-sonnet-4-20250514)
         """
         self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
-        if not self.api_key:
+        self._use_kv_capability = not self.api_key and has_kv_api_capability("anthropic")
+        if not self.api_key and not self._use_kv_capability:
             raise LLMAPIKeyError(
                 "Anthropic API key required. Set ANTHROPIC_API_KEY environment variable "
-                "or pass api_key parameter."
+                "or pass api_key parameter. For brokered KV usage, run inside "
+                "kv run --capability api:anthropic."
             )
         self.model = model
         self._client: Any = None
@@ -126,6 +233,9 @@ class AnthropicAdapter(BaseLLMAdapter):
     def client(self) -> Any:
         """Lazy-load the Anthropic client."""
         if self._client is None:
+            if self._use_kv_capability:
+                self._client = _KVAnthropicClient()
+                return self._client
             try:
                 import anthropic
                 self._client = anthropic.Anthropic(api_key=self.api_key)

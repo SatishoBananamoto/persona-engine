@@ -665,6 +665,55 @@ class TestStrictMode:
 class TestLLMAdapterErrorHandling:
     """Verify that LLM adapters produce typed exceptions, not raw crashes."""
 
+    def test_anthropic_adapter_uses_kv_capability_without_raw_key(self, monkeypatch):
+        """AnthropicAdapter can call through kv.cap_client instead of raw env keys."""
+        import sys
+        import types
+        from types import SimpleNamespace
+
+        from persona_engine.generation.llm_adapter import AnthropicAdapter
+
+        calls = []
+        kv_pkg = types.ModuleType("kv")
+        cap_client = types.ModuleType("kv.cap_client")
+
+        def fake_api_call(provider, path, *, body=None, **kwargs):
+            calls.append({"provider": provider, "path": path, "body": body, "kwargs": kwargs})
+            return SimpleNamespace(
+                body={
+                    "content": [{"type": "text", "text": "response from broker"}],
+                    "usage": {"input_tokens": 10, "output_tokens": 4},
+                }
+            )
+
+        cap_client.api_call = fake_api_call
+        monkeypatch.setitem(sys.modules, "kv", kv_pkg)
+        monkeypatch.setitem(sys.modules, "kv.cap_client", cap_client)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.setenv("KV_CAP_TOKEN", "kvcap_test")
+        monkeypatch.setenv("KV_CAPABILITY", "api:anthropic")
+
+        adapter = AnthropicAdapter(model="claude-test")
+        text = adapter.generate("system prompt", "user prompt", max_tokens=50, temperature=0.2)
+
+        assert text == "response from broker"
+        assert calls[0]["provider"] == "anthropic"
+        assert calls[0]["path"] == "/v1/messages"
+        assert calls[0]["body"]["model"] == "claude-test"
+        assert calls[0]["body"]["messages"][-1]["content"] == "user prompt"
+
+    def test_anthropic_adapter_rejects_wrong_kv_capability(self, monkeypatch):
+        """A token for another provider should not satisfy Anthropic setup."""
+        from persona_engine.generation.llm_adapter import AnthropicAdapter
+        from persona_engine.exceptions import LLMAPIKeyError
+
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.setenv("KV_CAP_TOKEN", "kvcap_test")
+        monkeypatch.setenv("KV_CAPABILITY", "api:openai")
+
+        with pytest.raises(LLMAPIKeyError, match="api:anthropic"):
+            AnthropicAdapter(model="claude-test")
+
     def test_generation_adapter_empty_content_raises(self):
         """AnthropicAdapter from generation module: empty content → LLMResponseError."""
         from unittest.mock import MagicMock, patch
