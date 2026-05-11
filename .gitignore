@@ -18,6 +18,7 @@ sim_log.txt
 htmlcov/
 .pytest_cache/
 .hypothesis/
+.svx-audit/
 
 # IDE
 .vscode/
