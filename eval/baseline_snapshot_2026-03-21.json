@@ -1,0 +1,205 @@
+{
+  "timestamp": "2026-03-21",
+  "session": "The Graft",
+  "branch": "graft/merge-tier1",
+  "engine_version": "0.4.0",
+  "status": "BASELINE \u2014 engine still in active development. Compare future results against these.",
+  "unit_tests": {
+    "total": 2649,
+    "passed": 2649,
+    "failed": 0
+  },
+  "L1_static_benchmark": {
+    "profiles": 8,
+    "prompts_per_profile": 4,
+    "direction_checks": "10/10",
+    "details": {
+      "E_disclosure": {
+        "high": 0.523,
+        "low": 0.286,
+        "diff": 0.237
+      },
+      "E_proactivity": {
+        "high": 0.74,
+        "low": 0.26,
+        "diff": 0.48
+      },
+      "A_hedging": {
+        "high": 0.6,
+        "low": 0.16,
+        "diff": 0.44
+      },
+      "A_directness": {
+        "high": 0.73,
+        "low": 0.27,
+        "diff": 0.461
+      },
+      "N_neg_tone": {
+        "high": 0.45,
+        "low": 0.05,
+        "diff": 0.4
+      },
+      "N_confidence": {
+        "high": 0.285,
+        "low": 0.444,
+        "diff": 0.159,
+        "note": "stable > neurotic"
+      },
+      "N_hedging": {
+        "high": 0.48,
+        "low": 0.38,
+        "diff": 0.1
+      },
+      "O_elasticity": {
+        "high": 0.626,
+        "low": 0.227,
+        "diff": 0.399
+      },
+      "C_verbosity": {
+        "high": 0.75,
+        "low": 0.25,
+        "diff": 0.5
+      }
+    }
+  },
+  "L1_dynamic": {
+    "checks": "15/15",
+    "details": [
+      "fatigue_accumulates (0.300 \u2192 0.695 over 20 turns)",
+      "mood_drifts_toward_baseline (0.900 \u2192 0.451)",
+      "stress_reduces_patience (0.544 \u2192 0.367)",
+      "trust_increases_disclosure (0.450 vs 0.180)",
+      "stance_cache_consistency (identical on revisit)",
+      "cross_turn_inertia (max swing 0.000)",
+      "stress_decays (1.000 \u2192 0.000 over 10 turns)",
+      "negative_emotion_shifts_mood (0.100 \u2192 0.061)",
+      "high_n_mood_lingers (drift 0.171 vs 0.261)",
+      "bias_reduces_elasticity (0.277 \u2192 0.157)",
+      "extreme_n_confidence (0.238, not collapsed)",
+      "extreme_a_directness (0.121, not collapsed)",
+      "tone_high_n_stress \u2192 anxious_stressed",
+      "tone_high_e_positive \u2192 excited_engaged",
+      "tone_neutral \u2192 neutral_calm"
+    ]
+  },
+  "L1_correlation_matrix": {
+    "personas": 212,
+    "sources": "100 Layer Zero + 100 random uniform + 12 shipped",
+    "direction_checks": "10/10",
+    "key_correlations": {
+      "O_elasticity": 0.957,
+      "C_confidence": 0.575,
+      "E_disclosure": 0.667,
+      "E_proactivity": 1.0,
+      "E_enthusiasm": 1.0,
+      "A_directness": -0.921,
+      "A_hedging": 0.956,
+      "N_confidence": -0.619,
+      "N_neg_tone": 1.0,
+      "N_hedging": 0.422
+    },
+    "note": "Some r=1.0 by construction (deterministic formulas). Real psychology has r=0.08-0.20."
+  },
+  "L1_distributions": {
+    "confidence": {
+      "mean": 0.39,
+      "std": 0.037,
+      "range": [
+        0.294,
+        0.479
+      ],
+      "floor_hits": 0
+    },
+    "directness": {
+      "mean": 0.47,
+      "std": 0.138,
+      "range": [
+        0.234,
+        0.822
+      ],
+      "floor_hits": 0
+    },
+    "elasticity": {
+      "range": [
+        0.314,
+        0.646
+      ],
+      "note": "healthy"
+    },
+    "disclosure": {
+      "note": "saturates at ~0.45 due to privacy clamp (intentional)"
+    }
+  },
+  "L1_shipped_personas": {
+    "count": 12,
+    "all_healthy": true,
+    "note": "No collapsed values, tones match personalities"
+  },
+  "L2_text_validation_BV2": {
+    "method": "descriptive directives (post-rewrite)",
+    "profiles": 10,
+    "prompts_per_profile": 3,
+    "direction_checks": "7/10",
+    "note": "3 failures are ties at zero (noise). Strong signals: N hedging 13 vs 8, E social 12 vs 6, E word count 412 vs 276",
+    "measurement_tool": "hand-picked word lists (NOT validated LIWC)"
+  },
+  "L2_linguistic_markers": {
+    "direction_checks": "10/10 (with negation context caveat)",
+    "note": "Proxy validation \u2014 checks directives, not generated text"
+  },
+  "E2E_conversations": {
+    "tests": "3/3",
+    "details": {
+      "fatigue_shortening": "early 95 words \u2192 late 47 words (50% reduction)",
+      "stance_consistency": "35% word overlap on topic revisit",
+      "stress_markers": "hedging 6\u219210, tone\u2192anxious_stressed"
+    }
+  },
+  "save_load_persistence": {
+    "result": "ALL FIELDS MATCH",
+    "fields_tested": [
+      "fatigue",
+      "mood_valence",
+      "mood_arousal",
+      "stress",
+      "engagement",
+      "turn_number",
+      "stance_cache",
+      "prior_snapshot",
+      "anchor_stance"
+    ]
+  },
+  "psychometric_grounding": {
+    "descriptions_aligned": "39/40 with IPIP-NEO items",
+    "rewrites": 1,
+    "intensity_thresholds": "mapped to BFI-2 norms (0.5/1.0/1.5/2.0 SD)"
+  },
+  "directive_clustering": {
+    "before": {
+      "unique_sets": 24,
+      "empty_pct": 48
+    },
+    "after": {
+      "unique_sets": 88,
+      "empty_pct": 0
+    },
+    "theoretical_max": 32768
+  },
+  "known_limitations": [
+    "IR parameters are deterministic functions of traits (r=1.0 for some), unlike real humans (r=0.08-0.20)",
+    "BV-2 uses hand-picked word lists, not validated LIWC instrument",
+    "No human evaluation \u2014 all validation is automated",
+    "No baseline comparison against vanilla LLM prompting",
+    "Layer Zero only produces moderate traits (0.2-0.8) \u2014 not stress-tested at extremes",
+    "Prompt still mixes numeric values (FORMALITY: 30%) with natural language \u2014 LLM interpretation uncertain"
+  ],
+  "fixes_applied_this_session": [
+    "TF-001: DK double-counting disabled",
+    "TF-002/CF-1-4: Self-efficacy baseline, capped personality modifier, removed floors",
+    "Fatigue threshold 0.7\u21920.5 + low engagement trigger",
+    "PA-8: Competence modulates directness + verbosity",
+    "Directives: prescriptive word lists \u2192 descriptive character descriptions",
+    "Clustering: bracket-based \u2192 interpolated _TRAIT_POLES (24\u219288 unique)",
+    "PG-1: Descriptions grounded in IPIP-NEO validated items"
+  ]
+}

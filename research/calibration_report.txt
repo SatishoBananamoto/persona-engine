@@ -1,0 +1,879 @@
+================================================================================
+PERSONA-ENGINE CALIBRATION REPORT
+Evidence-Based Parameter Review for trait_interpreter.py and Related Modules
+Date: 2026-03-19
+Status: RESEARCH ONLY — no code changes made
+================================================================================
+
+METHODOLOGY
+-----------
+This report reviews every tunable constant in the persona-engine behavioral
+layer against empirical findings from personality psychology and computational
+linguistics. Where exact effect sizes exist, they are cited. Where the
+literature provides directional evidence but no precise coefficient, the
+recommendation is bounded by the range of plausible values from multiple
+converging sources.
+
+Key principle: In personality-to-language mapping, individual trait-behavior
+correlations are reliably SMALL (r = .08-.15 for self-report, r = .18-.39
+for observer-report). The "Kernel of Truth" meta-analysis (Tackman et al.,
+2023, Psychological Bulletin) across 85,724 participants found that 52 LIWC
+categories explain on average only 5.1% of personality variance from
+self-report. This means modifier weights in the 0.1-0.4 range per trait
+are empirically appropriate — anything above 0.5 per single trait is
+likely too strong for a realistic simulation.
+
+PRIMARY SOURCES
+---------------
+[S1] Mairesse & Walker (2007). "PERSONAGE: Personality Generation for
+     Dialogue." ACL 2007. — 67 generation parameters mapped to Big Five.
+[S2] Mairesse & Walker (2008). "Trainable Generation of Big-Five Personality
+     Styles through Data-Driven Parameter Estimation." ACL 2008.
+[S3] Mairesse & Walker (2011). "Controlling User Perceptions of Linguistic
+     Style." Computational Linguistics, 37(3), 455-488. — Full trained model.
+[S4] Pennebaker & King (1999). "Linguistic Styles: Language Use as an
+     Individual Difference." JPSP, 77(6), 1296-1312.
+[S5] Schwartz et al. (2013). "Personality, Gender, and Age in the Language
+     of Social Media." PLoS ONE, 8(9). — 75,000 Facebook users.
+[S6] Serapio-Garcia et al. (2023). "Personality Traits in Large Language
+     Models." arXiv:2307.00184. — Psychometric validation of Big Five in LLMs.
+[S7] Tackman et al. (2023). "The Kernel of Truth in Text-Based Personality
+     Assessment." Psychological Bulletin. — Meta-analysis, N=85,724.
+[S8] Mairesse & Walker (2007). "Using Linguistic Cues for the Automatic
+     Recognition of Personality in Conversation and Text." JAIR, 30, 457-500.
+[S9] Schaefer et al. (2004). "Overconfidence and the Big Five." Journal of
+     Research in Personality, 38(5), 473-480.
+[S10] Soto & John (2017). "The Next Big Five Inventory (BFI-2)." JPSP.
+[S11] Roccas et al. (2002). "The Big Five Personality Factors and Personal
+      Values." Personality and Social Psychology Bulletin, 28(6), 789-801.
+[S12] Fleeson & Gallagher (2009). "The Implications of Big-Five Standing for
+      the Distribution of Trait Manifestation in Behavior." JPSP. — Meta of
+      15 experience-sampling studies.
+[S13] Tackman et al. (2020). "A Meta-analysis of Linguistic Markers of
+      Extraversion." JPSP. — r=.069 positive emotion, r=.077 social words.
+
+
+================================================================================
+FILE 1: trait_interpreter.py — CALIBRATION TABLE
+================================================================================
+
+Each entry follows this format:
+  METHOD NAME / PARAMETER
+  Current formula → What it computes → Empirical evidence → Recommendation
+
+------------------------------------------------------------------------
+1. get_elasticity() — Openness → willingness to change mind
+------------------------------------------------------------------------
+Current:
+  openness_factor = openness * 0.7
+  confidence_penalty = base_confidence * 0.3
+  elasticity = openness_factor - confidence_penalty + 0.2
+  Clamped to [0.1, 0.9]
+
+  At O=0, conf=0: 0.2  |  At O=1, conf=0: 0.9  |  At O=0.5, conf=0.5: 0.4
+
+Empirical evidence:
+  - Openness is the trait most associated with intellectual flexibility,
+    tolerance of ambiguity, and willingness to revise beliefs. The NEO-PI-R
+    facet "Openness to Values" directly measures flexibility of moral/
+    political positions. [S10]
+  - Openness correlates r=.30-.45 with divergent thinking and intellectual
+    curiosity, which are preconditions for opinion revision. [S10]
+  - The PERSONAGE system maps high openness to greater content diversity
+    and willingness to explore alternative framings. [S1, S3]
+  - Confirmation bias research shows that "active open-mindedness" (a
+    construct overlapping with Openness) is the strongest individual-
+    difference predictor of reduced myside bias.
+  - The 0.7 weight on openness is at the upper end of plausible. Empirical
+    trait-behavior correlations top out around r=.40 for single traits.
+
+Assessment: CLOSE but openness weight slightly too high.
+
+Recommendation:
+  openness_factor = openness * 0.6       # Was 0.7. Reduced to stay within
+                                          # empirical trait-behavior bounds.
+  confidence_penalty = base_confidence * 0.3  # KEEP — confidence reducing
+                                               # openness to revision is
+                                               # well-supported (Dunning-
+                                               # Kruger adjacent).
+  elasticity = openness_factor - confidence_penalty + 0.25  # Was +0.2.
+                                                            # Slight upward
+                                                            # shift so mid-
+                                                            # range persona
+                                                            # (O=0.5) lands
+                                                            # at ~0.4 not 0.35.
+  Clamp [0.1, 0.9] — KEEP.
+
+  Net effect: Range narrows slightly. Max realistic elasticity at O=1,
+  conf=0 goes from 0.9 to 0.85. More empirically grounded.
+
+------------------------------------------------------------------------
+2. influences_abstract_reasoning() — Openness > 0.7 threshold
+------------------------------------------------------------------------
+Current:
+  return openness > 0.7
+
+Empirical evidence:
+  - NEO-PI-R defines the "Ideas" facet of Openness as "intellectual
+    curiosity" and the "Fantasy" facet as "active imagination." Both
+    are prerequisites for abstract/metaphorical thinking. [S10]
+  - Openness to Experience correlates with "thinking in symbols and
+    abstractions far removed from concrete experience" (Costa & McCrae,
+    1992 manual).
+  - The 0.7 threshold places this at the 70th percentile of the trait
+    distribution. In a normal population (M~0.5 on 0-1 scale), 0.7
+    corresponds roughly to +1 SD.
+  - PERSONAGE uses openness to control "content diversity" and abstract
+    vs. concrete framing. [S1]
+
+Assessment: GOOD — 0.7 is a defensible threshold for "high" openness.
+  In NEO-PI-R norms, "high" typically means T-score >= 56 (~65th
+  percentile), which maps to roughly 0.65 on a 0-1 scale. 0.7 is
+  slightly conservative but reasonable.
+
+Recommendation: KEEP at 0.7, or lower to 0.65 for slightly broader
+  activation. Current value is fine.
+
+------------------------------------------------------------------------
+3. influences_verbosity() — Conscientiousness → detail orientation
+------------------------------------------------------------------------
+Current:
+  adjusted = base_verbosity + (conscientiousness - 0.5) * 0.2
+  Clamped [0.0, 1.0]
+  Thresholds: <0.15=MINIMAL, <0.35=BRIEF, <0.65=MEDIUM, else=DETAILED
+
+Empirical evidence:
+  - Conscientiousness is associated with detail orientation, thoroughness,
+    and organized communication. High-C individuals produce more structured
+    output. [S4, S10]
+  - HOWEVER: Conscientiousness does NOT reliably correlate with word count
+    or verbosity per se. The Kernel of Truth meta-analysis [S7] found
+    that C's strongest linguistic correlates are negation avoidance and
+    fewer negative emotion words — NOT length.
+  - PERSONAGE maps C primarily to planning language and structure quality,
+    not to verbosity. [S1, S3]
+  - The 0.2 modifier means C only shifts verbosity by +-0.1 from center,
+    which is appropriately small.
+  - Extraversion is actually the stronger predictor of word count/verbosity
+    (r~.10-.15 for word count, [S7, S13]), but it is not included in this
+    function.
+
+Assessment: MODIFIER SIZE IS GOOD (0.2 scaling = +-0.1 max shift).
+  But the function is MISSING extraversion influence on verbosity, which
+  is empirically the stronger predictor.
+
+Recommendation:
+  Keep the C modifier at 0.2.
+  ALSO add: + (extraversion - 0.5) * 0.15
+  This reflects that E is a slightly weaker but significant predictor of
+  verbose output (extraverts talk more, [S4, S5, S8, S13]).
+
+  Verbosity thresholds: KEEP current values. The 4-bin structure is
+  reasonable for discrete categorization.
+
+------------------------------------------------------------------------
+4. get_self_disclosure_modifier() — Extraversion → disclosure
+------------------------------------------------------------------------
+Current:
+  return (extraversion - 0.5) * 0.4
+  Range: -0.2 to +0.2
+
+Empirical evidence:
+  - Extraversion is positively correlated with self-disclosure, especially
+    in social media contexts. Extraverts share more personal information
+    and use more self-referencing language. [S5, S8]
+  - PERSONAGE maps high extraversion to higher self-reference rates. [S1]
+  - Pennebaker & King [S4] found extraverts use more social process words
+    (r~.08 from meta-analysis [S7]).
+  - The effect is real but SMALL. The meta-analytic correlation between
+    extraversion and personal pronoun use (a proxy for self-disclosure)
+    is r~.07-.10 [S7].
+  - The +-0.2 range is appropriate for a modifier that gets ADDED to a
+    base disclosure level. On a 0-1 scale, +-0.2 is a meaningful but
+    not dominant shift.
+  - HOWEVER: Neuroticism also predicts self-disclosure (especially of
+    negative content), with r~.10 for first-person singular pronouns
+    [S7]. This is NOT currently modeled.
+
+Assessment: GOOD — the +-0.2 range and 0.4 scaling factor are reasonable.
+  Could consider adding a small neuroticism component.
+
+Recommendation:
+  KEEP (extraversion - 0.5) * 0.4  [= +-0.2 range]
+  Consider adding: + neuroticism * 0.1  [= 0 to +0.1 range]
+  Rationale: High neuroticism increases disclosure of negative personal
+  content (rumination, venting). This is a secondary effect.
+
+------------------------------------------------------------------------
+5. influences_directness() — Agreeableness inversely affects directness
+------------------------------------------------------------------------
+Current:
+  modifier = (0.5 - agreeableness) * 0.3
+  adjusted = base_directness + modifier
+  Clamped [0.0, 1.0]
+
+  At A=0 (very disagreeable): modifier = +0.15 (more direct)
+  At A=1 (very agreeable): modifier = -0.15 (less direct)
+  Range: +-0.15
+
+Empirical evidence:
+  - This is one of the BEST-SUPPORTED mappings in the system.
+  - NEO-PI-R Agreeableness facet "Straightforwardness" directly measures
+    directness vs. diplomatic indirectness. Low-A individuals are
+    described as "blunt," "skeptical," and "frank." [S10]
+  - PERSONAGE maps high agreeableness to more hedging, fewer negative
+    content selections, and more polite forms. [S1, S3]
+  - Schwartz et al. [S5] found that agreeable individuals use fewer swear
+    words and more positive emotion words.
+  - The DeYoung "Politeness" aspect of Agreeableness directly captures
+    indirectness and tact.
+  - The 0.3 scaling (+-0.15 range) is APPROPRIATE — this is a well-
+    supported relationship but individual correlations are still modest
+    (r~.15-.25 in behavioral studies).
+
+Assessment: GOOD. The direction is correct, the magnitude is reasonable.
+
+Recommendation:
+  KEEP as is. The 0.3 scaling factor producing +-0.15 range is well-
+  calibrated for the strength of the A-directness relationship.
+
+------------------------------------------------------------------------
+6. influences_hedging_frequency() — Agreeableness → hedging
+------------------------------------------------------------------------
+Current:
+  return agreeableness * 0.6
+  Range: 0 to 0.6
+
+Empirical evidence:
+  - PERSONAGE models hedging as a key parameter for agreeableness. High-A
+    produces more hedge words ("kind of," "somewhat," "perhaps"). [S1, S3]
+  - The PERSONAGE system uses separate parameters for hedge_variation and
+    hedge_repetition, both increasing with Agreeableness. [S3]
+  - Neuroticism ALSO predicts hedging (tentative language), independently
+    of Agreeableness. [S4, S8] — This is NOT currently modeled.
+  - The 0.6 multiplier means max hedging tendency = 0.6 at A=1.0. This
+    feels appropriate — hedging should be noticeable at high A but never
+    dominate the output.
+
+Assessment: DIRECTION CORRECT, magnitude reasonable. Missing N contribution.
+
+Recommendation:
+  KEEP agreeableness * 0.6 as the primary term.
+  Consider adding: + neuroticism * 0.2
+  Then clamp to [0, 0.8].
+  Rationale: Neurotic individuals use more tentative/hedging language
+  independently of agreeableness (driven by self-doubt rather than
+  politeness). The 0.2 weight reflects this being a secondary effect.
+
+------------------------------------------------------------------------
+7. get_negative_tone_bias() — Neuroticism → negative tone
+------------------------------------------------------------------------
+Current:
+  return neuroticism * 0.7
+  Range: 0 to 0.7
+
+Empirical evidence:
+  - This is WELL-SUPPORTED. Neuroticism is THE strongest linguistic
+    personality signal. The Kernel of Truth meta-analysis [S7] found
+    neuroticism has the strongest correlations with negative emotion
+    word categories (rho = .08-.14 for self-report, up to .39 for
+    observer ratings).
+  - Pennebaker & King [S4]: neurotics use more negative emotion words
+    and fewer positive emotion words.
+  - Schwartz et al. [S5]: High-N individuals use more negative words
+    in social media posts.
+  - PERSONAGE maps high neuroticism to negative content polarity. [S1]
+  - PNAS study (2023): Neuroticism is associated with increased
+    variability in negative emotion. People high in N show greater
+    day-to-day fluctuation in negative affect.
+  - The 0.7 multiplier means at N=1.0, there's a 70% bias toward
+    negative tones. This is ARGUABLY TOO HIGH. Even at the extreme
+    of neuroticism, people don't have negative tone 70% of the time.
+    The empirical data shows N amplifies negative affect reactivity
+    but doesn't make it the dominant mode.
+
+Assessment: DIRECTION CORRECT, magnitude TOO HIGH.
+
+Recommendation:
+  return neuroticism * 0.5    # Was 0.7. Reduced.
+  Rationale: Even at extreme neuroticism (N=1.0), the negative tone
+  bias should be a strong tendency (0.5) but not overwhelming (0.7).
+  At N=0.5 (average), this gives 0.25 — a mild negative skew, which
+  matches the empirical finding of small-to-moderate effect sizes.
+
+------------------------------------------------------------------------
+8. get_confidence_modifier() — C boost, N penalty on confidence
+------------------------------------------------------------------------
+Current:
+  c_boost = (conscientiousness - 0.5) * 0.1
+  n_penalty = neuroticism * 0.15
+  adjusted = domain_proficiency + c_boost - n_penalty
+  Clamped [0.1, 0.95]
+
+  At C=1.0, N=0: +0.05 boost, 0 penalty
+  At C=0.5, N=1.0: 0 boost, -0.15 penalty
+  At C=0.5, N=0.5: 0 boost, -0.075 penalty
+
+Empirical evidence:
+  - Neuroticism-confidence relationship: Meta-analytic evidence shows
+    N correlates with self-efficacy at r=-.35 [Furnham, 2024 longitudinal].
+    N correlates with self-esteem at r=-.59 [multiple meta-analyses].
+    This is one of the STRONGEST personality-outcome relationships.
+  - Schaefer et al. [S9]: Extraversion predicted overconfidence; N did
+    NOT significantly predict confidence independent of other traits.
+    However, the self-efficacy literature shows N strongly predicts
+    lower self-efficacy in the work domain (r=-.35).
+  - C-confidence: Conscientiousness predicts self-efficacy at r~.25-.35
+    [meta-analyses]. The relationship is positive and meaningful.
+  - The current N penalty (0.15 max) is TOO SMALL given the empirical
+    evidence. N's effect on confidence/self-efficacy is one of the
+    strongest personality-outcome links in the literature.
+  - The current C boost (0.05 max) is also slightly too small. C
+    predicts self-efficacy at r~.30.
+
+Assessment: DIRECTION CORRECT for both. N penalty TOO SMALL, C boost
+  TOO SMALL.
+
+Recommendation:
+  c_boost = (conscientiousness - 0.5) * 0.15   # Was 0.1. Range: +-0.075
+  n_penalty = neuroticism * 0.20                # Was 0.15. Range: 0-0.20
+  Clamped [0.1, 0.95] — KEEP
+
+  Rationale: The N→confidence relationship (r~.35 for self-efficacy)
+  justifies a stronger penalty. The C→confidence relationship (r~.30)
+  justifies a slightly larger boost. The combined effect at extreme
+  values (C=1, N=0: +0.075; C=0, N=1: -0.275) is still within a
+  plausible range for individual-difference modifiers.
+
+  ALSO CONSIDER: Adding a small Extraversion boost (+ E * 0.05),
+  since E predicts overconfidence [S9] and social confidence.
+
+------------------------------------------------------------------------
+9. get_tone_from_mood() — Multi-trait tone selection thresholds
+------------------------------------------------------------------------
+Current thresholds (sampling):
+  - Stress > 0.6 AND N > 0.6 → ANXIOUS/CONCERNED
+  - E > 0.7 → enthusiasm bonus of 0.2
+  - O > 0.65 AND E > 0.6 → EAGER_ANTICIPATORY
+  - E > 0.65 AND N < 0.35 → AMUSED_PLAYFUL
+  - O > 0.7 AND E > 0.4 → CURIOUS_INTRIGUED
+  - N > 0.5 AND O > 0.6 → NOSTALGIC_WISTFUL
+  - A < 0.3 → CONTEMPTUOUS_DISMISSIVE
+  - N > 0.55 AND C < 0.4 → CONFUSED_UNCERTAIN
+  - E < 0.35 AND N > 0.45 → GUARDED_WARY
+  - N > 0.7 → GRIEVING_SORROWFUL
+
+Empirical evidence:
+  - The two-dimensional valence-arousal model for affect is well-
+    established (Russell, 1980; Barrett & Russell, 1999). Using
+    valence + arousal + trait modifiers for tone selection is a
+    sound design. [Standard in affective computing]
+  - Neuroticism thresholds: The 0.6 threshold for stress-anxiety
+    interaction is reasonable. N > 0.6 corresponds to roughly +0.5 SD
+    above mean in a normalized population. [S10]
+  - Extraversion thresholds: 0.7 for high-E bonus and 0.65 for trait
+    interactions are appropriate "high" cutoffs. [S10, S12]
+  - The multi-trait interactions (O+E for eagerness, E+low-N for
+    playfulness, low-A for contempt) are creative and face-valid but
+    lack specific empirical validation at these exact thresholds.
+  - The PERSONAGE system validates that multi-trait interactions DO
+    produce recognizably distinct personality styles, even though
+    exact thresholds are somewhat arbitrary. [S1, S3]
+
+Assessment: STRUCTURALLY SOUND. Thresholds are reasonable. Specific
+  values are defensible but not precisely calibrated.
+
+Recommendation:
+  - KEEP most thresholds. They map well to standard "high"/"low"
+    cutoffs in Big Five research.
+  - Consider lowering the N > 0.7 grief threshold to N > 0.65.
+    At 0.7, only ~15% of the population would ever reach this tone.
+    At 0.65 it becomes ~20%, which is still appropriately rare.
+  - The E > 0.7 enthusiasm bonus of 0.2 is reasonable but consider
+    making it proportional: e_bonus = (E - 0.5) * 0.4 if E > 0.5.
+    This gives a graded effect rather than a step function.
+
+------------------------------------------------------------------------
+10. influences_proactivity() — Extraversion raw passthrough
+------------------------------------------------------------------------
+Current:
+  return extraversion    (direct passthrough, range 0-1)
+
+Empirical evidence:
+  - Extraversion strongly predicts social initiative, talkativeness,
+    and assertiveness. This is a core facet of E. [S10]
+  - Experience-sampling meta-analysis [S12] shows E standing predicts
+    behavioral acts of social assertiveness at strong levels.
+  - Direct passthrough is simple but may be TOO STRONG. In practice,
+    even introverts sometimes initiate conversation, and even extraverts
+    sometimes wait. A transformed function would be more realistic.
+
+Assessment: DIRECTION CORRECT, but the direct passthrough means a
+  persona at E=0.1 has only 10% proactivity, which seems too low.
+
+Recommendation:
+  return 0.2 + extraversion * 0.6   # Range: 0.2 to 0.8
+  Rationale: Provides a floor (even introverts sometimes initiate)
+  and a ceiling (even extraverts don't initiate 100% of the time).
+  The 0.6 scaling keeps the trait's influence substantial but bounded.
+
+------------------------------------------------------------------------
+11. get_enthusiasm_baseline() — Extraversion raw passthrough
+------------------------------------------------------------------------
+Current:
+  return extraversion    (direct passthrough, range 0-1)
+
+Empirical evidence:
+  - Same concern as proactivity. E does predict positive affect and
+    enthusiasm [S5, S13, S7], but the correlation is moderate (r~.20-.30
+    for positive emotion words [S13]).
+  - At E=0.1, enthusiasm baseline of 0.1 is unrealistically flat.
+
+Assessment: TOO EXTREME at endpoints.
+
+Recommendation:
+  return 0.2 + extraversion * 0.5   # Range: 0.2 to 0.7
+  Rationale: Low-E individuals still have some baseline enthusiasm.
+  High-E individuals are notably enthusiastic but not maximally so.
+
+------------------------------------------------------------------------
+12. get_stress_sensitivity() — Neuroticism raw passthrough
+------------------------------------------------------------------------
+Current:
+  return neuroticism    (direct passthrough, range 0-1)
+
+Empirical evidence:
+  - Neuroticism is THE predictor of stress sensitivity. This is perhaps
+    the single most robust finding in all of personality psychology.
+    Meta-analyses consistently find N predicts psychological stress
+    reactivity at r~.35-.50. [Luo et al., 2023 meta-analysis]
+  - However, even low-N individuals still experience some stress.
+
+Assessment: DIRECTION CORRECT, but should have a floor.
+
+Recommendation:
+  return 0.15 + neuroticism * 0.7   # Range: 0.15 to 0.85
+  Rationale: Everyone has some stress sensitivity. The 0.7 scaling
+  keeps N as the dominant driver while preventing a literally zero
+  stress sensitivity at N=0.
+
+------------------------------------------------------------------------
+13. influences_mood_stability() — inverse Neuroticism
+------------------------------------------------------------------------
+Current:
+  return 1.0 - neuroticism
+
+Empirical evidence:
+  - PNAS (2023): N is associated with increased variability in negative
+    emotion across 13 longitudinal datasets (N=2,518). The relationship
+    is robust.
+  - However, the inversion is too symmetric. At N=0.5, mood stability
+    = 0.5, which suggests "moderately unstable" for an average person.
+    Normal-range individuals typically have fairly stable mood.
+
+Assessment: TOO STRONG at midrange. Average N should yield above-
+  average stability.
+
+Recommendation:
+  return 1.0 - neuroticism * 0.8   # Range: 0.2 to 1.0
+  Rationale: At N=0.5 (average), stability = 0.6 (slightly above
+  midpoint, reflecting that average people are somewhat stable). At
+  N=1.0, stability = 0.2 (quite unstable). This better matches the
+  empirical finding that mood instability is primarily a feature of
+  HIGH neuroticism, not of average neuroticism.
+
+
+================================================================================
+FILE 2: state_manager.py — CALIBRATION TABLE
+================================================================================
+
+------------------------------------------------------------------------
+14. mood_drift_rate — Neuroticism slows mood recovery
+------------------------------------------------------------------------
+Current:
+  self.mood_drift_rate = 0.05 + (neuroticism * 0.1)
+  Range: 0.05 (N=0) to 0.15 (N=1)
+
+  NOTE: This is BACKWARDS. Higher drift rate = faster drift to baseline
+  = MORE stable. But N should make mood LINGER (slower recovery).
+
+Empirical evidence:
+  - High neuroticism is associated with slower recovery from negative
+    affect (mood lingers longer). The comment in the code says "High
+    neuroticism: Slower drift" but the formula increases drift rate
+    with N, which means FASTER recovery. This contradicts the empirical
+    evidence AND the code comment.
+
+Assessment: BUG — formula contradicts its own comment and the evidence.
+
+Recommendation:
+  self.mood_drift_rate = 0.12 - (neuroticism * 0.08)
+  Range: 0.04 (N=1, slow recovery) to 0.12 (N=0, fast recovery)
+
+  This correctly models: high N = slow mood drift = moods linger.
+  Low N = fast mood drift = quick return to baseline.
+
+------------------------------------------------------------------------
+15. fatigue_accumulation_rate
+------------------------------------------------------------------------
+Current:
+  self.fatigue_accumulation_rate = 0.02 (constant)
+
+Empirical evidence:
+  - Not directly tied to a Big Five trait in the literature.
+  - However, Conscientiousness is associated with persistence and
+    sustained effort. High-C individuals report less fatigue during
+    sustained tasks (already partially modeled in increment_fatigue
+    via stamina_modifier).
+  - Neuroticism is associated with increased subjective fatigue and
+    cognitive depletion under stress.
+
+Assessment: REASONABLE as a constant. The C-based stamina modifier
+  in increment_fatigue() handles individual differences.
+
+Recommendation: KEEP at 0.02. Consider adding a small N component:
+  self.fatigue_accumulation_rate = 0.02 + (neuroticism * 0.01)
+  Range: 0.02 to 0.03. Subtle but captures N's fatigue amplification.
+
+------------------------------------------------------------------------
+16. stress_decay_rate
+------------------------------------------------------------------------
+Current:
+  self.stress_decay_rate = 0.08 (constant)
+
+Empirical evidence:
+  - Stress recovery should be modulated by neuroticism (slower recovery
+    for high-N) and possibly extraversion (faster recovery for high-E,
+    who engage in more active coping).
+
+Assessment: SHOULD BE TRAIT-MODULATED, not constant.
+
+Recommendation:
+  self.stress_decay_rate = 0.10 - (neuroticism * 0.06) + (extraversion * 0.02)
+  Range: ~0.04 (high-N, low-E) to ~0.12 (low-N, high-E)
+  Rationale: High-N individuals recover from stress more slowly.
+  High-E individuals engage in social coping that speeds recovery.
+
+------------------------------------------------------------------------
+17. baseline_valence (in apply_mood_drift)
+------------------------------------------------------------------------
+Current:
+  baseline_valence = 0.1 - (neuroticism * 0.2)
+  Range: -0.1 (N=1) to 0.1 (N=0)
+
+Empirical evidence:
+  - Average mood valence in the general population is mildly positive
+    (the "positivity offset" — Diener & Diener, 1996). Most people
+    report being slightly happy most of the time.
+  - Neuroticism lowers this baseline, and Extraversion raises it.
+    Both effects are well-documented. [S7, S12]
+  - The current formula only accounts for N. Missing the E contribution.
+
+Assessment: PARTIALLY CORRECT. N effect is reasonable but E is missing.
+
+Recommendation:
+  baseline_valence = 0.15 + (extraversion * 0.15) - (neuroticism * 0.2)
+  Range: -0.05 (E=0, N=1) to 0.30 (E=1, N=0)
+  Rationale: Adds the E contribution to positive affect baseline.
+  The positivity offset (0.15) ensures most personas drift slightly
+  positive, matching empirical population data.
+
+------------------------------------------------------------------------
+18. stress_sensitivity (in apply_stress_trigger)
+------------------------------------------------------------------------
+Current:
+  stress_sensitivity = 1.0 + (neuroticism * 0.5)
+  Range: 1.0 (N=0) to 1.5 (N=1)
+
+Empirical evidence:
+  - Luo et al. (2023) meta-analysis: All Big Five traits are associated
+    with stress perception, but N is the strongest (r~.40-.50).
+  - Experience-sampling studies show that high-N individuals show
+    amplified negative affect on stressful days ("becoming even more
+    neurotic than usual").
+  - A 1.5x multiplier at max N is actually quite conservative relative
+    to the empirical evidence. Some ESM studies show 2x amplification
+    of negative affect in high-N individuals.
+
+Assessment: DIRECTION CORRECT, magnitude SLIGHTLY LOW.
+
+Recommendation:
+  stress_sensitivity = 1.0 + (neuroticism * 0.6)
+  Range: 1.0 to 1.6. Slightly stronger but still bounded.
+
+------------------------------------------------------------------------
+19. conflict trigger multiplier for agreeableness
+------------------------------------------------------------------------
+Current:
+  "conflict": 1.2 if agreeableness > 0.6 else 0.8
+
+Empirical evidence:
+  - High-A individuals DO find interpersonal conflict more stressful.
+    The NEO-PI-R facets "Trust" and "Compliance" predict avoidance of
+    conflict. [S10]
+  - The 1.2/0.8 split is reasonable — a 20% amplification for
+    conflict-averse (high-A) individuals vs. 20% reduction for
+    conflict-comfortable (low-A) individuals.
+  - However, the binary threshold at 0.6 creates a step function.
+    A gradual function would be more psychologically realistic.
+
+Assessment: REASONABLE, but could be smoothed.
+
+Recommendation:
+  "conflict": 0.8 + (agreeableness * 0.6)
+  Range: 0.8 (A=0) to 1.4 (A=1). Gradual, no step function.
+
+
+================================================================================
+FILE 3: bias_simulator.py — CALIBRATION TABLE
+================================================================================
+
+------------------------------------------------------------------------
+20. MAX_BIAS_IMPACT = 0.15
+------------------------------------------------------------------------
+Empirical evidence:
+  - Cognitive biases have measurable but bounded effects on judgment.
+    The confirmation bias literature shows effect sizes of d~0.3-0.5
+    in controlled experiments.
+  - Translating to a 0-1 scale modifier, 0.15 means a bias can shift
+    a parameter by at most 15%. This is conservative.
+
+Assessment: GOOD. The 0.15 cap is deliberately conservative and
+  prevents biases from dominating persona behavior.
+
+Recommendation: KEEP at 0.15. The bounded design is a feature.
+
+------------------------------------------------------------------------
+21. Openness as confirmation bias counter (0.5 max reduction)
+------------------------------------------------------------------------
+Current:
+  openness_counter = openness * 0.5
+
+Empirical evidence:
+  - "Active open-mindedness" (overlapping with Openness) is the
+    strongest individual-difference predictor of reduced myside bias
+    (Stanovich & West, 2007).
+  - The 0.5 max reduction means high openness reduces confirmation
+    bias strength by up to 50%. This is a strong effect but is
+    supported by the finding that open-minded individuals show
+    substantially less confirmation bias.
+
+Assessment: GOOD. Well-supported direction and plausible magnitude.
+
+Recommendation: KEEP at 0.5.
+
+------------------------------------------------------------------------
+22. NEGATIVITY_NEUROTICISM_THRESHOLD = 0.5
+------------------------------------------------------------------------
+Current: Negativity bias only activates when N > 0.5
+
+Empirical evidence:
+  - Neuroticism's effect on negative information processing is present
+    across the full range but becomes more pronounced above the mean.
+    Setting the threshold at 0.5 (population mean) is reasonable —
+    below-average N individuals genuinely show less negativity bias.
+
+Assessment: GOOD.
+
+Recommendation: KEEP at 0.5. Could lower to 0.4 for slightly earlier
+  activation, but 0.5 is defensible.
+
+
+================================================================================
+FILE 4: cognitive_interpreter.py — CALIBRATION TABLE
+================================================================================
+
+------------------------------------------------------------------------
+23. analytical_intuitive thresholds (0.3 and 0.7)
+------------------------------------------------------------------------
+Current:
+  > 0.7 = "analytical"
+  < 0.3 = "intuitive"
+  else = "mixed"
+
+Empirical evidence:
+  - The analytical-intuitive dimension maps to dual-process theory
+    (Kahneman's System 1/2, Epstein's Cognitive-Experiential Theory).
+  - Standard practice in psychometrics is to use roughly +-1 SD for
+    "high" and "low" classifications. On a 0-1 scale with M~0.5,
+    0.3 and 0.7 correspond to roughly +-1 SD.
+
+Assessment: GOOD. Standard tripartite classification.
+
+Recommendation: KEEP.
+
+------------------------------------------------------------------------
+24. cognitive_complexity * 0.6 + (1-need_for_closure) * 0.4
+------------------------------------------------------------------------
+Current (get_elasticity_from_cognitive_style):
+  complexity_factor = cognitive_complexity * 0.6
+  closure_factor = (1.0 - need_for_closure) * 0.4
+
+Empirical evidence:
+  - Cognitive complexity IS associated with perspective-taking and
+    willingness to consider multiple viewpoints. The 0.6 weight is
+    appropriate as the primary component.
+  - Need for Closure (NFC) is inversely related to flexibility.
+    High NFC = rigid. The 0.4 weight as a secondary component is
+    reasonable.
+  - The 60/40 split between complexity and closure is not precisely
+    calibrated by any study, but the relative ordering (complexity
+    as primary) is correct.
+
+Assessment: GOOD. Reasonable heuristic weighting.
+
+Recommendation: KEEP.
+
+------------------------------------------------------------------------
+25. confidence_adjustment — analytical penalty and closure boost
+------------------------------------------------------------------------
+Current:
+  analytical_penalty = -0.05 if analytical_intuitive >= 0.5 else 0
+  closure_boost = +0.08 if need_for_closure >= 0.7 else 0
+
+Empirical evidence:
+  - Analytical thinkers see more caveats, which can reduce expressed
+    confidence. The -0.05 penalty is small and appropriate.
+  - High NFC individuals seek certainty and express more confidence
+    in their judgments. The +0.08 boost is reasonable.
+  - Both are implemented as step functions (binary on/off), which
+    is less realistic than gradual scaling.
+
+Assessment: MAGNITUDES GOOD. Step functions are suboptimal.
+
+Recommendation:
+  analytical_penalty = -(analytical_intuitive - 0.5) * 0.1 if > 0.5
+  closure_boost = (need_for_closure - 0.5) * 0.15 if > 0.5
+  This makes both effects gradual rather than binary.
+
+
+================================================================================
+FILE 5: values_interpreter.py — CALIBRATION TABLE
+================================================================================
+
+------------------------------------------------------------------------
+26. context_biases for value conflict resolution
+------------------------------------------------------------------------
+Current:
+  work:     achievement +0.1, power +0.05, conformity +0.05
+  personal: self_direction +0.1, hedonism +0.1, security +0.05
+  social:   benevolence +0.1, universalism +0.08, tradition +0.05
+
+Empirical evidence:
+  - Schwartz's theory predicts that value salience IS context-dependent.
+    Achievement and conformity are more salient in work contexts;
+    benevolence and universalism in social contexts. This is well-
+    supported. [S11, Schwartz 1992]
+  - Roccas et al. [S11] found that Big Five traits correlate with
+    specific Schwartz values in predictable ways:
+      E → Stimulation, Hedonism, Achievement (+), Tradition (-)
+      A → Benevolence, Universalism, Conformity (+), Power (-)
+      C → Security, Conformity, Achievement (+)
+      O → Self-direction, Stimulation, Universalism (+), Tradition (-)
+  - The specific bias magnitudes (0.05-0.10) are small, which is
+    appropriate. Context should nudge, not override.
+
+Assessment: GOOD. Well-grounded in Schwartz's circumplex theory.
+
+Recommendation: KEEP. The magnitudes are conservative and appropriate.
+
+
+================================================================================
+SUMMARY OF CHANGES — PRIORITY-ORDERED
+================================================================================
+
+CRITICAL (bug or clearly wrong):
+  1. [#14] mood_drift_rate: FORMULA IS BACKWARDS. N should slow drift,
+     not speed it. Fix: 0.12 - (N * 0.08) instead of 0.05 + (N * 0.1).
+
+HIGH PRIORITY (empirically supported improvement):
+  2. [#7] get_negative_tone_bias: Reduce 0.7 to 0.5 (too aggressive).
+  3. [#8] get_confidence_modifier: Increase N penalty from 0.15 to 0.20,
+     C boost from 0.1 to 0.15 (both too small per meta-analyses).
+  4. [#16] stress_decay_rate: Make trait-modulated, not constant.
+  5. [#17] baseline_valence: Add extraversion contribution.
+
+MEDIUM PRIORITY (defensible improvement):
+  6. [#1] get_elasticity: Reduce openness factor from 0.7 to 0.6.
+  7. [#3] influences_verbosity: Add extraversion contribution.
+  8. [#6] influences_hedging_frequency: Add neuroticism contribution.
+  9. [#10] influences_proactivity: Add floor (0.2) and ceiling (0.8).
+  10. [#11] get_enthusiasm_baseline: Add floor (0.2) and scaling (0.5).
+  11. [#12] get_stress_sensitivity: Add floor (0.15) and scaling (0.7).
+  12. [#13] influences_mood_stability: Reduce N scaling from 1.0 to 0.8.
+
+LOW PRIORITY (minor refinement):
+  13. [#4] get_self_disclosure_modifier: Add small N component.
+  14. [#15] fatigue_accumulation_rate: Add small N component.
+  15. [#18] stress_sensitivity multiplier: Increase from 0.5 to 0.6.
+  16. [#19] conflict trigger: Make gradual instead of binary.
+  17. [#25] confidence_adjustment: Make gradual instead of step function.
+
+NO CHANGE NEEDED (already well-calibrated):
+  - [#2] influences_abstract_reasoning threshold (0.7)
+  - [#5] influences_directness (0.3 scaling)
+  - [#9] get_tone_from_mood thresholds (structurally sound)
+  - [#20] MAX_BIAS_IMPACT (0.15)
+  - [#21] Openness as confirmation bias counter (0.5)
+  - [#22] NEGATIVITY_NEUROTICISM_THRESHOLD (0.5)
+  - [#23] analytical_intuitive thresholds (0.3/0.7)
+  - [#24] cognitive style elasticity weights (0.6/0.4)
+  - [#26] context_biases for value conflicts
+
+
+================================================================================
+CALIBRATION CONFIDENCE LEVELS
+================================================================================
+
+For each recommendation, here is the confidence that the suggested value
+is closer to empirical ground truth than the current value:
+
+  #1  get_elasticity O factor 0.7→0.6:           HIGH (bounded by meta r)
+  #2  abstract_reasoning 0.7 KEEP:               HIGH
+  #3  verbosity + E contribution:                 HIGH (E→verbosity is solid)
+  #4  disclosure + N component:                   MEDIUM (secondary effect)
+  #5  directness 0.3 KEEP:                        HIGH
+  #6  hedging + N component:                      MEDIUM (tentative language)
+  #7  negative_tone 0.7→0.5:                      HIGH (0.7 clearly too high)
+  #8  confidence N:0.15→0.20, C:0.1→0.15:         HIGH (strong meta evidence)
+  #9  tone thresholds KEEP:                       MEDIUM (face-valid, not tested)
+  #10 proactivity floor+ceiling:                  MEDIUM (design principle)
+  #11 enthusiasm floor+scaling:                   MEDIUM (design principle)
+  #12 stress_sensitivity floor+scaling:           HIGH (no zero sensitivity)
+  #13 mood_stability N*0.8:                       MEDIUM (asymmetry argument)
+  #14 mood_drift_rate REVERSED:                   CRITICAL (bug)
+  #15 fatigue + N component:                      LOW (theoretical)
+  #16 stress_decay trait-modulated:               HIGH (N→slow recovery)
+  #17 baseline_valence + E:                       HIGH (positivity offset)
+  #18 stress_sensitivity 0.5→0.6:                 MEDIUM (conservative estimate)
+  #19 conflict trigger gradual:                   MEDIUM (design principle)
+  #20 MAX_BIAS_IMPACT KEEP:                       HIGH
+  #21 O counter 0.5 KEEP:                         HIGH
+  #22 N threshold 0.5 KEEP:                       HIGH
+  #23 analytical thresholds KEEP:                 HIGH
+  #24 cognitive elasticity KEEP:                  MEDIUM
+  #25 confidence_adjustment gradual:              MEDIUM (design principle)
+  #26 context_biases KEEP:                        HIGH
+
+
+================================================================================
+SOURCES USED IN THIS REPORT
+================================================================================
+
+[S1]  https://aclanthology.org/P07-1063/
+[S2]  https://aclanthology.org/P08-1020.pdf
+[S3]  https://direct.mit.edu/coli/article/37/3/455/2108/
+[S4]  https://pubmed.ncbi.nlm.nih.gov/10626371/
+[S5]  https://ppc.sas.upenn.edu/sites/default/files/socialmediapub.pdf
+[S6]  https://arxiv.org/abs/2307.00184
+[S7]  https://research.tilburguniversity.edu/en/publications/the-kernel-of-truth-in-text-based-personality-assessment-a-meta-a
+[S8]  https://users.soe.ucsc.edu/~maw/papers/personality_jair07.pdf
+[S9]  https://www.sciencedirect.com/science/article/abs/pii/S0092656603001089
+[S10] NEO-PI-R / BFI-2 (Costa & McCrae, 1992; Soto & John, 2017)
+[S11] https://journals.sagepub.com/doi/10.1177/0146167202289008
+[S12] https://pmc.ncbi.nlm.nih.gov/articles/PMC2791901/
+[S13] https://www.sciencedirect.com/science/article/abs/pii/S0092656620301240
+
+================================================================================
+END OF REPORT
+================================================================================

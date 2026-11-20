@@ -1,0 +1,47 @@
+{
+  "_meta": {
+    "description": "Culture region → Big Five and Schwartz value baseline shifts",
+    "sources": [
+      "Schmitt et al. (2007) - Big Five across 56 nations",
+      "Inglehart-Welzel cultural map",
+      "Schwartz (2006) - A theory of cultural value orientations"
+    ],
+    "notes": "Shifts are relative to global mean. These are broad regional tendencies, not stereotypes. Confidence is reduced for under-studied regions."
+  },
+  "western": {
+    "label": "Western (US, Canada, Western Europe, Australia, NZ)",
+    "confidence": 0.7,
+    "big_five_shifts": {"openness": 0.03, "conscientiousness": 0.0, "extraversion": 0.03, "agreeableness": -0.02, "neuroticism": 0.0},
+    "value_shifts": {"self_direction": 0.05, "stimulation": 0.03, "hedonism": 0.03, "achievement": 0.02, "power": 0.0, "security": -0.03, "conformity": -0.05, "tradition": -0.05, "benevolence": 0.0, "universalism": 0.02}
+  },
+  "east_asian": {
+    "label": "East Asian (China, Japan, Korea, Taiwan)",
+    "confidence": 0.6,
+    "big_five_shifts": {"openness": -0.02, "conscientiousness": 0.03, "extraversion": -0.05, "agreeableness": 0.02, "neuroticism": 0.03},
+    "value_shifts": {"self_direction": -0.02, "stimulation": -0.03, "hedonism": -0.02, "achievement": 0.05, "power": 0.02, "security": 0.05, "conformity": 0.05, "tradition": 0.03, "benevolence": 0.02, "universalism": -0.02}
+  },
+  "south_asian": {
+    "label": "South Asian (India, Pakistan, Bangladesh, Sri Lanka, Nepal)",
+    "confidence": 0.5,
+    "big_five_shifts": {"openness": 0.0, "conscientiousness": 0.02, "extraversion": 0.0, "agreeableness": 0.03, "neuroticism": 0.02},
+    "value_shifts": {"self_direction": -0.02, "stimulation": -0.02, "hedonism": -0.03, "achievement": 0.03, "power": 0.03, "security": 0.05, "conformity": 0.05, "tradition": 0.08, "benevolence": 0.05, "universalism": 0.0}
+  },
+  "latin_american": {
+    "label": "Latin American (Mexico, Brazil, Argentina, Colombia, etc.)",
+    "confidence": 0.5,
+    "big_five_shifts": {"openness": 0.02, "conscientiousness": -0.02, "extraversion": 0.05, "agreeableness": 0.03, "neuroticism": 0.02},
+    "value_shifts": {"self_direction": 0.0, "stimulation": 0.02, "hedonism": 0.03, "achievement": 0.0, "power": 0.02, "security": 0.03, "conformity": 0.02, "tradition": 0.03, "benevolence": 0.05, "universalism": 0.0}
+  },
+  "middle_eastern": {
+    "label": "Middle Eastern / North African",
+    "confidence": 0.4,
+    "big_five_shifts": {"openness": -0.02, "conscientiousness": 0.02, "extraversion": 0.02, "agreeableness": 0.02, "neuroticism": 0.02},
+    "value_shifts": {"self_direction": -0.03, "stimulation": -0.02, "hedonism": -0.05, "achievement": 0.02, "power": 0.03, "security": 0.08, "conformity": 0.08, "tradition": 0.10, "benevolence": 0.03, "universalism": -0.02}
+  },
+  "sub_saharan_african": {
+    "label": "Sub-Saharan African",
+    "confidence": 0.3,
+    "big_five_shifts": {"openness": 0.0, "conscientiousness": 0.0, "extraversion": 0.03, "agreeableness": 0.03, "neuroticism": 0.0},
+    "value_shifts": {"self_direction": -0.02, "stimulation": 0.0, "hedonism": 0.0, "achievement": 0.0, "power": 0.02, "security": 0.05, "conformity": 0.05, "tradition": 0.05, "benevolence": 0.05, "universalism": 0.02}
+  }
+}

@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Test / lint caches
+.coverage
+htmlcov/
+.pytest_cache/
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+test_results/
+*.log
+
+# Eval reports (generated)
+eval/report.json
+eval/benchmark_report.json
+eval/dynamic_report.json
+eval/correlation_report.json
+eval/bv2_report.json
+eval/e2e_report.json
+!eval/baseline_*.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.venv/
+venv/
+ENV/
+
+# OS
+.DS_Store
+Thumbs.db
